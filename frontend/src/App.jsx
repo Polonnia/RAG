@@ -1,10 +1,41 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Upload, Button, Input, message, Typography, Spin, Tabs, Card, Space, List, Popconfirm, Tag, Divider, Select, Collapse, Modal, Form, Radio, Checkbox, Progress, Steps, Result, Table, InputNumber } from 'antd';
-import { UploadOutlined, BookOutlined, FileTextOutlined, ClockCircleOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined, FormOutlined, UserOutlined, LoginOutlined, LogoutOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { Layout, Upload, Button, Input, message, Typography, Spin, Card, Space, List, Popconfirm, Tag, Divider, Select, Collapse, Modal, Form, Radio, Checkbox, Progress, Steps, Result, Table, InputNumber, Menu, Switch, Empty, Avatar } from 'antd';
+import { UploadOutlined, BookOutlined, FileTextOutlined, ClockCircleOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined, FormOutlined, UserOutlined, LoginOutlined, LogoutOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, LockOutlined, BarChartOutlined, RobotOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import ExamDetail from './ExamDetail';
 import ReactMarkdown from 'react-markdown';
+import { Tabs } from 'antd';
+// 新增依赖
+import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import 'antd/dist/reset.css';
+import './global.css';
+import { Line } from '@ant-design/charts';
+// 词云依赖：如未安装请运行 npm install react-tagcloud
+import { TagCloud } from 'react-tagcloud';
+// 新增 ECharts 依赖
+import ReactECharts from 'echarts-for-react';
+import 'echarts-wordcloud';
+
+// 新增MarkdownWithLatex组件
+function MarkdownWithLatex({ children }) {
+  let safe = '';
+  if (typeof children === 'string') {
+    safe = children;
+  } else if (children) {
+    safe = String(children);
+  }
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      children={safe}
+    />
+  );
+}
 
 const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -13,6 +44,58 @@ const { TabPane } = Tabs;
 const { Option } = Select;
 const { Panel } = Collapse;
 const { Step } = Steps;
+
+function renderAdminLayout(activeAdminMenu, setActiveAdminMenu, handleLogout) {
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Layout.Sider width={220} style={{ background: '#f4f6fa', boxShadow: '2px 0 8px #e6eaf1', borderRight: '1.5px solid #e6eaf1', paddingTop: 0 }}>
+        <div style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          fontSize: 22,
+          color: '#1677ff',
+          letterSpacing: 2,
+          marginBottom: 16,
+          background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)',
+          borderRadius: '0 0 18px 18px',
+          boxShadow: '0 2px 8px #e6eaf1',
+        }}>
+          <BarChartOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
+          <span style={{ color: '#fff' }}>管理员后台</span>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[activeAdminMenu]}
+          onClick={({ key }) => setActiveAdminMenu(key)}
+          style={{ height: '100%', borderRight: 0, fontSize: 18, background: '#f4f6fa', fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif', fontWeight: 500 }}
+          items={adminMenuItems.map(item => ({
+            ...item,
+            style: {
+              borderRadius: 10,
+              margin: '6px 8px',
+              transition: 'background 0.2s',
+            }
+          }))}
+          theme="light"
+        />
+      </Layout.Sider>
+      <Layout>
+        <Layout.Header style={{ background: '#fff', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: 64, boxShadow: '0 2px 8px #e6eaf1' }}>
+          <Button type="link" icon={<LogoutOutlined />} onClick={handleLogout} style={{ fontSize: 16, fontWeight: 600 }}>
+            退出登录
+          </Button>
+        </Layout.Header>
+        <Layout.Content style={{ padding: 24, minHeight: 360, background: '#f8fafc' }}>
+          {activeAdminMenu === 'ppt' && <AdminPPTExport />}
+          {activeAdminMenu === 'activity' && <AdminActivity />}
+        </Layout.Content>
+      </Layout>
+    </Layout>
+  );
+}
 
 function App() {
   // 认证状态
@@ -39,13 +122,14 @@ function App() {
       return [];
     }
   });
+  const [qaLoading, setQaLoading] = useState(false);
 
   // 教学内容设计状态
   const [courseOutline, setCourseOutline] = useState('');
   const [teachingPlan, setTeachingPlan] = useState(''); // 只显示知识框架
+  const [lessonSchedule, setLessonSchedule] = useState(''); // 新增：学时安排表
   const [pptDetailContent, setPptDetailContent] = useState(''); // 只用于PPT生成，不显示
   const [pptLoading, setPptLoading] = useState(false);
-  const [pptStep, setPptStep] = useState('');
   const [planLoading, setPlanLoading] = useState(false);
 
   // 考核内容生成状态
@@ -69,12 +153,19 @@ function App() {
   // 知识库管理状态
   const [knowledgeFiles, setKnowledgeFiles] = useState([]);
   const [fileLoading, setFileLoading] = useState(false);
+  const [pptStep, setPptStep] = useState('');
 
   // 历史记录状态
   const [qaHistory, setQaHistory] = useState([]);
   const [teachingPlanHistory, setTeachingPlanHistory] = useState([]);
   const [examHistory, setExamHistory] = useState([]);
   const [historyModal, setHistoryModal] = useState({ visible: false, type: '', record: null });
+
+  // 试题批改状态
+  const [gradingModalVisible, setGradingModalVisible] = useState(false);
+  const [gradingModalQuestion, setGradingModalQuestion] = useState(null);
+  const [gradingModalStudentAnswers, setGradingModalStudentAnswers] = useState([]);
+  const [gradingModalSelectedStudent, setGradingModalSelectedStudent] = useState(null);
 
   // 题型配置state
   const [questionConfig, setQuestionConfig] = useState({
@@ -85,11 +176,16 @@ function App() {
     programming: { enabled: false, count: 0, points: 10 }
   });
   const [selectedQuestions, setSelectedQuestions] = useState([]); // 勾选的题目
+  const [difficulty, setDifficulty] = useState('中等'); // 添加难度选择状态
 
   const [gradingList, setGradingList] = useState([]);
   const [gradingLoading, setGradingLoading] = useState(false);
+  
+  const [activeAdminMenu, setActiveAdminMenu] = useState('ppt');
 
-  const [activeTeacherTab, setActiveTeacherTab] = useState('1');
+  // 教师端菜单状态，支持 localStorage 恢复
+  const [activeTeacherMenu, setActiveTeacherMenu] = useState(() => localStorage.getItem('activeTeacherMenu') || 'knowledge');
+  useEffect(() => { localStorage.setItem('activeTeacherMenu', activeTeacherMenu); }, [activeTeacherMenu]);
 
   const navigate = useNavigate();
 
@@ -125,24 +221,22 @@ function App() {
   const checkAuthStatus = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (token) {
-        // 直接请求一个需要认证的接口（如获取教师考试列表）
-        try {
-          const response = await axios.get('http://localhost:8000/teacher/exams');
-          // 如果token有效，接口会返回考试列表
-          // 可以从localStorage拿user信息
-        const user = JSON.parse(localStorage.getItem('user'));
-          setCurrentUser(user);
-          setIsLoggedIn(true);
-          fetchData();
-        } catch (error) {
-          // token无效或过期，自动登出
-          console.error('Token验证失败:', error);
-          logout();
+      const userStr = localStorage.getItem('user');
+      if (token && userStr) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        const user = JSON.parse(userStr);
+        if (user.role === 'teacher') {
+          await axios.get('http://localhost:8000/teacher/exams');
+        } else if (user.role === 'student') {
+          await axios.get('http://localhost:8000/student/exams');
         }
+        setCurrentUser(user);
+        setIsLoggedIn(true);
+        fetchData();
+      } else {
+        logout();
       }
     } catch (error) {
-      console.error('验证失败:', error);
       logout();
     }
   };
@@ -159,50 +253,34 @@ function App() {
   // 认证相关函数
   const handleLogin = async (values) => {
     try {
-      const formData = new FormData();
-      formData.append('username', values.username);
-      formData.append('password', values.password);
-      
-      const response = await axios.post('http://localhost:8000/login', formData);
-      
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
-      
-      setCurrentUser(response.data.user);
+      const res = await axios.post('http://localhost:8000/login', {
+        username: values.username,
+        password: values.password,
+      });
+      const { token, user } = res.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setCurrentUser(user);
       setIsLoggedIn(true);
       setLoginVisible(false);
-      
       message.success('登录成功');
-      fetchData();
-    } catch (error) {
-      message.error('登录失败: ' + (error.response?.data?.detail || error.message));
+    } catch (err) {
+      message.error(err.response?.data?.detail || '登录失败');
     }
   };
 
   const handleRegister = async (values) => {
     try {
-      const formData = new FormData();
-      formData.append('username', values.username);
-      formData.append('password', values.password);
-      formData.append('role', values.role);
-      
-      const response = await axios.post('http://localhost:8000/register', formData);
-      
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
-      
-      setCurrentUser(response.data.user);
-      setIsLoggedIn(true);
+      const res = await axios.post('http://localhost:8000/register', {
+        username: values.username,
+        password: values.password,
+        role: values.role,
+      });
+      message.success('注册成功，请登录');
       setRegisterVisible(false);
-      
-      message.success('注册成功');
-      fetchData();
-    } catch (error) {
-      message.error('注册失败: ' + (error.response?.data?.detail || error.message));
+      setLoginVisible(true);
+    } catch (err) {
+      message.error(err.response?.data?.detail || '注册失败');
     }
   };
 
@@ -376,7 +454,7 @@ function App() {
       message.warning('请输入问题');
       return;
     }
-    setLoading(true);
+    setQaLoading(true);
     try {
       const formData = new FormData();
       formData.append('question', question);
@@ -397,7 +475,7 @@ function App() {
         message.error('问答失败，请检查网络连接');
       }
     }
-    setLoading(false);
+    setQaLoading(false);
   };
 
   // 修改教学内容设计
@@ -414,8 +492,18 @@ function App() {
         timeout: 120000,
       });
       setTeachingPlan(response.data.plan); // 只显示知识框架
+      let schedule = response.data.lesson_schedule || '';
+      schedule = schedule.trim();
+      if (schedule.startsWith('```')) {
+        schedule = schedule.replace(/```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
+      }
+      setLessonSchedule(schedule); // 新增：保存学时安排表
       // 保存历史到后端
-      await axios.post('http://localhost:8000/teaching-plan-history', new URLSearchParams({ outline: courseOutline, plan: response.data.plan }));
+      await axios.post('http://localhost:8000/teaching-plan-history', new URLSearchParams({
+        outline: courseOutline,
+        plan: response.data.plan,
+        lesson_schedule: schedule // 新增
+      }));
       fetchTeachingPlanHistory();
       message.success('教学内容设计完成');
     } catch (err) {
@@ -477,6 +565,7 @@ function App() {
       const formData = new FormData();
       formData.append('course_outline', examOutline);
       formData.append('question_config', JSON.stringify(questionConfig));
+      formData.append('difficulty', difficulty); // 添加难度参数
       const response = await axios.post('http://localhost:8000/generate-exam', formData, {
         timeout: 180000,
       });
@@ -575,10 +664,56 @@ function App() {
       setExamAnswers({});
       setExamTimer(0);
       fetchStudentExams();
+      
+      // 立即开始轮询AI薄弱点分析结果
+      message.info('正在分析考试薄弱点，请稍候...');
+      await pollAiAnalysis(currentExam.exam.id);
+      // await fetchStudentAnalysis(); // 删除这行
+      // 通知 StudentAnalysis 组件刷新
+      window.dispatchEvent(new Event('updateStudentAnalysis'));
+      // 刷新最新考试分析
+      setTimeout(async () => {
+        try {
+          const analysisRes = await axios.get(`http://localhost:8000/student/latest-analysis/${currentExam.exam.id}`);
+          // 更新StudentAnalysis组件的状态
+          const studentAnalysisComponent = document.querySelector('[data-testid="student-analysis"]');
+          if (studentAnalysisComponent) {
+            // 触发重新渲染
+            window.dispatchEvent(new CustomEvent('updateLatestAnalysis', { 
+              detail: analysisRes.data 
+            }));
+          }
+        } catch (error) {
+          console.error('刷新最新分析失败:', error);
+        }
+      }, 2000);
     } catch (err) {
       console.error('提交考试失败:', err);
       message.error('提交考试失败');
     }
+  };
+
+  // 轮询AI薄弱点分析结果
+  const pollAiAnalysis = async (examId) => {
+    const maxAttempts = 30; // 最多等待30次
+    const interval = 2000; // 每2秒检查一次
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await axios.get(`http://localhost:8000/student/exam-result/${examId}`);
+        if (response.data.ai_summary && response.data.ai_summary.trim()) {
+          message.success('AI薄弱点分析完成！');
+          return;
+        }
+      } catch (error) {
+        console.error('检查AI分析状态失败:', error);
+      }
+      
+      // 等待一段时间再检查
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    
+    message.warning('AI分析可能仍在进行中，请稍后查看学情分析页面');
   };
 
   // 计时器效果
@@ -626,13 +761,14 @@ function App() {
       open={loginVisible}
       onCancel={() => setLoginVisible(false)}
       footer={null}
+      className="login-modal"
     >
       <Form onFinish={handleLogin} layout="vertical">
         <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-          <Input />
+          <Input prefix={<UserOutlined style={{color:'#1677ff'}} />} placeholder="请输入用户名" />
         </Form.Item>
         <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-          <Input.Password />
+          <Input.Password prefix={<LockOutlined style={{color:'#1677ff'}} />} placeholder="请输入密码" />
         </Form.Item>
         <Form.Item>
           <Button type="primary" htmlType="submit" block>
@@ -657,10 +793,11 @@ function App() {
         <Form.Item name="password" label="密码" rules={[{ required: true }]}>
           <Input.Password />
         </Form.Item>
-        <Form.Item name="role" label="角色" rules={[{ required: true }]}>
+        <Form.Item name="role" label="角色" initialValue="student" rules={[{ required: true, message: '请选择角色' }]}> 
           <Select>
-            <Option value="teacher">教师</Option>
-            <Option value="student">学生</Option>
+            <Select.Option value="student">学生</Select.Option>
+            <Select.Option value="teacher">教师</Select.Option>
+            <Select.Option value="admin">管理员</Select.Option>
           </Select>
         </Form.Item>
         <Form.Item>
@@ -672,315 +809,514 @@ function App() {
     </Modal>
   );
 
-  const renderTeacherInterface = () => (
-    <Tabs defaultActiveKey="1" activeKey={activeTeacherTab} onChange={key => {
-      setActiveTeacherTab(key);
-      if (key === 'grading') fetchGradingList();
-    }} size="large">
-      <TabPane tab={<span><DatabaseOutlined />知识库管理</span>} key="1">
-        <Card title="上传教学文档" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ marginBottom: 16 }}>
-            <Text type="secondary">
-              支持格式：PDF、Word文档(.doc/.docx)
-            </Text>
-          </div>
-        <Upload
-            beforeUpload={() => false}
-            fileList={fileList.map((file, index) => ({
-              uid: index,
-              name: file.name || `文件${index + 1}`,
-              status: 'done',
-            }))}
-            onChange={handleFileChange}
-            multiple={true}
-          accept=".pdf,.doc,.docx"
-        >
-          <Button icon={<UploadOutlined />}>选择文件</Button>
-        </Upload>
-        <Button type="primary" onClick={handleUpload} style={{ marginTop: 16 }} loading={loading}>
-            上传并入库 ({fileList.length} 个文件)
-          </Button>
-        </Card>
+  // 教师端左侧菜单项
+  const teacherMenuItems = [
+    { key: 'knowledge', icon: <DatabaseOutlined />, label: '知识库管理' },
+    { key: 'qa', icon: <BookOutlined />, label: '知识库问答' },
+    { key: 'teaching', icon: <FileTextOutlined />, label: '教学内容设计' },
+    { key: 'exam', icon: <FormOutlined />, label: '考核内容生成' },
+    { key: 'manage', icon: <FormOutlined />, label: '考试管理' },
+    { key: 'grading', icon: <CheckCircleOutlined />, label: '待批改试卷' }
+  ];
 
-        <Divider />
-
-        <Card title="知识库文件列表" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ marginBottom: 16 }}>
-            <Button onClick={fetchKnowledgeFiles} loading={fileLoading} icon={<EyeOutlined />}>
-              刷新列表
-            </Button>
-            <Text style={{ marginLeft: 16, color: '#666' }}>
-              共 {knowledgeFiles.length} 个文件
-            </Text>
+  // 教师端内容区渲染
+  const renderTeacherContent = () => {
+    switch (activeTeacherMenu) {
+      case 'knowledge':
+        return (
+          <>
+            {/* 知识库管理内容 */}
+            <Card title="上传教学文档" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  支持格式：PDF、Word文档(.doc/.docx)
+                </Text>
+              </div>
+              <Upload
+                beforeUpload={() => false}
+                fileList={fileList.map((file, index) => ({
+                  uid: index,
+                  name: file.name || `文件${index + 1}`,
+                  status: 'done',
+                }))}
+                onChange={handleFileChange}
+                multiple={true}
+                accept=".pdf,.doc,.docx"
+              >
+                <Button icon={<UploadOutlined />}>选择文件</Button>
+              </Upload>
+              <Button type="primary" onClick={handleUpload} style={{ marginTop: 16 }} loading={loading}>
+                上传并入库 ({fileList.length} 个文件)
+              </Button>
+            </Card>
+            <Divider />
+            <Card title="知识库文件列表" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <div style={{ marginBottom: 16 }}>
+                <Button onClick={fetchKnowledgeFiles} loading={fileLoading} icon={<EyeOutlined />}>
+                  刷新列表
+                </Button>
+                <Text style={{ marginLeft: 16, color: '#666' }}>
+                  共 {knowledgeFiles.length} 个文件
+                </Text>
+              </div>
+              {fileLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <Spin size="large" />
+                  <div style={{ marginTop: 16 }}>加载中...</div>
+                </div>
+              ) : knowledgeFiles.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+                  暂无文件，请先上传文档
+                </div>
+              ) : (
+                <List
+                  dataSource={knowledgeFiles}
+                  renderItem={(file) => {
+                    const fileType = getFileTypeTag(file.filename);
+                    return (
+                      <List.Item
+                        actions={[
+                          <Switch
+                            checked={file.student_can_download}
+                            checkedChildren="可下载"
+                            unCheckedChildren="不可下载"
+                            onChange={checked => {
+                              axios.post('http://localhost:8000/set-student-download', new URLSearchParams({
+                                filename: file.filename,
+                                can_download: checked
+                              })).then(() => {
+                                message.success('设置成功');
+                                fetchKnowledgeFiles();
+                              });
+                            }}
+                            style={{ marginRight: 16 }}
+                          />,
+                          <Popconfirm
+                            title="确定要删除这个文件吗？"
+                            description="删除后将从知识库中移除，无法恢复"
+                            onConfirm={() => handleDeleteFile(file.filename)}
+                            okText="确定"
+                            cancelText="取消"
+                          >
+                            <Button 
+                              type="text" 
+                              danger 
+                              icon={<DeleteOutlined />}
+                              size="small"
+                            >
+                              删除
+                            </Button>
+                          </Popconfirm>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <Space>
+                              <span>{file.filename}</span>
+                              <Tag color={fileType.color}>{fileType.text}</Tag>
+                            </Space>
+                          }
+                          description={
+                            <Space direction="vertical" size="small">
+                              <Text type="secondary">上传时间: {file.upload_time}</Text>
+                              <Text type="secondary">文档片段: {file.chunk_count} 个</Text>
+                            </Space>
+                          }
+                        />
+                      </List.Item>
+                    );
+                  }}
+                />
+              )}
+            </Card>
+          </>
+        );
+      case 'qa':
+        return (
+          <div
+            style={{
+              width: '100%',
+              minHeight: 480,
+              background: 'linear-gradient(135deg, #f8fafc 0%, #e6f7ff 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: 0,
+              margin: 0,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 26, color: '#1677ff', margin: '32px 0 18px 32px', letterSpacing: 1, display: 'flex', alignItems: 'center', width: '100%', maxWidth: 900 }}>
+              <BookOutlined style={{ color: '#1677ff', marginRight: 10, fontSize: 30 }} />知识库问答
+                          </div>
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 900,
+                minHeight: 320,
+                maxHeight: '60vh',
+                overflowY: 'auto',
+                padding: '0 32px 0 32px',
+                marginBottom: 16,
+                background: 'rgba(246,248,250,0.7)',
+                borderRadius: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+              }}
+            >
+              {/* 展示历史问题和AI回答气泡 */}
+              {answer && (
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', margin: '24px 0' }}>
+                  <Avatar icon={<RobotOutlined />} style={{ backgroundColor: '#1677ff', margin: '0 8px' }} />
+                  <div
+                    style={{
+                      background: '#f6ffed',
+                      color: '#222',
+                      borderRadius: 16,
+                      padding: '12px 18px',
+                      maxWidth: 520,
+                      boxShadow: '0 2px 8px #b7eb8f',
+                      fontSize: 16,
+                      wordBreak: 'break-word',
+                      position: 'relative',
+                    }}
+                  >
+                    <b>AI助手：</b>
+                    <span><MarkdownWithLatex>{answer}</MarkdownWithLatex></span>
+                          </div>
+                    </div>
+                  )}
+              {qaLoading && (
+                <div style={{ color: '#aaa', textAlign: 'left', margin: '8px 0 0 48px' }}>
+                  <Spin size="small" /> AI正在思考...
+                </div>
+              )}
+            </div>
+            <div style={{ width: '100%', maxWidth: 900, padding: '0 32px 32px 32px', background: 'transparent', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+              <Input.TextArea
+                rows={2}
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                placeholder="请输入你的问题...(Enter发送, Shift+Enter换行)"
+                disabled={qaLoading}
+                style={{ marginBottom: 0, borderRadius: 8, fontSize: 16, flex: 1 }}
+                onPressEnter={e => {
+                  if (!e.shiftKey) {
+                    e.preventDefault();
+                    handleAsk();
+                  }
+                }}
+              />
+              <Button type="primary" onClick={handleAsk} loading={qaLoading} disabled={qaLoading || !question.trim()} style={{ height: 40, fontSize: 16, borderRadius: 8, fontWeight: 600 }}>
+                提问
+              </Button>
+            </div>
           </div>
-          
-          {fileLoading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Spin size="large" />
-              <div style={{ marginTop: 16 }}>加载中...</div>
-            </div>
-          ) : knowledgeFiles.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
-              暂无文件，请先上传文档
-            </div>
-          ) : (
-            <List
-              dataSource={knowledgeFiles}
-              renderItem={(file) => {
-                const fileType = getFileTypeTag(file.filename);
-                return (
+        );
+      case 'teaching':
+        return (
+          <>
+            <Card title="课程大纲输入" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <TextArea
+                rows={6}
+                value={courseOutline}
+                onChange={e => setCourseOutline(e.target.value)}
+                placeholder="请输入课程大纲，包括课程目标、主要知识点、 教学要求、学时安排等"
+                style={{ marginBottom: 16 }}
+              />
+              <Space>
+                <Button type="primary" onClick={handleDesignTeachingPlan} loading={planLoading} icon={<FileTextOutlined />}>
+                  设计教学内容
+                </Button>
+                <Button onClick={() => setCourseOutline('')}>
+                  清空大纲
+                </Button>
+              </Space>
+            </Card>
+            {teachingPlan && (
+              <Card title="教学内容设计结果" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+                <MarkdownWithLatex>{teachingPlan}</MarkdownWithLatex>
+                <Space style={{ marginTop: 16 }}>
+                  <Button type="primary" onClick={handleGeneratePPTFromOutline} disabled={!teachingPlan}>一键将大纲生成PPT</Button>
+                  <Upload
+                    accept=".md,.txt"
+                    showUploadList={false}
+                    customRequest={handleGeneratePPTFromUpload}
+                  >
+                    <Button>上传txt/md生成PPT</Button>
+                  </Upload>
+                </Space>
+                {pptLoading && (
+                  <div style={{ marginTop: 24, textAlign: 'center' }}>
+                    <Spin tip={pptStep || '正在生成PPT...'} size="large" />
+                  </div>
+                )}
+              </Card>
+            )}
+            {lessonSchedule && (
+              <Card title="学时安排表" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+                <div className="markdown-body">
+                  <MarkdownWithLatex>{lessonSchedule}</MarkdownWithLatex>
+                </div>
+              </Card>
+            )}
+            <Card title="历史记录" style={{ marginTop: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <List
+                dataSource={teachingPlanHistory}
+                renderItem={item => (
                   <List.Item
                     actions={[
-                      <Popconfirm
-                        title="确定要删除这个文件吗？"
-                        description="删除后将从知识库中移除，无法恢复"
-                        onConfirm={() => handleDeleteFile(file.filename)}
-                        okText="确定"
-                        cancelText="取消"
-                      >
-                        <Button 
-                          type="text" 
-                          danger 
-                          icon={<DeleteOutlined />}
-                          size="small"
-                        >
-                          删除
-                        </Button>
+                      <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteTeachingPlanHistory(item.id)} okText="删除" cancelText="取消">
+                        <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
                       </Popconfirm>
                     ]}
                   >
-                    <List.Item.Meta
-                      title={
-                        <Space>
-                          <span>{file.filename}</span>
-                          <Tag color={fileType.color}>{fileType.text}</Tag>
-                        </Space>
-                      }
-                      description={
-                        <Space direction="vertical" size="small">
-                          <Text type="secondary">上传时间: {file.upload_time}</Text>
-                          <Text type="secondary">文档片段: {file.chunk_count} 个</Text>
-                        </Space>
-                      }
-                    />
+                    <a onClick={() => {
+                      setCourseOutline(item.outline);
+                      setTeachingPlan(item.plan);
+                      setLessonSchedule(item.lesson_schedule || ''); // 新增
+                      setHistoryModal({ visible: false, type: '', record: null });
+                    }}>
+                      {item.outline}（{item.time}）
+                    </a>
                   </List.Item>
-                );
-              }}
-            />
-          )}
-        </Card>
-      </TabPane>
-
-      <TabPane tab={<span><BookOutlined />知识库问答</span>} key="2">
-        <Card title="知识库问答" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <TextArea
-            rows={3}
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            placeholder="请输入你的问题..."
-            style={{ marginBottom: 16 }}
-          />
-          <Button type="primary" onClick={handleAsk} loading={loading}>
-            提问
-          </Button>
-          <div style={{ marginTop: 16, minHeight: 60 }}>
-            {loading ? <Spin /> : answer && (
-              <div style={{ padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
-                <Text strong>AI助手：</Text>
-                <ReactMarkdown style={{ marginTop: 8, marginBottom: 16 }}>{answer}</ReactMarkdown>
-                {qaSources.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <Text strong>溯源片段：</Text>
-                    {qaSources.map((src, idx) => (
-                      <div key={idx} style={{ margin: '12px 0', background: '#e6f7ff', borderRadius: 4, padding: 8 }}>
-                        <div style={{ fontSize: 13, color: '#888' }}>
-                          <b>文档：</b>{src.metadata?.source || src.metadata?.doc_id || '-'}
-                          <span> <b>页码：</b>
-                            {src.metadata?.page_num || src.metadata?.page || '-'}
-                          </span>
-                          {typeof src.metadata?.start_pos === 'number' && typeof src.metadata?.end_pos === 'number' && (
-                            <span> <b>位置：</b>{src.metadata.start_pos}~{src.metadata.end_pos}</span>
-                          )}
-                        </div>
-                        <div style={{ background: '#fffbe6', borderRadius: 3, padding: 6, marginTop: 4, fontSize: 15 }}>
-                          <ReactMarkdown>{src.content}</ReactMarkdown>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 )}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card title="历史记录" style={{ marginTop: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <List
-            dataSource={qaHistory}
-            renderItem={item => (
-              <List.Item
-                actions={[
-                  <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteQaHistory(item.id)} okText="删除" cancelText="取消">
-                    <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
-                  </Popconfirm>
-                ]}
-              >
-                <a onClick={() => setHistoryModal({ visible: true, type: 'qa', record: item })}>
-                  {item.question}（{item.time}）
-                </a>
-              </List.Item>
-            )}
-          />
-        </Card>
-      </TabPane>
-
-      <TabPane tab={<span><FileTextOutlined />教学内容设计</span>} key="3">
-        <Card title="课程大纲输入" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <TextArea
-            rows={6}
-            value={courseOutline}
-            onChange={e => setCourseOutline(e.target.value)}
-            placeholder="请输入课程大纲，包括：\n1. 课程目标\n2. 主要知识点\n3. 教学要求\n4. 学时安排等"
-            style={{ marginBottom: 16 }}
-          />
-          <Space>
-            <Button type="primary" onClick={handleDesignTeachingPlan} loading={planLoading} icon={<FileTextOutlined />}>
-              设计教学内容
-            </Button>
-            <Button onClick={() => setCourseOutline('')}>
-              清空大纲
-            </Button>
-          </Space>
-        </Card>
-
-        {teachingPlan && (
-          <Card title="教学内容设计结果（知识框架）" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-            <ReactMarkdown>{teachingPlan}</ReactMarkdown>
-            <Space style={{ marginTop: 16 }}>
-              <Button type="primary" onClick={handleGeneratePPTFromOutline} disabled={!teachingPlan}>一键将大纲生成PPT</Button>
-              <Upload
-                accept=".md,.txt"
-                showUploadList={false}
-                customRequest={handleGeneratePPTFromUpload}
-              >
-                <Button>上传txt/md生成PPT</Button>
-              </Upload>
-            </Space>
-          </Card>
-        )}
-
-        <Card title="历史记录" style={{ marginTop: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <List
-            dataSource={teachingPlanHistory}
-            renderItem={item => (
-              <List.Item
-                actions={[
-                  <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteTeachingPlanHistory(item.id)} okText="删除" cancelText="取消">
-                    <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
-                  </Popconfirm>
-                ]}
-              >
-                <a onClick={() => {
-                  setCourseOutline(item.outline);
-                  setTeachingPlan(item.plan);
-                  setHistoryModal({ visible: false, type: '', record: null });
-                }}>
-                  {item.outline}（{item.time}）
-                </a>
-              </List.Item>
-            )}
-          />
-        </Card>
-      </TabPane>
-
-      <TabPane tab={<span><FormOutlined />考核内容生成</span>} key="4">
-        {/* 题型设置表单 */}
-        {renderQuestionConfigForm()}
-        <Card title="课程大纲输入" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <TextArea
-            rows={6}
-            value={examOutline}
-            onChange={e => setExamOutline(e.target.value)}
-            placeholder="请输入课程大纲，包括：\n1. 课程目标\n2. 主要知识点\n3. 教学要求\n4. 学时安排等"
-            style={{ marginBottom: 16 }}
-          />
-          <Space>
-            <Button type="primary" onClick={handleGenerateExam} loading={examLoading} icon={<FormOutlined />}>
-              生成考核内容
-            </Button>
-            <Button onClick={() => setExamOutline('')}>
-              清空大纲
-            </Button>
-          </Space>
-        </Card>
-        {/* 生成后题目勾选渲染 */}
-        {renderGeneratedQuestions()}
-
-        <Card title="历史记录" style={{ marginTop: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <List
-            dataSource={examHistory}
-            renderItem={item => (
-              <List.Item
-                actions={[
-                  <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteExamHistory(item.id)} okText="删除" cancelText="取消">
-                    <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
-                  </Popconfirm>
-                ]}
-              >
-                <a onClick={() => {
-                  setExamContent(item.examContent);
-                  setHistoryModal({ visible: false, type: '', record: null });
-                }}>
-                  {item.outline}（{item.time}）
-                </a>
-              </List.Item>
-              )}
-          />
-          </Card>
-      </TabPane>
-
-      <TabPane tab={<span><FormOutlined />考试管理</span>} key="5">
-        <Card title="考试列表" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
-          <List
-            dataSource={exams}
-            renderItem={(exam) => (
-              <List.Item
-                actions={[
-                  <Button 
-                    type="link" 
-                    onClick={() => navigate(`/exam/${exam.id}`)}
+              />
+            </Card>
+          </>
+        );
+      case 'exam':
+        return (
+          <>
+            {renderQuestionConfigForm()}
+            <Card title="课程大纲输入" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <TextArea
+                rows={6}
+                value={examOutline}
+                onChange={e => setExamOutline(e.target.value)}
+                placeholder="请输入课程大纲，包括：\n1. 课程目标\n2. 主要知识点\n3. 教学要求\n4. 学时安排等"
+                style={{ marginBottom: 16 }}
+              />
+              <Space>
+                <Button type="primary" onClick={handleGenerateExam} loading={examLoading} icon={<FormOutlined />}>
+                  生成考核内容
+                </Button>
+                <Button onClick={() => setExamOutline('')}>
+                  清空大纲
+                </Button>
+              </Space>
+            </Card>
+            {renderGeneratedQuestions()}
+            <Card title="历史记录" style={{ marginTop: 24, maxWidth: 1200, margin: '0 auto' }}>
+              <List
+                dataSource={examHistory}
+                renderItem={item => (
+                  <List.Item
+                    actions={[
+                      <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteExamHistory(item.id)} okText="删除" cancelText="取消">
+                        <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
+                      </Popconfirm>
+                    ]}
                   >
-                    查看详情
-        </Button>
-                ]}
-              >
-                <List.Item.Meta
-                  title={exam.title}
-                  description={
-                    <Space direction="vertical" size="small">
-                      <Text>{exam.description}</Text>
-                      <Text type="secondary">时长: {exam.duration} 分钟</Text>
-                      <Text type="secondary">参与学生: {exam.student_count} 人</Text>
-                      <Text type="secondary">创建时间: {exam.created_at}</Text>
-                    </Space>
-                  }
-                />
-              </List.Item>
-            )}
-          />
-        </Card>
-      </TabPane>
+                    <a onClick={() => {
+                      setExamContent(item.examContent);
+                      setHistoryModal({ visible: false, type: '', record: null });
+                    }}>
+                      {item.outline}（{item.time}）
+                    </a>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          </>
+        );
+      case 'manage':
+        return (
+          <Card title="考试列表" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+            <List
+              dataSource={exams}
+              renderItem={(exam) => (
+                <List.Item
+                  actions={[
+                    <Button 
+                      type="link" 
+                      onClick={() => navigate(`/exam/${exam.id}`)}
+                    >
+                      查看详情
+                    </Button>,
+                    <Popconfirm
+                      title="确定要删除这个考试吗？"
+                      description="删除后将无法恢复，且相关学生记录也会被删除"
+                      onConfirm={() => handleDeleteExam(exam.id)}
+                      okText="确定"
+                      cancelText="取消"
+                    >
+                      <Button type="link" danger>删除</Button>
+                    </Popconfirm>
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={exam.title}
+                    description={
+                      <Space direction="vertical" size="small">
+                        <Text>{exam.description}</Text>
+                        <Text type="secondary">时长: {exam.duration} 分钟</Text>
+                        <Text type="secondary">参与学生: {exam.student_count} 人</Text>
+                        <Text type="secondary">创建时间: {exam.created_at}</Text>
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
+        );
+      case 'grading':
+        return (
+          <Card title={<span style={{ fontWeight: 600, fontSize: 18 }}>待批改简答题/编程题</span>} style={{ width: '100%', maxWidth: 1600, margin: '0 auto' }}>
+            <Table columns={gradingQuestionColumns} dataSource={gradingList} loading={gradingLoading} pagination={{ pageSize: 8 }} bordered rowClassName={(_, idx) => idx % 2 === 0 ? 'table-row-light' : 'table-row-dark'} />
+            {/* 批改弹窗 */}
+            <Modal
+              open={gradingModalVisible}
+              onCancel={() => setGradingModalVisible(false)}
+              footer={null}
+              title={<span>批改试题</span>}
+              width={600}
+            >
+              {gradingModalQuestion && gradingModalStudentAnswers.length > 0 ? (
+                <div>
+                  <div style={{ marginBottom: 16 }}>
+                    <b>题目：</b>{gradingModalQuestion.question}
+                    <br /><b>题型：</b>{gradingModalQuestion.type === 'short_answer' ? '简答题' : '编程题'}
+                    <br /><b>分值：</b>{gradingModalQuestion.points}
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <b>选择学生：</b>
+                    <Select
+                      style={{ width: 200 }}
+                      value={gradingModalSelectedStudent}
+                      onChange={sid => setGradingModalSelectedStudent(sid)}
+                    >
+                      {gradingModalStudentAnswers.map(stu => (
+                        <Select.Option key={stu.studentId} value={stu.studentId}>{stu.studentName}</Select.Option>
+                      ))}
+                    </Select>
+                  </div>
+                  {gradingModalStudentAnswers.filter(stu => stu.studentId === gradingModalSelectedStudent).map(stu => (
+                    <div key={stu.studentId} style={{ marginBottom: 16 }}>
+                      <div style={{ marginBottom: 8 }}><b>学生：</b>{stu.studentName}</div>
+                      <div style={{ marginBottom: 8 }}><b>学生答案：</b>{stu.answer}</div>
+                      <div style={{ marginBottom: 8 }}>
+                        <InputNumber min={0} max={gradingModalQuestion.points} style={{ width: 80 }} placeholder="分数" id={`modal_score_${stu.key}`} />
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <Input.TextArea rows={2} style={{ minWidth: 100, maxWidth: 300 }} placeholder="可填写评语" id={`modal_comment_${stu.key}`} />
+                      </div>
+                      <Button type="primary" size="small" onClick={() => {
+                        const score = Number(document.getElementById(`modal_score_${stu.key}`).value);
+                        const comment = document.getElementById(`modal_comment_${stu.key}`).value;
+                        handleModalGrade(stu.studentExamId, gradingModalQuestion.questionId, score, comment);
+                      }}>提交批改</Button>
+                    </div>
+                  ))}
+                </div>
+              ) : <div>暂无待批改学生</div>}
+            </Modal>
+          </Card>
+        );
+      default:
+        return null;
+    }
+  };
 
-      <TabPane tab={<span><CheckCircleOutlined />待批改试卷</span>} key="grading">
-        <Card title={<span style={{ fontWeight: 600, fontSize: 18 }}>待批改简答题/编程题</span>} style={{ width: '100%', maxWidth: 1600, margin: '0 auto' }}>
-          <Table columns={gradingColumns} dataSource={gradingList} loading={gradingLoading} pagination={{ pageSize: 8 }} bordered rowClassName={(_, idx) => idx % 2 === 0 ? 'table-row-light' : 'table-row-dark'} />
-        </Card>
-      </TabPane>
-    </Tabs>
+  // 教师端整体布局
+  const renderTeacherLayout = () => (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Layout.Sider width={220} style={{ background: '#f4f6fa', boxShadow: '2px 0 8px #e6eaf1', borderRight: '1.5px solid #e6eaf1', paddingTop: 0 }}>
+        <div style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          fontSize: 22,
+          color: '#1677ff',
+          letterSpacing: 2,
+          marginBottom: 16,
+          background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)',
+          borderRadius: '0 0 18px 18px',
+          boxShadow: '0 2px 8px #e6eaf1',
+        }}>
+          <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
+          <span style={{ color: '#fff' }}>教学AI助手</span>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[activeTeacherMenu]}
+          onClick={({ key }) => {
+            setActiveTeacherMenu(key);
+            if (key === 'grading') {
+              fetchGradingList();
+            }
+          }}
+          style={{ height: '100%', borderRight: 0, fontSize: 18, background: '#f4f6fa', fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif', fontWeight: 500 }}
+          items={teacherMenuItems.map(item => ({
+            ...item,
+            style: {
+              borderRadius: 10,
+              margin: '6px 8px',
+              transition: 'background 0.2s',
+            }
+          }))}
+          theme="light"
+        />
+      </Layout.Sider>
+      <Layout>
+        {/* 顶部Header去除白色长条，背景色与整体统一 */}
+        <div style={{ height: 64, background: '#f4f6fa', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px' }}>
+          <Space>
+            <Text style={{ color: '#1677ff', fontWeight: 600 }}>
+              教师：{currentUser?.username}
+            </Text>
+            <Button type="primary" icon={<LogoutOutlined />} onClick={logout} style={{ borderRadius: 20, fontWeight: 500 }}>
+              退出登录
+            </Button>
+          </Space>
+        </div>
+        <Layout.Content style={{ padding: '48px 0', background: '#f4f6fa', minHeight: 800, fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif' }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', padding: 32, background: '#fff', borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', minHeight: 600 }}>
+            {renderTeacherContent()}
+          </div>
+          {/* 创建考试Modal */}
+          <Modal
+            title="创建考试"
+            open={examModalVisible}
+            onCancel={() => setExamModalVisible(false)}
+            footer={null}
+          >
+            <Form form={examForm} onFinish={handleCreateExam} layout="vertical" initialValues={{}} validateTrigger={['onChange','onBlur']}>
+              <Form.Item name="title" label="考试标题" rules={[{ required: true, message: '请输入考试标题' }]} validateTrigger={['onChange','onBlur']}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="description" label="考试描述" rules={[{ required: true, message: '请输入考试描述' }]} validateTrigger={['onChange','onBlur']}>
+                <TextArea rows={3} />
+              </Form.Item>
+              <Form.Item name="duration" label="考试时长（分钟）" rules={[{ required: true, message: '请输入考试时长' }]} validateTrigger={['onChange','onBlur']}>
+                <Input type="number" min={1} />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block> 创建考试 </Button>
+              </Form.Item>
+            </Form>
+          </Modal>
+        </Layout.Content>
+        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+      </Layout>
+    </Layout>
   );
 
   const renderStudentInterface = () => (
-    <Tabs defaultActiveKey="1" size="large">
+    <Tabs activeKey={activeStudentMenu} onChange={key => setActiveStudentMenu(key)} size="large">
       <TabPane tab={<span><BookOutlined />知识库问答</span>} key="1">
         <Card title="知识库问答" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
           <TextArea
@@ -997,30 +1333,27 @@ function App() {
             {loading ? <Spin /> : answer && (
               <div style={{ padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
                 <Text strong>AI助手：</Text>
-                <ReactMarkdown style={{ marginTop: 8, marginBottom: 16 }}>{answer}</ReactMarkdown>
-                {qaSources.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <Text strong>溯源片段：</Text>
-                    {qaSources.map((src, idx) => (
-                      <div key={idx} style={{ margin: '12px 0', background: '#e6f7ff', borderRadius: 4, padding: 8 }}>
-                        <div style={{ fontSize: 13, color: '#888' }}>
-                          <b>文档：</b>{src.metadata?.source || src.metadata?.doc_id || '-'}
-                          <span> <b>页码：</b>
-                            {src.metadata?.page_num || src.metadata?.page || '-'}
-                          </span>
-                          {typeof src.metadata?.start_pos === 'number' && typeof src.metadata?.end_pos === 'number' && (
-                            <span> <b>位置：</b>{src.metadata.start_pos}~{src.metadata.end_pos}</span>
-                          )}
-                        </div>
-                        <div style={{ background: '#fffbe6', borderRadius: 3, padding: 6, marginTop: 4, fontSize: 15 }}>
-                          <ReactMarkdown>{src.content}</ReactMarkdown>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <MarkdownWithLatex>{answer}</MarkdownWithLatex>
               </div>
             )}
+          </div>
+          {/* 新增：可下载资料列表 */}
+          <div style={{ marginTop: 32 }}>
+            <b>可下载资料：</b>
+            <List
+              dataSource={knowledgeFiles.filter(f => f.student_can_download)}
+              renderItem={file => (
+                <List.Item>
+                  <span>{file.filename}</span>
+                  <span style={{ color: '#bbb', marginLeft: 12 }}>{file.upload_time}</span>
+                  <Button
+                    style={{ marginLeft: 16 }}
+                    onClick={() => handleDownload(file.filename)}
+                    type="link"
+                  >下载</Button>
+                </List.Item>
+              )}
+            />
           </div>
         </Card>
       </TabPane>
@@ -1028,11 +1361,12 @@ function App() {
       <TabPane tab={<span><FormOutlined />考试系统</span>} key="2">
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: '80vh', background: '#f5f6fa' }}>
           <div style={{ width: 420, maxWidth: '95vw', marginTop: 32 }}>
-            <Card title="可参加的考试" style={{ marginBottom: 24, borderRadius: 8, boxShadow: '0 2px 8px #f0f1f2' }} bodyStyle={{ padding: 0 }}>
+            <Card title="可参加的考试" style={{ marginBottom: 24, borderRadius: 8, boxShadow: '0 2px 8px #f0f1f2', width: '100%', minHeight: 400, padding: 0 }} bodyStyle={{ padding: 0 }}>
           <List
             dataSource={studentExams}
+                style={{ width: '100%' }}
                 renderItem={exam => (
-                  <List.Item style={{ borderBottom: '1px solid #f0f0f0', padding: 20 }}>
+                  <List.Item style={{ borderBottom: '1px solid #f0f0f0', padding: 20, width: '100%', margin: 0 }}>
                     <div style={{ width: '100%' }}>
                       <div style={{ fontWeight: 'bold', fontSize: 18 }}>{exam.title}</div>
                       <div style={{ color: '#888', margin: '8px 0' }}>{exam.description}</div>
@@ -1070,7 +1404,8 @@ function App() {
     if (!currentExam) return null;
 
     return (
-      <Card title={`考试：${currentExam.exam.title}`} style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <Card title={`考试：${currentExam.exam.title}`} style={{ marginBottom: 24 }}>
         <div style={{ marginBottom: 16 }}>
           <Space>
             <Text strong>剩余时间：</Text>
@@ -1118,12 +1453,30 @@ function App() {
                   </Radio.Group>
                 )}
 
+                {question.type === 'multi' && (
+                  <Checkbox.Group
+                    value={examAnswers[question.id] || []}
+                    onChange={checkedValues => setExamAnswers({
+                      ...examAnswers,
+                      [question.id]: checkedValues
+                    })}
+                  >
+                    <Space direction="vertical">
+                      {Object.entries(question.options).map(([key, value]) => (
+                        <Checkbox key={key} value={key}>
+                          {key}. {value}
+                        </Checkbox>
+                      ))}
+                    </Space>
+                  </Checkbox.Group>
+                )}
+
                 {question.type === 'fill_blank' && (() => {
                   const blankCount = (question.question.match(/_____/g) || []).length;
                   return (
                     <>
                   <Input
-                        placeholder={`请输入答案${blankCount > 1 ? '，多个空用英文分号 ; 分隔' : ''}`}
+                          placeholder={`请输入答案${blankCount > 1 ? '，多个空用空格分隔' : ''}`}
                     value={examAnswers[question.id] || ''}
                     onChange={(e) => setExamAnswers({
                       ...examAnswers,
@@ -1132,7 +1485,7 @@ function App() {
                   />
                       {blankCount > 1 && (
                         <div style={{ color: '#faad14', fontSize: 12, marginTop: 4 }}>
-                          多个空请用英文分号 ; 分隔，如：答案1;答案2;答案3
+                            多个空请用空格分隔，如：答案1 答案2 答案3
                         </div>
                 )}
                     </>
@@ -1171,6 +1524,7 @@ function App() {
           </Space>
         </div>
       </Card>
+      </div>
     );
   };
 
@@ -1198,7 +1552,7 @@ function App() {
           <Text>{q.explanation}</Text>
         </div>
         <div>
-          <Tag color="blue">知识点: {q.knowledge_point}</Tag>
+          <Tag color="blue">知识点: {q.knowledge_points}</Tag>
         </div>
       </Card>
     ));
@@ -1207,23 +1561,31 @@ function App() {
   const renderFillBlankQuestions = (questions) => {
     if (!questions || questions.length === 0) return <Text type="secondary">暂无填空题</Text>;
     
-    return questions.map((q, index) => (
+    return questions.map((q, index) => {
+      // 处理多个空的答案显示
+      const answers = (q.answer || q.correct_answer || '').split().map(ans => ans.trim()).filter(ans => ans);
+      const answerDisplay = answers.length > 1 
+        ? answers.map((ans, i) => `空${i + 1}: ${ans}`).join(' ')
+        : answers[0] || '';
+      
+      return (
       <Card key={index} size="small" style={{ marginBottom: 16 }}>
         <div style={{ marginBottom: 8 }}>
           <Text strong>{index + 1}. {q.question}</Text>
         </div>
         <div style={{ marginBottom: 8 }}>
-          <Text type="success" strong>答案: {q.answer}</Text>
+            <Text type="success" strong>答案: {answerDisplay}</Text>
         </div>
         <div style={{ marginBottom: 8 }}>
           <Text strong>解析: </Text>
           <Text>{q.explanation}</Text>
         </div>
         <div>
-          <Tag color="blue">知识点: {q.knowledge_point}</Tag>
+            <Tag color="blue">知识点: {q.knowledge_points}</Tag>
         </div>
       </Card>
-    ));
+      );
+    });
   };
 
   const renderShortAnswerQuestions = (questions) => {
@@ -1247,7 +1609,7 @@ function App() {
           </ul>
         </div>
         <div>
-          <Tag color="blue">知识点: {q.knowledge_point}</Tag>
+          <Tag color="blue">知识点: {q.knowledge_points}</Tag>
         </div>
       </Card>
     ));
@@ -1283,75 +1645,11 @@ function App() {
           <Text>{q.explanation}</Text>
         </div>
         <div>
-          <Tag color="blue">知识点: {q.knowledge_point}</Tag>
+          <Tag color="blue">知识点: {q.knowledge_points}</Tag>
         </div>
       </Card>
     ));
   };
-
-  // 题型配置表单
-  const renderQuestionConfigForm = () => (
-    <Card title="题型设置" style={{ marginBottom: 24 }}>
-      <table style={{ width: '100%', textAlign: 'center' }}>
-        <thead>
-          <tr>
-            <th>题型</th>
-            <th>生成</th>
-            <th>数量</th>
-            <th>分值</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            { key: 'choice', label: '单选题' },
-            { key: 'multi', label: '多选题' },
-            { key: 'fill_blank', label: '填空题' },
-            { key: 'short_answer', label: '简答题' },
-            { key: 'programming', label: '编程题' }
-          ].map(item => (
-            <tr key={item.key}>
-              <td>{item.label}</td>
-              <td>
-                <Checkbox
-                  checked={questionConfig[item.key].enabled}
-                  onChange={e => setQuestionConfig({
-                    ...questionConfig,
-                    [item.key]: { ...questionConfig[item.key], enabled: e.target.checked }
-                  })}
-                />
-              </td>
-              <td>
-                <Input
-                  type="number"
-                  min={0}
-                  value={questionConfig[item.key].count}
-                  disabled={!questionConfig[item.key].enabled}
-                  onChange={e => setQuestionConfig({
-                    ...questionConfig,
-                    [item.key]: { ...questionConfig[item.key], count: Number(e.target.value) }
-                  })}
-                  style={{ width: 60 }}
-                />
-              </td>
-              <td>
-                <Input
-                  type="number"
-                  min={1}
-                  value={questionConfig[item.key].points}
-                  disabled={!questionConfig[item.key].enabled}
-                  onChange={e => setQuestionConfig({
-                    ...questionConfig,
-                    [item.key]: { ...questionConfig[item.key], points: Number(e.target.value) }
-                  })}
-                  style={{ width: 60 }}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
-  );
 
   // 优化生成后题目勾选渲染，分Panel分题型显示
   const renderGeneratedQuestions = () => {
@@ -1427,11 +1725,11 @@ function App() {
                             </div>
                           )}
                           {q.answer && <div style={{ color: '#d4380d', marginTop: 4 }}>答案：{q.answer}</div>}
-                          {q.correct_answer && <div style={{ color: '#d4380d', marginTop: 4 }}>答案：{q.correct_answer}</div>}
+                          {q.correct_answer && <div style={{ color: '#1677ff', marginTop: 4 }}>答案：{q.correct_answer}</div>}
                           <div style={{ color: '#52c41a', marginTop: 4 }}>分值：{q.points}</div>
                           <div style={{ color: '#8c8c8c', marginTop: 4 }}>解析：{q.explanation}</div>
                           <div style={{ marginTop: 4 }}>
-                            <Tag color="geekblue">知识点：{q.knowledge_point}</Tag>
+                            <Tag color="geekblue">知识点：{q.knowledge_points}</Tag>
                           </div>
                         </div>
                       </List.Item>
@@ -1519,28 +1817,32 @@ function App() {
   const fetchGradingList = async () => {
     setGradingLoading(true);
     try {
-      // 获取所有考试
       const examsRes = await axios.get('http://localhost:8000/teacher/exams');
       const exams = examsRes.data.exams || [];
-      let allToGrade = [];
+      let questionMap = {};
       for (const exam of exams) {
-        // 获取每场考试的学生作答
         const ansRes = await axios.get(`http://localhost:8000/teacher/exam/${exam.id}/answers`);
         const students = ansRes.data.students || [];
         for (const stu of students) {
           for (const ans of stu.answers) {
             if (ans.is_correct === null) {
-              allToGrade.push({
+              const key = `${exam.id}_${ans.question_id}`;
+              if (!questionMap[key]) {
+                questionMap[key] = {
                 examId: exam.id,
                 examTitle: exam.title,
-                studentId: stu.student_id,
-                studentName: stu.student_name,
-                studentExamId: stu.student_exam_id || stu.id,
                 questionId: ans.question_id,
                 question: ans.question,
                 type: ans.type,
-                answer: ans.student_answer,
                 points: ans.points,
+                  waitStudents: [],
+                };
+              }
+              questionMap[key].waitStudents.push({
+                studentId: stu.student_id,
+                studentName: stu.student_name,
+                studentExamId: stu.student_exam_id || stu.id,
+                answer: ans.student_answer,
                 comment: ans.comment || '',
                 key: `${stu.student_exam_id || stu.id}_${ans.question_id}`
               });
@@ -1548,7 +1850,11 @@ function App() {
           }
         }
       }
-      setGradingList(allToGrade);
+      const questionList = Object.values(questionMap).map(q => ({
+        ...q,
+        waitCount: q.waitStudents.length
+      }));
+      setGradingList(questionList);
     } catch (e) {
       setGradingList([]);
     }
@@ -1570,45 +1876,43 @@ function App() {
     }
   };
 
-  const gradingColumns = [
+  const gradingQuestionColumns = [
     { title: '考试', dataIndex: 'examTitle', key: 'examTitle', align: 'center', width: 120 },
-    { title: '学生', dataIndex: 'studentName', key: 'studentName', align: 'center', width: 100 },
     { title: '题型', dataIndex: 'type', key: 'type', align: 'center', width: 100, render: t => t === 'short_answer' ? '简答题' : '编程题' },
     { title: '题目', dataIndex: 'question', key: 'question', width: 350, render: text => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{text}</div> },
-    { title: '学生答案', dataIndex: 'answer', key: 'answer', width: 250, render: text => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{text}</div> },
-    { title: '分值', dataIndex: 'points', key: 'points', align: 'center', width: 80, render: v => <span style={{ fontWeight: 600 }}>{v}</span> },
-    {
-      title: '打分',
-      key: 'grade',
-      align: 'center',
-      width: 100,
-      render: (_, record) => (
-        <InputNumber min={0} max={record.points} style={{ width: 60 }} placeholder="分数" id={`score_${record.key}`} />
-      )
-    },
-    {
-      title: '评语',
-      key: 'comment',
-      align: 'center',
-      width: 180,
-      render: (_, record) => (
-        <Input.TextArea rows={2} style={{ minWidth: 100, maxWidth: 180 }} placeholder="可填写评语" id={`comment_${record.key}`} />
-      )
-    },
+    { title: '待批改人数', dataIndex: 'waitCount', key: 'waitCount', align: 'center', width: 100 },
     {
       title: '操作',
       key: 'action',
       align: 'center',
-      width: 100,
+      width: 120,
       render: (_, record) => (
-        <Button type="primary" size="small" style={{ marginLeft: 8 }} onClick={() => {
-          const score = Number(document.getElementById(`score_${record.key}`).value);
-          const comment = document.getElementById(`comment_${record.key}`).value;
-          handleGrade(record, score, comment);
-        }}>提交批改</Button>
+        <Button type="primary" size="small" onClick={() => {
+          setGradingModalQuestion(record);
+          setGradingModalStudentAnswers(record.waitStudents);
+          setGradingModalSelectedStudent(record.waitStudents[0]?.studentId || null);
+          setGradingModalVisible(true);
+        }}>进入批改</Button>
       )
     }
   ];
+
+  // 批改弹窗提交
+  const handleModalGrade = async (studentExamId, questionId, score, comment) => {
+    try {
+      await axios.post('http://localhost:8000/teacher/grade-answer', new URLSearchParams({
+        student_exam_id: studentExamId,
+        question_id: questionId,
+        points_earned: score,
+        comment
+      }));
+      message.success('批改成功');
+      setGradingModalVisible(false);
+      fetchGradingList();
+    } catch (e) {
+      message.error('批改失败');
+    }
+  };
 
   // 在App组件内添加方法
   const handleGeneratePPTFromUpload = async ({ file }) => {
@@ -1622,6 +1926,890 @@ function App() {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  };
+
+  // 在App组件内添加删除考试函数
+  const handleDeleteExam = async (id) => {
+    try {
+      await axios.delete(`http://localhost:8000/exam/${id}`);
+      message.success('考试删除成功');
+      fetchTeacherExams(); // 重新拉取考试列表
+    } catch (e) {
+      message.error('删除失败');
+      console.error(e);
+    }
+  };
+
+  // 题型配置表单
+  const renderQuestionConfigForm = () => (
+    <Card title="题型设置" style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
+        <Text strong style={{ marginRight: 8 }}>试题难度：</Text>
+        <Select value={difficulty} onChange={setDifficulty} style={{ width: 120 }}>
+          <Option value="简单">简单</Option>
+          <Option value="中等">中等</Option>
+          <Option value="困难">困难</Option>
+        </Select>
+      </div>
+      <table style={{ width: '100%', textAlign: 'center' }}>
+        <thead>
+          <tr>
+            <th>题型</th>
+            <th>生成</th>
+            <th>数量</th>
+            <th>分值</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { key: 'choice', label: '单选题' },
+            { key: 'multi', label: '多选题' },
+            { key: 'fill_blank', label: '填空题' },
+            { key: 'short_answer', label: '简答题' },
+            { key: 'programming', label: '编程题' }
+          ].map(item => (
+            <tr key={item.key}>
+              <td>{item.label}</td>
+              <td>
+                <Checkbox
+                  checked={questionConfig[item.key].enabled}
+                  onChange={e => setQuestionConfig({
+                    ...questionConfig,
+                    [item.key]: { ...questionConfig[item.key], enabled: e.target.checked }
+                  })}
+                />
+              </td>
+              <td>
+                <Input
+                  type="number"
+                  min={0}
+                  value={questionConfig[item.key].count}
+                  disabled={!questionConfig[item.key].enabled}
+                  onChange={e => setQuestionConfig({
+                    ...questionConfig,
+                    [item.key]: { ...questionConfig[item.key], count: Number(e.target.value) }
+                  })}
+                  style={{ width: 60 }}
+                />
+              </td>
+              <td>
+                <Input
+                  type="number"
+                  min={1}
+                  value={questionConfig[item.key].points}
+                  disabled={!questionConfig[item.key].enabled}
+                  onChange={e => setQuestionConfig({
+                    ...questionConfig,
+                    [item.key]: { ...questionConfig[item.key], points: Number(e.target.value) }
+                  })}
+                  style={{ width: 60 }}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+
+  // 学生端左侧菜单项
+  const studentMenuItems = [
+    { key: 'qa', icon: <BookOutlined />, label: '知识库问答' },
+    { key: 'exam', icon: <FormOutlined />, label: '考试系统' },
+    { key: 'analysis', icon: <DatabaseOutlined />, label: '学情分析' },
+    { key: 'wrongbook', icon: <BookOutlined />, label: '错题巩固' },
+    { key: 'assistant', icon: <BookOutlined />, label: '学习助手' }, // 新增
+  ];
+  // 学生端菜单状态，支持 localStorage 恢复
+  const [activeStudentMenu, setActiveStudentMenu] = useState(() => localStorage.getItem('activeStudentMenu') || 'qa');
+  useEffect(() => { localStorage.setItem('activeStudentMenu', activeStudentMenu); }, [activeStudentMenu]);
+
+  // 学生端内容区渲染
+  const renderStudentContent = () => {
+    switch (activeStudentMenu) {
+      case 'qa':
+        return (
+          <Card title="知识库问答" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
+            <TextArea
+              rows={3}
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              placeholder="请输入你的问题..."
+              style={{ marginBottom: 16 }}
+            />
+            <Button type="primary" onClick={handleAsk} loading={loading}>
+              提问
+            </Button>
+            <div style={{ marginTop: 16, minHeight: 60 }}>
+              {loading ? <Spin /> : answer && (
+                <div style={{ padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+                  <Text strong>AI助手：</Text>
+                  <MarkdownWithLatex>{answer}</MarkdownWithLatex>
+                </div>
+              )}
+            </div>
+            {/* 新增：可下载资料列表 */}
+            <div style={{ marginTop: 32 }}>
+              <b>可下载资料：</b>
+              <List
+                dataSource={knowledgeFiles.filter(f => f.student_can_download)}
+                renderItem={file => (
+                  <List.Item>
+                    <span>{file.filename}</span>
+                    <span style={{ color: '#bbb', marginLeft: 12 }}>{file.upload_time}</span>
+                    <Button
+                      style={{ marginLeft: 16 }}
+                      onClick={() => handleDownload(file.filename)}
+                      type="link"
+                    >下载</Button>
+                  </List.Item>
+                )}
+              />
+            </div>
+          </Card>
+        );
+      case 'exam':
+        return (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 24,
+              width: '100%',
+              minHeight: 400,
+              background: 'transparent',
+              margin: '0 auto',
+              justifyContent: 'flex-start'
+            }}
+          >
+            {studentExams.length === 0 ? (
+              <div style={{ color: '#888', fontSize: 18, margin: '80px auto' }}>暂无可参加的考试</div>
+            ) : (
+              studentExams.map((exam) => (
+                <Card
+                  key={exam.id}
+                  title={<span style={{ fontWeight: 600, fontSize: 20 }}>{exam.title}</span>}
+                  bordered={false}
+                  style={{
+                    width: 340,
+                    minHeight: 220,
+                    boxShadow: '0 2px 12px #e6eaf1',
+                    borderRadius: 14,
+                    background: '#fff',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                  bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 20 }}
+                  extra={
+                    exam.completed ? (
+                      <Tag color="green" style={{ fontWeight: 600 }}>已完成</Tag>
+                    ) : (
+                      <Tag color="blue" style={{ fontWeight: 600 }}>未完成</Tag>
+                    )
+                  }
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#888', marginBottom: 8 }}>{exam.description}</div>
+                    <div style={{ marginBottom: 8 }}>
+                      <Tag color="blue">时长: {exam.duration} 分钟</Tag>
+                      <span style={{ color: '#aaa', marginLeft: 8 }}>创建时间: {exam.created_at?.slice(0, 16)}</span>
+                    </div>
+                    {exam.completed && (
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ color: '#52c41a', fontWeight: 'bold' }}>得分: {exam.score}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                    {exam.completed ? (
+                      <Button size="small" type="primary" ghost onClick={() => viewExamResult(exam.id)}>
+                        查看结果
+                      </Button>
+                    ) : (
+                      <Button type="primary" onClick={() => startExam(exam.id)}>
+                        开始考试
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        );
+      case 'analysis':
+        return <StudentAnalysis />;
+      case 'wrongbook':
+        return <StudentWrongbook />;
+      case 'assistant':
+        return <SocraticAssistant />;
+      default:
+        return null;
+    }
+  };
+
+  function StudentAnalysis() {
+    const [accuracyData, setAccuracyData] = useState([]);
+    const [keywordAccuracy, setKeywordAccuracy] = useState([]);
+    // 新增：存储每场考试的知识点正确率
+    const [examKeywordAccuracy, setExamKeywordAccuracy] = useState({});
+    // 新增：存储 tooltip 的 examId，强制刷新
+    const [tooltipExamId, setTooltipExamId] = useState(null);
+    const [hoveredExamId, setHoveredExamId] = useState(null);
+
+    const fetchStudentAnalysis = async () => {
+      try {
+        const res = await axios.get('http://localhost:8000/student/analysis');
+        setAccuracyData(res.data.accuracy_curve || []);
+        setKeywordAccuracy(res.data.keyword_accuracy || []);
+      } catch (error) {
+        console.error('获取学情分析失败:', error);
+      }
+    };
+
+    useEffect(() => {
+      fetchStudentAnalysis();
+      axios.get('http://localhost:8000/student/keyword-accuracy').then(res => {
+        setKeywordAccuracy(res.data.keyword_accuracy || []);
+      });
+      // 新增：监听 updateStudentAnalysis 事件
+      const handler = () => fetchStudentAnalysis();
+      window.addEventListener('updateStudentAnalysis', handler);
+      return () => window.removeEventListener('updateStudentAnalysis', handler);
+    }, []);
+
+    // 只保留正确率低于80%的知识点
+    const weakKeywords = keywordAccuracy.filter(item => item.accuracy < 80);
+    // 词云数据，声明为 let，后续根据 hoveredExamId 赋值（只声明一次）
+    let tagData = [];
+    if (hoveredExamId && examKeywordAccuracy[hoveredExamId]) {
+      tagData = (examKeywordAccuracy[hoveredExamId] || []).map(item => ({
+        value: item.keyword,
+        count: Math.max(20, Math.round(40 + (80 - item.accuracy) * 1.5)),
+        accuracy: item.accuracy,
+        disabled: item.accuracy === 100
+      }));
+    } else {
+      tagData = weakKeywords.map(item => ({
+        value: item.keyword,
+        count: Math.max(20, Math.round(40 + (80 - item.accuracy) * 1.5)),
+        accuracy: item.accuracy,
+        disabled: item.accuracy === 100
+      }));
+    }
+
+    // ECharts option
+    const echartsOption = {
+      title: { text: '历次考试正确率曲线', left: 'center' },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'line' },
+        // formatter 支持异步
+        formatter: function (params) {
+          if (!params || !params.length) return '';
+          const d = params[0].data;
+          const examId = d.exam_id;
+          setTooltipExamId(examId); // 触发 useEffect
+          setHoveredExamId(examId); // 新增：记录悬停考试id
+          let content = `<div><div>考试：${d.exam_title || '-'}<\/div><div>总正确率：${d.accuracy != null ? d.accuracy + '%' : '-'}<\/div><div>知识点正确率：<\/div>`;
+          const keywordData = examKeywordAccuracy[examId];
+          if (!keywordData) {
+            // 触发异步请求
+            axios.get(`http://localhost:8000/student/exam-keyword-accuracy/${examId}`)
+              .then(res => {
+                setExamKeywordAccuracy(prev => ({ ...prev, [examId]: res.data }));
+              })
+              .catch(() => {
+                setExamKeywordAccuracy(prev => ({ ...prev, [examId]: [] }));
+              });
+            content += '<div style="color:#aaa">加载中...<\/div>';
+          } else if (Array.isArray(keywordData) && keywordData.length > 0) {
+            content += '<ul style="margin:0;padding-left:16px">' +
+              keywordData.map(item => `<li>${item.keyword}：${item.accuracy != null ? item.accuracy + '%' : '-'}（${item.correct || 0}/${item.total || 0}）<\/li>`).join('') +
+              '<\/ul>';
+          } else {
+            content += '<div style="color:#aaa">暂无数据<\/div>';
+          }
+          content += '<\/div>';
+          return content;
+        },
+        // 新增：tooltip消失时清空 hoveredExamId
+        hideDelay: 100,
+        enterable: true,
+        confine: true,
+        extraCssText: 'z-index: 9999;',
+        // ECharts 5 支持事件
+        triggerOn: 'mousemove|click',
+        // 监听 tooltip 隐藏
+        // 下面的 events 仅供参考，实际需在 onEvents 里处理
+      },
+      xAxis: {
+        type: 'category',
+        name: '考试',
+        data: (accuracyData.length > 0 ? accuracyData : []).map(d => d.exam_title),
+        nameLocation: 'middle',
+        nameGap: 30,
+        axisLabel: { rotate: 0 }
+      },
+      yAxis: {
+        type: 'value',
+        name: '正确率(%)',
+        min: 0,
+        max: 100,
+        nameLocation: 'middle',
+        nameGap: 40
+      },
+      series: [
+        {
+          data: (accuracyData.length > 0 ? accuracyData : []).map(d => ({ ...d, value: d.accuracy })),
+          type: 'line',
+          smooth: true,
+          symbol: 'circle',
+          lineStyle: { width: 3, color: '#1677ff' },
+          itemStyle: { color: '#1677ff', borderColor: '#fff', borderWidth: 2 },
+          label: {
+            show: true,
+            formatter: p => (p.data.accuracy == null ? '-' : p.data.accuracy + '%'),
+            fontSize: 12,
+            color: '#666',
+            fontWeight: 500
+          }
+        }
+      ],
+      grid: { left: 40, right: 20, top: 60, bottom: 60 }
+    };
+
+    // 词云鼠标移出时清空 hoveredExamId
+    const handleChartEvents = {
+      mouseout: () => setHoveredExamId(null)
+    };
+
+    // ECharts 词云 option
+    const wordCloudOption = {
+      tooltip: {
+        formatter: function(params) {
+          return `知识点：${params.name}<br/>正确率：${params.data && params.data.accuracy !== undefined ? params.data.accuracy + '%' : '--'}`;
+        }
+      },
+      series: [{
+        type: 'wordCloud',
+        gridSize: 8,
+        sizeRange: [20, 60],
+        rotationRange: [-45, 90],
+        shape: 'circle',
+        textStyle: {
+          color: (params) => {
+            // 100% 正确率变灰色
+            if (params && params.data && params.data.accuracy === 100) return '#bbb';
+            const colors = ['#1677ff', '#52c41a', '#faad14', '#d4380d', '#722ed1'];
+            return colors[Math.floor(Math.random() * colors.length)];
+          }
+        },
+        data: tagData.map(item => ({
+          name: item.value,
+          value: item.count,
+          accuracy: item.accuracy
+        }))
+      }]
+    };
+
+    // 词云点击事件：切换到错题本并选中知识点（修正顺序）
+    const handleWordClick = params => {
+      if (params && params.name) {
+        // 查找当前词条是否 disabled
+        const tag = tagData.find(t => t.value === params.name);
+        if (tag && tag.disabled) return;
+        window.selectedWrongbookKeyword = params.name;
+        setActiveStudentMenu('wrongbook');
+      }
+    };
+
+    // 统计卡片和词云部分保持不变，折线图部分替换为 ECharts
+    return (
+      <Card style={{ marginBottom: 32, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
+        {/* 统计信息卡片 ... 保持原样 ... */}
+        <div className="stats-grid fade-in-up" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+          <div className="stats-card" style={{
+            background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #91d5ff',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1677ff', marginBottom: '8px' }}>
+              {accuracyData.length}
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>参加考试次数</div>
+          </div>
+          
+          <div className="stats-card" style={{
+            background: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #b7eb8f',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a', marginBottom: '8px' }}>
+              {accuracyData.length > 0 ? 
+                Math.round(accuracyData.reduce((sum, item) => sum + item.accuracy, 0) / accuracyData.length) : 
+                0}%
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>平均正确率</div>
+          </div>
+          
+          <div className="stats-card" style={{
+            background: 'linear-gradient(135deg, #fff7e6 0%, #ffd591 100%)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #ffc53d',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#faad14', marginBottom: '8px' }}>
+              {weakKeywords.length}
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>薄弱知识点</div>
+          </div>
+          
+          <div className="stats-card" style={{
+            background: 'linear-gradient(135deg, #fff1f0 0%, #ffccc7 100%)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #ffa39e',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f5222d', marginBottom: '8px' }}>
+              {accuracyData.length > 0 ? 
+                accuracyData.filter(item => item.accuracy < 60).length : 
+                0}
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>需加强考试</div>
+          </div>
+        </div>
+        {/* 折线图部分用 ECharts 替换 */}
+        <div className="chart-container fade-in-up" style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)', border: '1px solid #e8e8e8', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: '0', left: '0', right: '0', height: '3px', background: 'linear-gradient(90deg, #1677ff 0%, #52c41a 50%, #faad14 100%)' }} />
+          <ReactECharts option={echartsOption} style={{ height: 320 }} notMerge={true} onEvents={handleChartEvents} />
+        </div>
+        {/* 词云部分用 ECharts 替换 */}
+        <div className="wordcloud-container fade-in-up" style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: 240,
+          background: 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid #ffd591'
+        }}>
+          <ReactECharts 
+            option={wordCloudOption} 
+            style={{ width: 650, height: 240 }} 
+            onEvents={{ click: handleWordClick }}
+          />
+        </div>
+      </Card>
+    );
+  }
+
+  function StudentWrongbook() {
+    const [keywords, setKeywords] = useState([]);
+    const [accuracyMap, setAccuracyMap] = useState({}); // 新增：知识点正确率
+    const [selectedKeyword, setSelectedKeyword] = useState('');
+    const [questions, setQuestions] = useState([]);
+    const [activeQuestion, setActiveQuestion] = useState(null);
+    const [answer, setAnswer] = useState('');
+    const [result, setResult] = useState(null);
+    const [loading, setLoading] = useState(false);
+    // 巩固练习相关
+    const [practiceModal, setPracticeModal] = useState(false);
+    const [practiceCount, setPracticeCount] = useState(5);
+    const [practiceQuestions, setPracticeQuestions] = useState([]);
+    const [practiceAnswers, setPracticeAnswers] = useState({});
+    const [practiceResult, setPracticeResult] = useState(null);
+    const [practiceLoading, setPracticeLoading] = useState(false);
+    const [practiceHistory, setPracticeHistory] = useState([]); // 新增：巩固练习历史
+
+    useEffect(() => {
+      axios.get('http://localhost:8000/student/wrongbook/keywords').then(res => {
+        setKeywords(res.data || []);
+      });
+      // 拉取知识点正确率
+      axios.get('http://localhost:8000/student/keyword-accuracy').then(res => {
+        const map = {};
+        (res.data.keyword_accuracy || []).forEach(item => {
+          map[item.keyword] = item.accuracy;
+        });
+        setAccuracyMap(map);
+      });
+    }, []);
+
+    useEffect(() => {
+      if (selectedKeyword) {
+        setLoading(true);
+        axios.get('http://localhost:8000/student/wrongbook/questions', { params: { keyword: selectedKeyword } })
+          .then(res => setQuestions(res.data || []))
+          .finally(() => setLoading(false));
+        // 新增：拉取巩固练习历史
+        axios.get('http://localhost:8000/student/practice-records', { params: { keyword: selectedKeyword } })
+          .then(res => setPracticeHistory(res.data || []));
+      }
+    }, [selectedKeyword]);
+
+    useEffect(() => {
+      if (window.selectedWrongbookKeyword) {
+        setSelectedKeyword(window.selectedWrongbookKeyword);
+        window.selectedWrongbookKeyword = null;
+      }
+    }, []);
+
+    // 标签区优化：可取消选择，悬停气泡显示正确率，颜色区分
+    const handleSelectKeyword = (keyword) => {
+      if (selectedKeyword === keyword) {
+        setSelectedKeyword('');
+        setQuestions([]);
+        setPracticeHistory([]);
+      } else {
+        setSelectedKeyword(keyword);
+        setResult(null);
+        setActiveQuestion(null);
+      }
+    };
+
+    // 错题重做弹窗美化
+    const redoInputRef = React.useRef(null);
+    useEffect(() => {
+      if (activeQuestion && redoInputRef.current) {
+        redoInputRef.current.focus();
+      }
+    }, [activeQuestion]);
+
+    const handleRedoKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        handleSubmit();
+      }
+    };
+
+    const handleSubmit = async () => {
+      if (!activeQuestion) return;
+      setLoading(true);
+      try {
+        const res = await axios.post('http://localhost:8000/student/wrongbook/submit',
+          new URLSearchParams({ wrong_id: activeQuestion.id, answer })
+        );
+        setResult(res.data);
+      } catch (e) {
+        message.error('提交失败');
+      }
+      setLoading(false);
+    };
+
+    // 巩固练习相关
+    const handleGeneratePractice = async () => {
+      if (!selectedKeyword) return;
+      setPracticeLoading(true);
+      setPracticeQuestions([]);
+      setPracticeResult(null);
+      setPracticeAnswers({});
+      try {
+        const res = await axios.post('http://localhost:8000/student/generate-practice',
+          new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
+        );
+        setPracticeQuestions(res.data.questions || []);
+      } catch (e) {
+        message.error('生成习题失败');
+      }
+      setPracticeLoading(false);
+    };
+    const handleSubmitPractice = async () => {
+      setPracticeLoading(true);
+      try {
+        const answers = practiceQuestions.map((q, idx) => ({
+          question: q.question,
+          answer: practiceAnswers[idx] || '',
+          correct_answer: q.correct_answer,
+          explanation: q.explanation,
+          knowledge_points: q.knowledge_points
+        }));
+        const res = await axios.post('http://localhost:8000/student/submit-practice',
+          new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
+        );
+        setPracticeResult(res.data);
+        // 新增：提交后刷新正确率
+        const accRes = await axios.get('http://localhost:8000/student/keyword-accuracy');
+        const map = {};
+        (accRes.data.keyword_accuracy || []).forEach(item => {
+          map[item.keyword] = item.accuracy;
+        });
+        setAccuracyMap(map);
+        // 新增：刷新巩固练习历史
+        const historyRes = await axios.get('http://localhost:8000/student/practice-records', { params: { keyword: selectedKeyword } });
+        setPracticeHistory(historyRes.data || []);
+      } catch (e) {
+        message.error('提交失败');
+      }
+      setPracticeLoading(false);
+    };
+
+    // 巩固练习进度条
+    const practiceProgress = practiceQuestions.length > 0 ? Math.round(Object.keys(practiceAnswers).length / practiceQuestions.length * 100) : 0;
+
+    return (
+      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />错题本</span>} style={{ maxWidth: 1200, margin: '0 auto', marginBottom: 24, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
+        {/* 知识点标签区美化 */}
+        <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+          <b style={{ marginRight: 12 }}>知识点标签：</b>
+          {keywords.length === 0 ? <Empty description="暂无错题" /> :
+            keywords.map(k => (
+              <Tag.CheckableTag
+                key={k.keyword}
+                checked={selectedKeyword === k.keyword}
+                onChange={() => handleSelectKeyword(k.keyword)}
+                style={{
+                  fontSize: 16,
+                  margin: 6,
+                  background: selectedKeyword === k.keyword ? '#e6f7ff' : '#f5f5f5',
+                  border: selectedKeyword === k.keyword ? '1.5px solid #1890ff' : '1px solid #eee',
+                  color: accuracyMap[k.keyword] < 60 ? '#f5222d' : accuracyMap[k.keyword] < 80 ? '#faad14' : '#52c41a',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                  boxShadow: selectedKeyword === k.keyword ? '0 2px 8px #bae7ff' : 'none'
+                }}
+                title={`正确率：${accuracyMap[k.keyword] !== undefined ? accuracyMap[k.keyword] + '%' : '--'}`}
+              >
+                {k.keyword}
+                <span style={{ color: '#bbb', fontSize: 12, marginLeft: 4 }}>正确率：{accuracyMap[k.keyword] !== undefined ? accuracyMap[k.keyword] + '%' : '--'}</span>
+              </Tag.CheckableTag>
+            ))}
+        </div>
+        {/* 错题列表美化 */}
+        {selectedKeyword && (
+          <div>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+              <span style={{ color: '#888', marginRight: 16 }}>
+                正确率：{accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] + '%' : '--'}
+              </span>
+              <Button size="small" type="primary" ghost onClick={() => setPracticeModal(true)} style={{ borderRadius: 16, fontWeight: 600 }}>
+                巩固练习
+              </Button>
+            </div>
+            <b style={{ fontSize: 18 }}>错题列表{selectedKeyword ? `（${selectedKeyword}）` : ''}：</b>
+            {loading ? <Spin style={{ marginLeft: 16 }} /> : (
+              <List
+                dataSource={questions}
+                locale={{ emptyText: <Empty description="该知识点暂无错题" /> }}
+                renderItem={q => (
+                  <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ width: '100%' }}>
+                      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{q.question}</div>
+                      {q.options && Object.keys(q.options).length > 0 && (
+                        <div style={{ margin: '8px 0' }}>
+                          {Object.entries(q.options).map(([k, v]) => (
+                            <div key={k}>{k}. {v}</div>
+                          ))}
+                        </div>
+                      )}
+                      <Button type="primary" ghost onClick={() => {
+                        setActiveQuestion(q);
+                        setAnswer('');
+                        setResult(null);
+                      }} style={{ marginTop: 8, borderRadius: 12, fontWeight: 600 }}>重做</Button>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            )}
+            {/* 巩固练习历史 */}
+            <div style={{ marginTop: 32 }}>
+              <b style={{ fontSize: 16 }}>巩固练习历史：</b>
+              {practiceHistory.length === 0 ? (
+                <div style={{ color: '#aaa', margin: '12px 0' }}><Empty description="暂无巩固练习记录" /></div>
+              ) : (
+                <List
+                  dataSource={practiceHistory}
+                  renderItem={h => (
+                    <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{h.question}</div>
+                        {/* 仅选择题显示选项 */}
+                        {h.options && Object.keys(h.options).length > 0 && (h.type === 'choice' || h.type === 'multi') && (
+                          <div style={{ margin: '8px 0' }}>
+                            {Object.entries(h.options).map(([k, v]) => (
+                              <div key={k}>{k}. {v}</div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ margin: '8px 0' }}>
+                          <span>你的答案：{h.student_answer}</span>
+                        </div>
+                        <div style={{ margin: '8px 0' }}>
+                          判定：{h.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}
+                        </div>
+                        <div style={{ color: '#888', fontSize: 12 }}>{h.time}</div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              )}
+            </div>
+          </div>
+        )}
+        {/* 错题重做弹窗美化 */}
+        <Modal
+          open={!!activeQuestion}
+          onCancel={() => { setActiveQuestion(null); setResult(null); setAnswer(''); }}
+          footer={null}
+          title={<span style={{ fontWeight: 700, fontSize: 20 }}>错题重做</span>}
+          bodyStyle={{ padding: 24 }}
+        >
+          {activeQuestion && (
+            <div>
+              <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 16 }}>{activeQuestion.question}</div>
+              {activeQuestion.options && Object.keys(activeQuestion.options).length > 0 ? (
+                <Radio.Group
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Space direction="vertical">
+                    {Object.entries(activeQuestion.options).map(([k, v]) => (
+                      <Radio key={k} value={k}>{k}. {v}</Radio>
+                    ))}
+                  </Space>
+                </Radio.Group>
+              ) : (
+                <Input
+                  ref={redoInputRef}
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  onKeyDown={handleRedoKeyDown}
+                  placeholder="请输入答案"
+                  style={{ width: '100%', marginBottom: 16, fontSize: 16, padding: 8, borderRadius: 8 }}
+                />
+              )}
+              <Button type="primary" onClick={handleSubmit} loading={loading} style={{ marginTop: 8, width: '100%', borderRadius: 12, fontWeight: 600 }}>
+                提交
+              </Button>
+              {result && (
+                <Result
+                  status={result.is_correct ? 'success' : 'error'}
+                  title={result.is_correct ? '回答正确' : '回答错误'}
+                  subTitle={
+                    <div style={{ marginTop: 8 }}>
+                      <div>你的答案：<span style={{ color: result.is_correct ? '#52c41a' : '#d4380d' }}>{result.your_answer}</span></div>
+                      <div>正确答案：<span style={{ color: '#52c41a' }}>{result.correct_answer}</span></div>
+                      <div>解析：{result.explanation}</div>
+                    </div>
+                  }
+                />
+              )}
+            </div>
+          )}
+        </Modal>
+        {/* 巩固练习弹窗美化 */}
+        <Modal
+          open={practiceModal}
+          onCancel={() => { setPracticeModal(false); setPracticeQuestions([]); setPracticeResult(null); setPracticeAnswers({}); }}
+          footer={null}
+          title={<span style={{ fontWeight: 700, fontSize: 20 }}>巩固练习 - {selectedKeyword}</span>}
+          bodyStyle={{ padding: 24 }}
+          width={700}
+        >
+          <div style={{ marginBottom: 16 }}>
+            <span style={{ color: '#888', marginRight: 16 }}>共 {practiceQuestions.length} 题</span>
+            <Progress percent={practiceProgress} size="small" style={{ width: 200, display: 'inline-block' }} />
+          </div>
+          {practiceQuestions.length === 0 ? (
+            <Empty description="暂无巩固练习题目" />
+          ) : (
+            <List
+              dataSource={practiceQuestions}
+              renderItem={(q, idx) => (
+                <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                  <div style={{ width: '100%' }}>
+                    <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>题目{idx + 1}：{q.question}</div>
+                    {q.options && Object.keys(q.options).length > 0 ? (
+                      <Radio.Group
+                        value={practiceAnswers[idx]}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Space direction="vertical">
+                          {Object.entries(q.options).map(([k, v]) => (
+                            <Radio key={k} value={k}>{k}. {v}</Radio>
+                          ))}
+                        </Space>
+                      </Radio.Group>
+                    ) : (
+                      <Input
+                        value={practiceAnswers[idx] || ''}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        placeholder="请输入答案"
+                        style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                      />
+                    )}
+                  </div>
+                </List.Item>
+              )}
+            />
+          )}
+          {practiceQuestions.length > 0 && !practiceResult && (
+            <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 600 }}>
+              提交练习
+            </Button>
+          )}
+          {/* 练习结果美化 */}
+          {practiceResult && (
+            <Card title={<span>练习得分：<span style={{ color: '#52c41a' }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12 }}>
+              <List
+                dataSource={practiceResult.results}
+                renderItem={(r, idx) => (
+                  <List.Item>
+                    <div style={{ width: '100%' }}>
+                      <div><b>题目{idx + 1}：</b>{r.question}</div>
+                      <div>你的答案：<span style={{ color: r.is_correct ? '#52c41a' : '#d4380d' }}>{r.answer}</span></div>
+                      <div>正确答案：<span style={{ color: '#52c41a' }}>{r.correct_answer}</span></div>
+                      <div>解析：{r.explanation}</div>
+                      <div>知识点：{Array.isArray(r.knowledge_points) ? r.knowledge_points.join('，') : r.knowledge_points}</div>
+                      <div>判定：{r.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}</div>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          )}
+        </Modal>
+      </Card>
+    );
+  }
+
+  // 在App组件内添加下载函数
+  const handleDownload = async (filename) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`http://localhost:8000/download/${filename}`, {
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      // 创建下载链接
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('下载失败：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.reload();
   };
 
   if (!isLoggedIn) {
@@ -1663,61 +2851,67 @@ function App() {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Title level={3} style={{ color: 'white', margin: 0 }}>
-          <BookOutlined /> 教学AI助手
-        </Title>
-        <Space>
-          <Text style={{ color: 'white' }}>
-            {currentUser?.role === 'teacher' ? '教师' : '学生'}：{currentUser?.username}
-          </Text>
-          <Button type="primary" icon={<LogoutOutlined />} onClick={logout}>
-            退出登录
-          </Button>
-        </Space>
-      </Header>
-      <Content style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
-        {examInProgress ? (
-          renderExamInterface()
-        ) : currentUser?.role === 'teacher' ? (
-          renderTeacherInterface()
-        ) : (
-          renderStudentInterface()
-        )}
-      </Content>
-      <Footer style={{ textAlign: 'center' }}>教学AI助手 ©2024</Footer>
-      
-      {/* 创建考试模态框 */}
-      <Modal
-        title="创建考试"
-        open={examModalVisible}
-        onCancel={() => setExamModalVisible(false)}
-        footer={null}
-      >
-        <Form form={examForm} onFinish={handleCreateExam} layout="vertical">
-          <Form.Item name="title" label="考试标题" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label="考试描述" rules={[{ required: true }]}>
-            <TextArea rows={3} />
-          </Form.Item>
-          <Form.Item name="duration" label="考试时长（分钟）" rules={[{ required: true }]}>
-            <Input type="number" min={1} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block>
-              创建考试
+    currentUser?.role === 'teacher'
+      ? renderTeacherLayout()
+      : currentUser?.role === 'admin'
+        ? renderAdminLayout(activeAdminMenu, setActiveAdminMenu, handleLogout)
+        : (
+      <Layout style={{ minHeight: '100vh' }}>
+        <Layout.Sider width={220} style={{ background: '#f4f6fa', boxShadow: '2px 0 8px #e6eaf1', borderRight: '1.5px solid #e6eaf1', paddingTop: 0 }}>
+          <div style={{
+            height: 64,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: 22,
+            color: '#1677ff',
+            letterSpacing: 2,
+            marginBottom: 16,
+            background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)',
+            borderRadius: '0 0 18px 18px',
+            boxShadow: '0 2px 8px #e6eaf1',
+          }}>
+            <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
+            <span style={{ color: '#fff' }}>教学AI助手</span>
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={[activeStudentMenu]}
+            onClick={({ key }) => setActiveStudentMenu(key)}
+            style={{ height: '100%', borderRight: 0, fontSize: 18, background: '#f4f6fa', fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif', fontWeight: 500 }}
+            items={studentMenuItems.map(item => ({
+              ...item,
+              style: {
+                borderRadius: 10,
+                margin: '6px 8px',
+                transition: 'background 0.2s',
+              }
+            }))}
+            theme="light"
+          />
+        </Layout.Sider>
+        <Layout>
+          {/* 顶部Header */}
+          <div style={{ height: 64, background: '#f4f6fa', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px' }}>
+          <Space>
+              <Text style={{ color: '#1677ff', fontWeight: 600 }}>
+              学生：{currentUser?.username}
+            </Text>
+              <Button type="primary" icon={<LogoutOutlined />} onClick={logout} style={{ borderRadius: 20, fontWeight: 500 }}>
+              退出登录
             </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {renderHistoryModal()}
-      <Modal open={pptLoading} footer={null} closable={false} centered>
-        <Spin tip={pptStep || '正在生成PPT...'} size="large" />
-      </Modal>
-    </Layout>
+          </Space>
+          </div>
+          <Layout.Content style={{ padding: '48px 0', background: '#f4f6fa', minHeight: 800, fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif' }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: 32, background: '#fff', borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', minHeight: 600 }}>
+              {examInProgress ? renderExamInterface() : renderStudentContent()}
+            </div>
+          </Layout.Content>
+          <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+        </Layout>
+      </Layout>
+    )
   );
 }
 
@@ -1746,9 +2940,7 @@ function ExamResultPage() {
       try {
         const res = await axios.get(`http://localhost:8000/student/exam-result/${id}`);
         setResult(res.data);
-        // AI总结薄弱点
-        const aiRes = await axios.post('http://localhost:8000/ai-weakness-summary', { answers: res.data.answers, exam_id: res.data.exam_id });
-        setAiSummary(aiRes.data.summary);
+        setAiSummary(res.data.ai_summary || '');
       } catch (e) {
         setResult(null);
       }
@@ -1768,7 +2960,75 @@ function ExamResultPage() {
   const seconds = duration % 60;
 
   return (
-    <Card title={<span>考试结果 <Button style={{ float: 'right' }} onClick={() => navigate(-1)}>返回</Button></span>} style={{ maxWidth: 1200, margin: '32px auto' }}>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Layout.Sider width={220} style={{ background: '#f4f6fa', boxShadow: '2px 0 8px #e6eaf1', borderRight: '1.5px solid #e6eaf1', paddingTop: 0 }}>
+        <div style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          fontSize: 22,
+          color: '#1677ff',
+          letterSpacing: 2,
+          marginBottom: 16,
+          background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)',
+          borderRadius: '0 0 18px 18px',
+          boxShadow: '0 2px 8px #e6eaf1',
+        }}>
+          <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
+          <span style={{ color: '#fff' }}>教学AI助手</span>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={['exam']}
+          onClick={({ key }) => {
+            if (key === 'qa') navigate('/');
+            else if (key === 'exam') navigate('/');
+            else if (key === 'analysis') navigate('/');
+            else if (key === 'wrongbook') navigate('/');
+          }}
+          style={{ height: '100%', borderRight: 0, fontSize: 18, background: '#f4f6fa', fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif', fontWeight: 500 }}
+          items={[
+            {
+              key: 'qa',
+              icon: <BookOutlined />,
+              label: '知识库问答',
+              style: { borderRadius: 10, margin: '6px 8px', transition: 'background 0.2s' }
+            },
+            {
+              key: 'exam',
+              icon: <FormOutlined />,
+              label: '考试系统',
+              style: { borderRadius: 10, margin: '6px 8px', transition: 'background 0.2s' }
+            },
+            {
+              key: 'analysis',
+              icon: <BarChartOutlined />,
+              label: '学情分析',
+              style: { borderRadius: 10, margin: '6px 8px', transition: 'background 0.2s' }
+            },
+            {
+              key: 'wrongbook',
+              icon: <BookOutlined />,
+              label: '错题本',
+              style: { borderRadius: 10, margin: '6px 8px', transition: 'background 0.2s' }
+            }
+          ]}
+          theme="light"
+        />
+      </Layout.Sider>
+      <Layout>
+        <div style={{ height: 64, background: '#f4f6fa', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px' }}>
+          <Space>
+            <Button type="primary" icon={<LogoutOutlined />} onClick={() => navigate('/')} style={{ borderRadius: 20, fontWeight: 500 }}>
+              返回主页
+            </Button>
+          </Space>
+        </div>
+        <Layout.Content style={{ padding: '48px 0', background: '#f4f6fa', minHeight: 800, fontFamily: 'Segoe UI, HarmonyOS, Arial, sans-serif' }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', padding: 32, background: '#fff', borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', minHeight: 600 }}>
+            <Card title={<span>考试结果 <Button style={{ float: 'right' }} onClick={() => navigate(-1)}>返回</Button></span>}>
       <Title level={3} style={{ color: '#52c41a' }}>总分：{result.score}</Title>
       <Text type="secondary">用时：{minutes}分{seconds}秒</Text>
       <Divider />
@@ -1777,6 +3037,25 @@ function ExamResultPage() {
         renderItem={(a, idx) => (
           <List.Item>
             <Card style={{ width: '100%' }}>
+                      {/* 题干部分，样式与考试界面一致 */}
+                      <div style={{ marginBottom: 16 }}>
+                        <Text strong>第 {idx + 1} 题 ({a.points} 分)</Text>
+                        <Tag style={{ marginLeft: 8 }}>{a.type === 'choice' ? '单选题' : a.type === 'multi' ? '多选题' : a.type === 'fill_blank' ? '填空题' : a.type === 'short_answer' ? '简答题' : a.type === 'programming' ? '编程题' : a.type}</Tag>
+                      </div>
+                      <div style={{ marginBottom: 16 }}>
+                        <Text>{a.question}</Text>
+                      </div>
+                      {/* 新增：显示选项 */}
+                      {(a.type === 'choice' || a.type === 'multi') && a.options && Object.keys(a.options).length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          {Object.entries(a.options).map(([key, value]) => (
+                            <div key={key} style={{ marginBottom: 4 }}>
+                              <Text>{key}. {value}</Text>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* 结果与解析部分 */}
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                 {['short_answer', 'programming'].includes(a.type) ? (
                   a.is_correct === null ? (
@@ -1789,10 +3068,15 @@ function ExamResultPage() {
                 )}
                 <span style={{ marginLeft: 8 }}>得分：{a.is_correct === null ? '--' : a.points_earned}</span>
               </div>
-              <div style={{ marginBottom: 8 }}><b>题号：</b>{idx + 1}</div>
               <div style={{ marginBottom: 8 }}><b>你的答案：</b>{a.answer}</div>
               <div style={{ marginBottom: 8 }}><b>正确答案：</b>{a.correct_answer}</div>
               <div style={{ marginBottom: 8 }}><b>解析：</b>{a.explanation || '无'}</div>
+                      {/* 新增：显示知识点关键词 */}
+                      {a.knowledge_points && a.knowledge_points.length > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <Tag color="geekblue">知识点：{Array.isArray(a.knowledge_points) ? a.knowledge_points.join('，') : a.knowledge_points}</Tag>
+                        </div>
+                      )}
               {['short_answer', 'programming'].includes(a.type) && a.is_correct !== null && (
                 <div style={{ marginBottom: 8 }}><b>老师评语：</b>{a.comment || '无'}</div>
               )}
@@ -1802,7 +3086,326 @@ function ExamResultPage() {
       />
       <Divider />
       <Title level={4}>AI总结你的薄弱点</Title>
-      <div style={{ minHeight: 60 }}>{aiSummary || 'AI正在分析...'}</div>
+      <div style={{ minHeight: 60 }}>
+        {typeof aiSummary === 'string' && aiSummary.trim()
+          ? <MarkdownWithLatex>{aiSummary}</MarkdownWithLatex>
+          : 'AI正在分析...'}
+      </div>
     </Card>
+          </div>
+        </Layout.Content>
+        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+      </Layout>
+    </Layout>
   );
 } 
+
+// 新增 SocraticAssistant 组件
+function SocraticAssistant() {
+  const [history, setHistory] = useState([]); // {role: 'ai'|'student', content: string, knowledge_point?: string}
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [aiThinking, setAiThinking] = useState(false);
+  const chatListRef = useRef(null);
+  const [lastKnowledgePoint, setLastKnowledgePoint] = useState(null);
+
+  // 首次加载自动请求第一个问题
+  useEffect(() => {
+    if (history.length === 0) {
+      fetchNextQuestion();
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // 聊天区自动滚动到底部
+  useEffect(() => {
+    if (chatListRef.current) {
+      chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
+    }
+  }, [history, aiThinking, loading]);
+
+  // 请求AI下一个问题
+  const fetchNextQuestion = async () => {
+    setLoading(true);
+    setAiThinking(true);
+    try {
+      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+        history,
+        action: 'next',
+        current_knowledge_point: lastKnowledgePoint
+      });
+      setHistory(h => [...h, { role: 'ai', content: res.data.question, knowledge_point: res.data.knowledge_point }]);
+      setLastKnowledgePoint(res.data.knowledge_point);
+    } catch (e) {
+      setHistory(h => [...h, { role: 'ai', content: 'AI助手暂时无法提问，请稍后重试。' }]);
+    }
+    setLoading(false);
+    setAiThinking(false);
+  };
+
+  // 学生提交答案
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+    setHistory(h => [...h, { role: 'student', content: input }]);
+    setInput('');
+    setAiThinking(true);
+    try {
+      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+        history: [...history, { role: 'student', content: input }],
+        action: 'answer',
+        answer: input,
+        current_knowledge_point: lastKnowledgePoint
+      });
+      setHistory(h => [...h, { role: 'ai', content: res.data.reply, knowledge_point: res.data.knowledge_point }]);
+      setLastKnowledgePoint(res.data.knowledge_point);
+    } catch (e) {
+      setHistory(h => [...h, { role: 'ai', content: 'AI助手暂时无法回复，请稍后重试。' }]);
+    }
+    setAiThinking(false);
+  };
+
+  // "我不会"请求AI讲解
+  const handleExplain = async () => {
+    setHistory(h => [...h, { role: 'student', content: '我不会' }]);
+    setAiThinking(true);
+    try {
+      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+        history: [...history, { role: 'student', content: '我不会' }],
+        action: 'explain',
+        current_knowledge_point: lastKnowledgePoint
+      });
+      setHistory(h => [...h, { role: 'ai', content: res.data.explanation, knowledge_point: res.data.knowledge_point }]);
+      setLastKnowledgePoint(res.data.knowledge_point);
+    } catch (e) {
+      setHistory(h => [...h, { role: 'ai', content: 'AI助手暂时无法讲解，请稍后重试。' }]);
+    }
+    setAiThinking(false);
+  };
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: 'calc(100vh - 64px - 48px)',
+        minHeight: 480,
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e6f7ff 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        padding: 0,
+        margin: 0,
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 900,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          padding: '32px 0 0 0',
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 26, color: '#1677ff', margin: '0 0 18px 32px', letterSpacing: 1, display: 'flex', alignItems: 'center' }}>
+          <RobotOutlined style={{ color: '#1677ff', marginRight: 10, fontSize: 30 }} />学习助手
+        </div>
+        <div
+          ref={chatListRef}
+          style={{
+            flex: 1,
+            minHeight: 320,
+            maxHeight: '60vh',
+            overflowY: 'auto',
+            padding: '0 32px 0 32px',
+            marginBottom: 16,
+            background: 'rgba(246,248,250,0.7)',
+            borderRadius: 16,
+          }}
+        >
+          {history.length === 0 && (
+            <div style={{ color: '#aaa', textAlign: 'center', marginTop: 40 }}>
+              <Spin /> AI正在准备问题...
+            </div>
+          )}
+          {history.map((msg, idx) => (
+            <div
+              key={idx}
+              style={{
+                display: 'flex',
+                flexDirection: msg.role === 'ai' ? 'row' : 'row-reverse',
+                alignItems: 'flex-end',
+                margin: '16px 0',
+              }}
+            >
+              <Avatar
+                icon={msg.role === 'ai' ? <RobotOutlined /> : <UserOutlined />}
+                style={{
+                  backgroundColor: msg.role === 'ai' ? '#1677ff' : '#1890ff',
+                  margin: '0 8px',
+                }}
+              />
+              <div
+                style={{
+                  background: msg.role === 'ai' ? '#f6ffed' : '#e6f7ff',
+                  color: '#222',
+                  borderRadius: 16,
+                  padding: '12px 18px',
+                  maxWidth: 520,
+                  boxShadow: msg.role === 'ai'
+                    ? '0 2px 8px #b7eb8f'
+                    : '0 2px 8px #91d5ff',
+                  fontSize: 16,
+                  wordBreak: 'break-word',
+                  position: 'relative',
+                }}
+              >
+                <b>{msg.role === 'ai' ? 'AI助手' : '我'}：</b>
+                <span>{msg.content}</span>
+                {msg.knowledge_point && (
+                  <span
+                    style={{
+                      color: '#faad14',
+                      marginLeft: 8,
+                      fontSize: 13,
+                      fontWeight: 500,
+                    }}
+                  >
+                    [知识点: {msg.knowledge_point}]
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {aiThinking && (
+            <div style={{ color: '#aaa', textAlign: 'left', margin: '8px 0 0 48px' }}>
+              <Spin size="small" /> AI正在思考...
+            </div>
+          )}
+        </div>
+        <div style={{ width: '100%', maxWidth: 900, padding: '0 32px 32px 32px', background: 'transparent' }}>
+          <Input.TextArea
+            rows={2}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onPressEnter={e => {
+              if (!e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            placeholder="请输入你的回答...(Enter发送, Shift+Enter换行)"
+            disabled={loading || aiThinking}
+            style={{ marginBottom: 12, borderRadius: 8, fontSize: 16 }}
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={handleSubmit}
+              loading={aiThinking}
+              disabled={!input.trim() || aiThinking}
+            >
+              提交
+            </Button>
+            <Button onClick={fetchNextQuestion} disabled={aiThinking || loading}>
+              下一题
+            </Button>
+            <Button onClick={handleExplain} disabled={aiThinking || loading}>
+              我不会
+            </Button>
+          </Space>
+        </div>
+      </div>
+    </div>
+  );
+} 
+
+// 新增管理员PPT导出组件
+function AdminPPTExport() {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setLoading(true);
+    axios.get('http://localhost:8000/admin/ppt-files').then(res => {
+      setFiles(res.data.files || []);
+    }).finally(() => setLoading(false));
+  }, []);
+  const handleDownload = (filename) => {
+    window.open(`http://localhost:8000/admin/ppt-files/download/${filename}`);
+  };
+  return (
+    <Card title="教师PPT导出" style={{ maxWidth: 900, margin: '0 auto', marginTop: 32 }}>
+      <List
+        loading={loading}
+        dataSource={files}
+        renderItem={file => (
+          <List.Item actions={[<Button type="link" onClick={() => handleDownload(file.filename)}>下载</Button>]}> 
+            <div style={{ width: '100%' }}>
+              <b>{file.filename}</b>
+              <span style={{ marginLeft: 16, color: '#888' }}>创建时间: {file.created_at}</span>
+              <span style={{ marginLeft: 16, color: '#888' }}>大小: {(file.size/1024).toFixed(1)} KB</span>
+            </div>
+          </List.Item>
+        )}
+      />
+    </Card>
+  );
+}
+
+// 新增管理员活跃度统计组件
+function AdminActivity() {
+  const [data, setData] = useState({ teachers: [], students: [] });
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setLoading(true);
+    axios.get('http://localhost:8000/admin/activity').then(res => {
+      setData(res.data || { teachers: [], students: [] });
+    }).finally(() => setLoading(false));
+  }, []);
+  // 美化表格样式
+  const tableCardStyle = { borderRadius: 16, boxShadow: '0 2px 12px #e6eaf1', marginBottom: 32 };
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', marginTop: 32 }}>
+      <Card title={<span style={{ fontWeight: 700, fontSize: 20, color: '#1677ff' }}>教师活跃度</span>} style={tableCardStyle} loading={loading}>
+        <Table
+          dataSource={data.teachers}
+          rowKey="id"
+          bordered
+          columns={[
+            { title: '用户名', dataIndex: 'username', key: 'username', width: 120 },
+            { title: 'PPT生成数', dataIndex: 'ppt_count', key: 'ppt_count', width: 120, render: v => <Tag color="blue">{v}</Tag> },
+            { title: '创建考试数', dataIndex: 'exam_count', key: 'exam_count', width: 120, render: v => <Tag color="purple">{v}</Tag> },
+            { title: '登录频率', dataIndex: 'login_count', key: 'login_count', width: 120, render: v => <Tag color="green">{v || 0}</Tag> },
+            { title: '最近活跃时间', dataIndex: 'last_active', key: 'last_active', width: 180 },
+          ]}
+          pagination={false}
+          style={{ borderRadius: 12 }}
+        />
+      </Card>
+      <Card title={<span style={{ fontWeight: 700, fontSize: 20, color: '#1677ff' }}>学生活跃度</span>} style={tableCardStyle} loading={loading}>
+        <Table
+          dataSource={data.students}
+          rowKey="id"
+          bordered
+          columns={[
+            { title: '用户名', dataIndex: 'username', key: 'username', width: 120 },
+            { title: '参与考试数', dataIndex: 'exam_count', key: 'exam_count', width: 120, render: v => <Tag color="purple">{v}</Tag> },
+            { title: '知识库问答数', dataIndex: 'qa_count', key: 'qa_count', width: 120, render: v => <Tag color="blue">{v}</Tag> },
+            { title: '登录频率', dataIndex: 'login_count', key: 'login_count', width: 120, render: v => <Tag color="green">{v || 0}</Tag> },
+            { title: '最近活跃时间', dataIndex: 'last_active', key: 'last_active', width: 180 },
+          ]}
+          pagination={false}
+          style={{ borderRadius: 12 }}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// 管理员菜单项
+const adminMenuItems = [
+  { key: 'ppt', icon: <FileTextOutlined />, label: 'PPT导出' },
+  { key: 'activity', icon: <BarChartOutlined />, label: '活跃度统计' },
+];
+

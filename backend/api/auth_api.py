@@ -1,29 +1,39 @@
-from fastapi import APIRouter, Form, HTTPException, Depends
+from fastapi import APIRouter, Form, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from models import get_db, User
 from auth import create_session_token, login_user, get_current_user, hash_password
+from . import admin_api
 
 router = APIRouter()
 
 @router.post("/register")
-async def register(username: str = Form(...), password: str = Form(...), role: str = Form(...)):
-    db = next(get_db())
-    existing_user = db.query(User).filter(User.username == username).first()
-    if existing_user:
+async def register(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    username = data.get("username")
+    password = data.get("password")
+    role = data.get("role", "student")  # 支持 student/teacher/admin
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="用户名和密码不能为空")
+    if role not in ["student", "teacher", "admin"]:
+        raise HTTPException(status_code=400, detail="角色无效")
+    if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
-    hashed_password = hash_password(password)
-    user = User(username=username, password=hashed_password, role=role)
+    user = User(username=username, password=password, role=role)
     db.add(user)
     db.commit()
     db.refresh(user)
-    access_token = login_user(db, user)
-    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "username": user.username, "role": user.role}}
+    return {"msg": "注册成功", "user": {"id": user.id, "username": user.username, "role": user.role}}
 
 @router.post("/login")
-async def login(username: str = Form(...), password: str = Form(...)):
-    db = next(get_db())
-    user = db.query(User).filter(User.username == username).first()
-    if not user or user.password != hash_password(password):
+async def login(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="用户名和密码不能为空")
+    user = db.query(User).filter(User.username == username, User.password == password).first()
+    if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    access_token = login_user(db, user)
-    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "username": user.username, "role": user.role}} 
+    # 生成token（略）
+    token = f"token-{user.id}-{user.role}"
+    return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role}} 

@@ -1,8 +1,10 @@
 import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+import torch
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_community.vectorstores.chroma import Chroma
 from datetime import datetime
 from langchain.schema import Document
 from typing import List
@@ -36,6 +38,9 @@ except ImportError:
 # 尝试导入旧版Word文档解析器
 try:
     import docx
+    from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+    from docx.oxml.ns import nsdecls
+    from docx.oxml import parse_xml
     HAS_PYTHON_DOCX = True
 except ImportError:
     HAS_PYTHON_DOCX = False
@@ -44,10 +49,17 @@ except ImportError:
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
 
+model_name = "BAAI/bge-large-zh-v1.5"
+model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
+encode_kwargs = {"normalize_embeddings": True}
 # 初始化向量数据库
 vector_db = Chroma(
     persist_directory=DB_DIR,
-    embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_function=HuggingFaceBgeEmbeddings(
+        model_name=model_name,
+        model_kwargs=model_kwargs,
+        encode_kwargs=encode_kwargs
+    )
 )
 
 def is_scanned_pdf(file_path: str) -> bool:
@@ -191,7 +203,7 @@ def process_scanned_pdf(file_path: str) -> List[Document]:
                     }
                 )
                 docs.append(doc)
-        
+       
         print(f"OCR处理完成，生成了 {len(docs)} 个文档片段")
         return docs
         
@@ -199,35 +211,165 @@ def process_scanned_pdf(file_path: str) -> List[Document]:
         print(f"处理扫描版PDF失败: {str(e)}")
         return []
 
+def add_page_numbers_to_word(file_path: str) -> str:
+    """为Word文档添加页码，返回带页码的临时文件路径"""
+    try:
+        if not HAS_PYTHON_DOCX:
+            print("python-docx未安装，无法添加页码")
+            return file_path
+            
+        # 打开Word文档
+        doc = docx.Document(file_path)
+        
+        # 为每个节添加页码到页脚
+        for section in doc.sections:
+            footer = section.footer
+            if not footer.paragraphs:
+                footer.add_paragraph()
+            
+            paragraph = footer.paragraphs[0]
+            paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            
+            # 清除现有内容
+            paragraph.clear()
+            
+            # 添加页码字段
+            run = paragraph.add_run()
+            fldSimple = parse_xml(r'<w:fldSimple xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:instr="PAGE" />')
+            run._r.append(fldSimple)
+        
+        # 保存到临时文件
+        import tempfile
+        temp_dir = os.path.join(os.path.dirname(file_path), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        temp_file = os.path.join(temp_dir, f"temp_{os.path.basename(file_path)}")
+        doc.save(temp_file)
+        
+        print(f"已为Word文档添加页码，临时文件：{temp_file}")
+        return temp_file
+        
+    except Exception as e:
+        print(f"添加页码失败: {str(e)}")
+        return file_path
+
+def process_word_with_pages(file_path: str) -> List[Document]:
+    """处理Word文档并添加页码信息"""
+    try:
+        # 为Word文档添加页码
+        temp_file = add_page_numbers_to_word(file_path)
+        
+        # 使用带页码的文档进行解析
+        docs = None
+        loaders_to_try = []
+        
+        # 按优先级排序Word解析器
+        if HAS_DOCX2TXT:
+            loaders_to_try.append(("Docx2txt", Docx2txtLoader))
+        loaders_to_try.append(("UnstructuredWord", UnstructuredWordDocumentLoader))
+        
+        for loader_name, loader_class in loaders_to_try:
+            try:
+                print(f"尝试使用 {loader_name} 解析Word文档...")
+                loader = loader_class(temp_file)
+                docs = loader.load()
+                if docs and any(len(doc.page_content.strip()) > 0 for doc in docs):
+                    print(f"成功使用 {loader_name} 解析Word文档")
+                    break
+                else:
+                    print(f"{loader_name} 解析结果为空，尝试下一个解析器")
+            except Exception as e:
+                print(f"{loader_name} 解析失败: {str(e)}")
+                continue
+        
+        if not docs or not any(len(doc.page_content.strip()) > 0 for doc in docs):
+            raise ValueError('所有Word解析器都无法提取到有效内容，可能是文件损坏或格式异常')
+        
+        # 为每个文档添加页码信息
+        for i, doc in enumerate(docs):
+            if not doc.metadata.get('page'):
+                doc.metadata['page'] = i + 1
+            doc.metadata['page_type'] = 'page'
+        
+        # 清理临时文件
+        if temp_file != file_path and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+                print(f"已清理临时文件：{temp_file}")
+            except Exception as e:
+                print(f"清理临时文件失败: {str(e)}")
+        
+        return docs
+        
+    except Exception as e:
+        print(f"处理Word文档失败: {str(e)}")
+        return []
+
 def custom_split_documents(docs, chunk_size=500, chunk_overlap=50):
     """
-    切分文档并为每个chunk添加元数据：页码、起止位置等
+    保证切分成完整的段落，并且不同章节不会分到一段
     """
+    import re
+
     split_docs = []
+    chapter_pattern = re.compile(r'^\s*(第[一二三四五六七八九十百千万\d]+[章节篇部分]|Chapter\s*\d+|CHAPTER\s*\d+|[一二三四五六七八九十百千万\d]+\s*、|[一二三四五六七八九十百千万\d]+\.)', re.MULTILINE)
+
     for doc in docs:
         text = doc.page_content
-        meta = doc.metadata.copy()
-        page_num = meta.get('page', 1)
-        # 按字符切分
-        start = 0
+        # 先按章节切分
+        chapter_splits = []
+        last_idx = 0
+        for m in chapter_pattern.finditer(text):
+            idx = m.start()
+            if idx != 0:
+                chapter_splits.append((last_idx, idx))
+            last_idx = idx
+        chapter_splits.append((last_idx, len(text)))
+
+        chapter_texts = [text[start:end] for start, end in chapter_splits if text[start:end].strip()]
+
         chunk_id = 0
-        while start < len(text):
-            end = min(start + chunk_size, len(text))
-            chunk_text = text[start:end]
-            chunk_meta = meta.copy()
-            chunk_meta['page_num'] = page_num
-            chunk_meta['start_pos'] = start
-            chunk_meta['end_pos'] = end
-            chunk_meta['chunk_id'] = chunk_id
-            # 可选：小节编号、锚点ID等
-            split_docs.append(Document(page_content=chunk_text, metadata=chunk_meta))
-            if end == len(text):
-                break  # 防止最后一次start不变死循环
-            if end - chunk_overlap <= start:
-                # chunk_overlap过大，强制退出，防止死循环
-                break
-            start = end - chunk_overlap
-            chunk_id += 1
+        for chapter in chapter_texts:
+            # 按段落切分（以两个换行或一个换行+空行为段落分隔）
+            paragraphs = [p for p in re.split(r'\n\s*\n', chapter) if p.strip()]
+            buffer = ""
+            for para in paragraphs:
+                if len(buffer) + len(para) <= chunk_size:
+                    buffer += (("\n\n" if buffer else "") + para)
+                else:
+                    if buffer.strip():
+                        meta = doc.metadata.copy()
+                        meta['chunk_id'] = chunk_id
+                        split_docs.append(Document(page_content=buffer, metadata=meta))
+                        chunk_id += 1
+                    # 段落本身太长，直接切
+                    if len(para) > chunk_size:
+                        # 按句号等分割
+                        sentences = re.split(r'(?<=[。！？；\n])', para)
+                        sent_buf = ""
+                        for sent in sentences:
+                            if len(sent_buf) + len(sent) <= chunk_size:
+                                sent_buf += sent
+                            else:
+                                if sent_buf.strip():
+                                    meta = doc.metadata.copy()
+                                    meta['chunk_id'] = chunk_id
+                                    split_docs.append(Document(page_content=sent_buf, metadata=meta))
+                                    chunk_id += 1
+                                sent_buf = sent
+                        if sent_buf.strip():
+                            meta = doc.metadata.copy()
+                            meta['chunk_id'] = chunk_id
+                            split_docs.append(Document(page_content=sent_buf, metadata=meta))
+                            chunk_id += 1
+                        buffer = ""
+                    else:
+                        buffer = para
+            if buffer.strip():
+                meta = doc.metadata.copy()
+                meta['chunk_id'] = chunk_id
+                split_docs.append(Document(page_content=buffer, metadata=meta))
+                chunk_id += 1
     return split_docs
 
 def ingest_file(file_path):
@@ -359,30 +501,10 @@ def ingest_file(file_path):
                 raise ValueError('无法解析.doc文件，请确保文件格式正确或转换为.docx格式')
                 
         elif ext == '.docx':
-            docs = None
-            loaders_to_try = []
-            
-            # 按优先级排序Word解析器
-            if HAS_DOCX2TXT:
-                loaders_to_try.append(("Docx2txt", Docx2txtLoader))
-            loaders_to_try.append(("UnstructuredWord", UnstructuredWordDocumentLoader))
-            
-            for loader_name, loader_class in loaders_to_try:
-                try:
-                    print(f"尝试使用 {loader_name} 解析Word文档...")
-                    loader = loader_class(file_path)
-                    docs = loader.load()
-                    if docs and any(len(doc.page_content.strip()) > 0 for doc in docs):
-                        print(f"成功使用 {loader_name} 解析Word文档")
-                        break
-                    else:
-                        print(f"{loader_name} 解析结果为空，尝试下一个解析器")
-                except Exception as e:
-                    print(f"{loader_name} 解析失败: {str(e)}")
-                    continue
-            
-            if not docs or not any(len(doc.page_content.strip()) > 0 for doc in docs):
-                raise ValueError('所有Word解析器都无法提取到有效内容，可能是文件损坏或格式异常')
+            print("检测到Word文档，使用页码处理功能...")
+            docs = process_word_with_pages(file_path)
+            if not docs:
+                raise ValueError('Word文档处理失败，无法提取到有效内容')
         else:
             raise ValueError('仅支持PDF和Word文档')
         
@@ -419,7 +541,8 @@ def ingest_file(file_path):
                 doc.metadata.update({
                     'source': filename,
                     'upload_time': upload_time,
-                    'file_path': file_path
+                    'file_path': file_path,
+                    'student_can_download': False
                 })
                 valid_docs.append(doc)
         

@@ -5,6 +5,9 @@ from api.knowledge_api import router as knowledge_router
 from api.exam_api import router as exam_router
 from api.ai_api import router as ai_router
 from api.teaching_api import router as teaching_router
+from api.analysis_api import router as analysis_router
+from api.assistant_api import router as assistant_router
+from api import admin_api
 
 app = FastAPI()
 
@@ -21,6 +24,9 @@ app.include_router(knowledge_router)
 app.include_router(exam_router)
 app.include_router(ai_router)
 app.include_router(teaching_router)
+app.include_router(analysis_router)
+app.include_router(assistant_router)
+app.include_router(admin_api.router, prefix="/admin")
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,16 +1,26 @@
 import os
 import json
 from datetime import datetime
-from langchain_chroma import Chroma
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores.chroma import Chroma
+import torch
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
 
+model_name = "BAAI/bge-large-zh-v1.5"
+model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
+encode_kwargs = {"normalize_embeddings": True}
 # 初始化向量数据库
 vector_db = Chroma(
     persist_directory=DB_DIR,
-    embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_function=HuggingFaceBgeEmbeddings(
+        model_name=model_name,
+        model_kwargs=model_kwargs,
+        encode_kwargs=encode_kwargs
+    )
 )
 
 def get_knowledge_files():
@@ -37,14 +47,18 @@ def get_knowledge_files():
             # 从元数据中获取文件名
             metadata = metadatas[i] if i < len(metadatas) else {}
             filename = metadata.get('source', 'unknown')
-            
+            student_can_download = metadata.get('student_can_download', False)
             if filename not in file_chunks:
                 file_chunks[filename] = {
                     'filename': filename,
                     'chunk_count': 0,
-                    'upload_time': metadata.get('upload_time', 'unknown')
+                    'upload_time': metadata.get('upload_time', 'unknown'),
+                    'student_can_download': student_can_download
                 }
             file_chunks[filename]['chunk_count'] += 1
+            # 只要有一个片段为True，则整体为True
+            if student_can_download:
+                file_chunks[filename]['student_can_download'] = True
         
         # 转换为列表格式
         files = list(file_chunks.values())
@@ -134,3 +148,25 @@ def update_file_metadata(filename, metadata):
     except Exception as e:
         print(f"更新文件元数据失败: {str(e)}")
         return False 
+
+def search_knowledge(query: str, top_k: int = 5) -> list:
+    """
+    使用与测试脚本相同的向量查找方式搜索知识库
+    """
+    try:
+        docs_with_scores = vector_db.similarity_search_with_score(query, k=top_k)
+        
+        results = []
+        for doc, score in docs_with_scores:
+            results.append({
+                'content': doc.page_content,
+                'source': doc.metadata.get('source', '未知'),
+                'page': doc.metadata.get('page', '未知'),
+                'similarity': float(score),
+                'metadata': doc.metadata
+            })
+        
+        return results
+    except Exception as e:
+        print(f"知识库搜索失败: {str(e)}")
+        return [] 

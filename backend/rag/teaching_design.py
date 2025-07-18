@@ -1,15 +1,24 @@
 import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 import re
-from langchain_chroma import Chroma
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+import torch
+from langchain_community.vectorstores.chroma import Chroma
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from openai import OpenAI
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 API_KEY = "sk-9fabf0d9e8e84d0994756d5846207c04"
+model_name = "BAAI/bge-large-zh-v1.5"
+model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
+encode_kwargs = {"normalize_embeddings": True}
 
 vector_db = Chroma(
     persist_directory=DB_DIR,
-    embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_function=HuggingFaceBgeEmbeddings(
+        model_name=model_name,
+        model_kwargs=model_kwargs,
+        encode_kwargs=encode_kwargs
+    )
 )
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
@@ -25,116 +34,113 @@ def get_completion(prompt, model="deepseek-chat"):
     )
     return response.choices[0].message.content
 
-def retrieve_relevant_docs(query, k=5):
-    """检索相关的教学文档"""
+def search_teaching_materials(query: str, top_k: int = 10) -> list:
+    """
+    使用与测试脚本相同的向量查找方式搜索教学资料
+    """
     try:
-        docs = vector_db.similarity_search(query, k=k)
-        return "\n".join([doc.page_content for doc in docs])
+        docs_with_scores = vector_db.similarity_search_with_score(query, k=top_k)
+        
+        results = []
+        for doc, score in docs_with_scores:
+            results.append({
+                '内容': doc.page_content,
+                '来源': doc.metadata.get('source', '未知'),
+                '页码': doc.metadata.get('page', '未知'),
+                '相似度': float(score)
+            })
+        
+        print(f"[调试] 教学资料搜索找到 {len(results)} 个相关片段")
+        return results
     except Exception as e:
-        print(f"检索文档失败: {str(e)}")
-        return ""
+        print(f"教学资料搜索失败: {str(e)}")
+        return []
 
 def generate_teaching_outline(course_outline):
-    relevant_docs = retrieve_relevant_docs(course_outline)
+    relevant_docs = search_teaching_materials(course_outline)
+    
+    # 格式化资料内容
+    if relevant_docs:
+        content_text = "\n\n".join([
+            f"【资料片段 {i+1}】{doc['内容']}\n（来源：{doc['来源']} 第{doc['页码']}页）"
+            for i, doc in enumerate(relevant_docs)
+        ])
+    else:
+        content_text = "暂无相关教学资源"
+    
     prompt = f"""
-请根据以下资料内容，梳理出本课程的知识点结构，要求只输出知识点框架（用Markdown标题，层级清晰，不要超过2级），不要输出任何具体内容说明。
+请根据以下资料内容，和教学大纲，梳理出本课程的知识点结构，要求只输出知识点框架（用Markdown标题，层级清晰，不要超过2级）。
+
+【教学大纲】
+{course_outline}
 
 【资料内容】
-{relevant_docs if relevant_docs else "暂无相关教学资源"}
+{content_text}
 
 输出示例：
-# 第一章：xxx
+# 1.xxx
 ## 1.1 xxx
 ## 1.2 xxx
-# 第二章：xxx
+# 2.xxx
+# 2.1 xxx
+# 2.2 xxx
 ...
 """
     outline = get_completion(prompt)
     return outline
 
 def generate_detailed_content_for_outline(outline):
+    relevant_docs = search_teaching_materials(outline)
+    
+    # 格式化资料内容
+    if relevant_docs:
+        content_text = "\n\n".join([
+            f"【资料片段 {i+1}】{doc['内容']}\n（来源：{doc['来源']} 第{doc['页码']}页）"
+            for i, doc in enumerate(relevant_docs)
+        ])
+    else:
+        content_text = "暂无相关教学资源"
+    
     prompt = f"""
-你是一位专业的课程内容设计AI。请根据下方知识框架（Markdown标题结构），结合知识库资料，在每个最小层级标题（即没有子标题的标题）下自动补充详细教学内容，内容要结合资料，条理清晰，适合PPT展示。最终输出完整的Markdown文档，保留原有标题结构，每个最小标题下都要有详细内容。
+你是一位专业的课程PPT设计AI。
+1. 请根据下方知识框架在每个最小层级标题（即没有子标题的标题）下自动补充详细教学内容，内容要结合资料，条理清晰，适合PPT展示。
+2. 起一个标题，标题要简洁明了，能概括大纲内容。
+3. 在知识框架上方加入以下内容：
+---
+title: 你起的标题 
+---
+4. 最终输出完整的Markdown文档。
 
 【知识框架】
 {outline}
 
 【资料内容】
-{retrieve_relevant_docs(outline)}
+{content_text}
 """
     content = get_completion(prompt)
     return content
 
-def generate_practice_exercises(topic, difficulty="中等"):
-    """生成实训练习与指导"""
-    
+
+
+def extract_duration_from_prompt(prompt: str) -> int:
+    """从教师输入的课程大纲或prompt中提取学时要求，若无则返回0"""
+    match = re.search(r"(\d+)\s*学时", prompt)
+    if match:
+        return int(match.group(1))
+    return 0
+
+def generate_lesson_schedule(outline: str) -> str:
+    """
+    传入生成的大纲，用LLM生成学时安排表（Markdown格式）
+    """
     prompt = f"""
-请为以下教学主题设计实训练习与指导：
+你是一位专业的课程设计AI，请根据下方课程知识框架，为每一章合理分配学时，生成学时安排表，要求如下：
+1. 结合常规课程安排和内容难度，合理分配每章学时。
+2. 输出标准Markdown表格，表头为“章节”和“学时”。
+3. 不要输出多余内容，只输出表格。
 
-【教学主题】
-{topic}
-
-【难度要求】
-{difficulty}
-
-请设计：
-
-1. 【基础练习】（适合初学者）
-   - 概念理解题
-   - 简单应用题
-
-2. 【进阶练习】（适合有一定基础的学生）
-   - 综合分析题
-   - 实际案例题
-
-3. 【拓展练习】（适合优秀学生）
-   - 创新思维题
-   - 研究性题目
-
-4. 【练习指导】
-   - 解题思路
-   - 常见错误分析
-   - 学习建议
-
-请确保练习题目由浅入深，覆盖知识点全面，并提供详细的解题指导。
+【课程知识框架】
+{outline}
 """
-
-    exercises = get_completion(prompt)
-    return exercises
-
-def create_lesson_plan(chapter, duration=90):
-    """创建单节课教学计划"""
-    
-    prompt = f"""
-请为以下章节设计详细的单节课教学计划：
-
-【章节内容】
-{chapter}
-
-【课时安排】
-{duration}分钟
-
-请设计：
-
-1. 【课前准备】（5分钟）
-   - 复习上节课内容
-   - 引入新课主题
-
-2. 【新课讲授】（60分钟）
-   - 知识点讲解
-   - 重点难点突破
-   - 师生互动
-
-3. 【课堂练习】（15分钟）
-   - 即时练习
-   - 小组讨论
-
-4. 【总结与作业】（10分钟）
-   - 课堂总结
-   - 布置作业
-
-请确保教学计划时间安排合理，内容充实，互动性强。
-"""
-
-    lesson_plan = get_completion(prompt)
-    return lesson_plan 
+    table = get_completion(prompt)
+    return table
