@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from models import get_db, User, Exam, StudentExam, QAHistory
 import os
 import datetime
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -69,4 +70,56 @@ def get_activity(db: Session = Depends(get_db)):
             'qa_count': qa_count,
             'last_active': last_active
         })
-    return {"teachers": teacher_stats, "students": student_stats} 
+    return {"teachers": teacher_stats, "students": student_stats}
+
+@router.get("/users")
+def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail='需要管理员权限')
+    users = db.query(User).all()
+    return [{
+        'id': u.id,
+        'username': u.username,
+        'role': u.role,
+        'created_at': u.created_at.strftime('%Y-%m-%d %H:%M'),
+        'is_active': getattr(u, 'is_active', True)
+    } for u in users]
+
+@router.post("/users/reset-password")
+def reset_password(user_id: int = Body(...), new_password: str = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail='需要管理员权限')
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    from auth import hash_password
+    user.password = hash_password(new_password)
+    db.commit()
+    return {'msg': '密码重置成功'}
+
+@router.post("/users/disable")
+def disable_user(user_id: int = Body(...), disable: bool = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail='需要管理员权限')
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    # 若User模型无is_active字段，可动态添加
+    if not hasattr(user, 'is_active'):
+        from sqlalchemy import Boolean
+        if not hasattr(User, 'is_active'):
+            User.is_active = True
+    user.is_active = not disable
+    db.commit()
+    return {'msg': '操作成功'}
+
+@router.delete("/users/delete/{user_id}")
+def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail='需要管理员权限')
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    db.delete(user)
+    db.commit()
+    return {'msg': '用户已删除'} 

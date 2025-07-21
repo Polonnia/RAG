@@ -91,6 +91,7 @@ function renderAdminLayout(activeAdminMenu, setActiveAdminMenu, handleLogout) {
         <Layout.Content style={{ padding: 24, minHeight: 360, background: '#f8fafc' }}>
           {activeAdminMenu === 'ppt' && <AdminPPTExport />}
           {activeAdminMenu === 'activity' && <AdminActivity />}
+          {activeAdminMenu === 'users' && <AdminUserManagement />}
         </Layout.Content>
       </Layout>
     </Layout>
@@ -151,6 +152,7 @@ function App() {
   const [examInProgress, setExamInProgress] = useState(false);
 
   // 知识库管理状态
+  const [fileModalVisible, setFileModalVisible] = useState(false);
   const [knowledgeFiles, setKnowledgeFiles] = useState([]);
   const [fileLoading, setFileLoading] = useState(false);
   const [pptStep, setPptStep] = useState('');
@@ -260,6 +262,8 @@ function App() {
       const { token, user } = res.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      // 立即设置 axios header，防止登录后第一次请求没带 token
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setCurrentUser(user);
       setIsLoggedIn(true);
       setLoginVisible(false);
@@ -535,17 +539,10 @@ function App() {
       // 传给PPT agent
       const pptForm = new FormData();
       pptForm.append('outline', detailRes.data.detail);
-      const pptRes = await axios.post('http://localhost:8000/teacher/generate-ppt-from-outline', pptForm, { responseType: 'blob' });
-
-      // 下载PPT
-      const url = window.URL.createObjectURL(new Blob([pptRes.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'teaching-outline.pptx');
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      message.success('PPT生成成功');
+      await axios.post('http://localhost:8000/teacher/generate-ppt-from-outline', pptForm);
+      message.success('PPT生成成功，已加入历史列表');
+      // 生成后刷新PPT历史
+      if (typeof fetchPptHistory === 'function') fetchPptHistory();
     } catch (err) {
       console.error('PPT生成失败:', err);
       message.error('PPT生成失败');
@@ -651,37 +648,38 @@ function App() {
     }
   };
 
-  const submitExam = async () => {
+  // 在学生考试流程中添加阶段状态
+  const [examStep, setExamStep] = useState('answer'); // 'answer' | 'submit' | 'done'
+
+  // 修改 submitExam 函数，先进入提交阶段弹窗，确认后再真正提交
+  const handleSubmitExam = () => {
+    setExamStep('submit');
+  };
+
+  const confirmSubmitExam = async () => {
+    setExamLoading(true);
     try {
       const formData = new FormData();
       formData.append('exam_id', currentExam.exam.id);
       formData.append('answers_data', JSON.stringify(examAnswers));
-      
       const response = await axios.post('http://localhost:8000/student/submit-exam', formData);
       message.success(`考试提交成功！得分：${response.data.score}`);
+      setExamStep('done');
       setExamInProgress(false);
       setCurrentExam(null);
       setExamAnswers({});
       setExamTimer(0);
       fetchStudentExams();
-      
       // 立即开始轮询AI薄弱点分析结果
       message.info('正在分析考试薄弱点，请稍候...');
       await pollAiAnalysis(currentExam.exam.id);
-      // await fetchStudentAnalysis(); // 删除这行
-      // 通知 StudentAnalysis 组件刷新
       window.dispatchEvent(new Event('updateStudentAnalysis'));
-      // 刷新最新考试分析
       setTimeout(async () => {
         try {
           const analysisRes = await axios.get(`http://localhost:8000/student/latest-analysis/${currentExam.exam.id}`);
-          // 更新StudentAnalysis组件的状态
           const studentAnalysisComponent = document.querySelector('[data-testid="student-analysis"]');
           if (studentAnalysisComponent) {
-            // 触发重新渲染
-            window.dispatchEvent(new CustomEvent('updateLatestAnalysis', { 
-              detail: analysisRes.data 
-            }));
+            window.dispatchEvent(new CustomEvent('updateLatestAnalysis', { detail: analysisRes.data }));
           }
         } catch (error) {
           console.error('刷新最新分析失败:', error);
@@ -691,6 +689,16 @@ function App() {
       console.error('提交考试失败:', err);
       message.error('提交考试失败');
     }
+    setExamLoading(false);
+  };
+
+  const handleReturnToExamList = () => {
+    setExamStep('answer');
+    setExamInProgress(false);
+    setCurrentExam(null);
+    setExamAnswers({});
+    setExamTimer(0);
+    fetchStudentExams();
   };
 
   // 轮询AI薄弱点分析结果
@@ -723,7 +731,7 @@ function App() {
       interval = setInterval(() => {
         setExamTimer(prev => {
           if (prev <= 1) {
-            submitExam();
+            confirmSubmitExam();
             return 0;
           }
           return prev - 1;
@@ -933,85 +941,85 @@ function App() {
         );
       case 'qa':
         return (
-          <div
-            style={{
-              width: '100%',
-              minHeight: 480,
-              background: 'linear-gradient(135deg, #f8fafc 0%, #e6f7ff 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: 0,
-              margin: 0,
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: 26, color: '#1677ff', margin: '32px 0 18px 32px', letterSpacing: 1, display: 'flex', alignItems: 'center', width: '100%', maxWidth: 900 }}>
-              <BookOutlined style={{ color: '#1677ff', marginRight: 10, fontSize: 30 }} />知识库问答
-                          </div>
-            <div
-              style={{
-                width: '100%',
-                maxWidth: 900,
-                minHeight: 320,
-                maxHeight: '60vh',
-                overflowY: 'auto',
-                padding: '0 32px 0 32px',
-                marginBottom: 16,
-                background: 'rgba(246,248,250,0.7)',
-                borderRadius: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'flex-end',
-              }}
-            >
-              {/* 展示历史问题和AI回答气泡 */}
-              {answer && (
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', margin: '24px 0' }}>
-                  <Avatar icon={<RobotOutlined />} style={{ backgroundColor: '#1677ff', margin: '0 8px' }} />
-                  <div
-                    style={{
-                      background: '#f6ffed',
-                      color: '#222',
-                      borderRadius: 16,
-                      padding: '12px 18px',
-                      maxWidth: 520,
-                      boxShadow: '0 2px 8px #b7eb8f',
-                      fontSize: 16,
-                      wordBreak: 'break-word',
-                      position: 'relative',
-                    }}
-                  >
-                    <b>AI助手：</b>
-                    <span><MarkdownWithLatex>{answer}</MarkdownWithLatex></span>
-                          </div>
-                    </div>
-                  )}
-              {qaLoading && (
-                <div style={{ color: '#aaa', textAlign: 'left', margin: '8px 0 0 48px' }}>
-                  <Spin size="small" /> AI正在思考...
+          <Card style={{ margin: 0, maxWidth: '100vw', minHeight: '100vh', borderRadius: 0, boxShadow: 'none', background: '#fafdff', padding: '48px 0' }}>
+            <div style={{ marginBottom: 32, padding: 24, background: '#fff', borderRadius: 14, boxShadow: '0 2px 12px #e6eaf1' }}>
+              <TextArea
+                rows={3}
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                placeholder="请输入你的问题..."
+                style={{ marginBottom: 16, fontSize: 15, borderRadius: 10, boxShadow: '0 1px 4px #e6eaf1' }}
+              />
+              <Button type="primary" onClick={handleAsk} loading={qaLoading} disabled={qaLoading || !question.trim()} style={{ height: 42, fontSize: 16, borderRadius: 10, fontWeight: 600, width: 140 }}>
+                提问
+              </Button>
+              <Button style={{ marginLeft: 24 }} onClick={() => setFileModalVisible(true)}>
+                可下载资料
+              </Button>
+            </div>
+            <div style={{ marginTop: 16, minHeight: 60 }}>
+              {qaLoading ? <Spin size="large" style={{ margin: '32px 0' }} /> : answer && (
+                <div style={{ padding: 22, background: '#f6faff', borderRadius: 14, marginBottom: 24, boxShadow: '0 2px 8px #e6eaf1', fontSize: 16, color: '#222', lineHeight: 1.7 }}>
+                  <div style={{ fontWeight: 700, color: '#1677ff', marginBottom: 8, fontSize: 16 }}><RobotOutlined style={{marginRight:8}}/>AI助手：</div>
+                  <MarkdownWithLatex>{answer}</MarkdownWithLatex>
                 </div>
               )}
             </div>
-            <div style={{ width: '100%', maxWidth: 900, padding: '0 32px 32px 32px', background: 'transparent', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-              <Input.TextArea
-                rows={2}
-                value={question}
-                onChange={e => setQuestion(e.target.value)}
-                placeholder="请输入你的问题...(Enter发送, Shift+Enter换行)"
-                disabled={qaLoading}
-                style={{ marginBottom: 0, borderRadius: 8, fontSize: 16, flex: 1 }}
-                onPressEnter={e => {
-                  if (!e.shiftKey) {
-                    e.preventDefault();
-                    handleAsk();
-                  }
-                }}
+            {qaSources && qaSources.length > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ fontWeight: 600, fontSize: 16, color: '#1677ff', marginBottom: 14 }}>原文片段</div>
+                <List
+                  dataSource={qaSources}
+                  renderItem={src => {
+                    let page = '';
+                    if (src.metadata && (src.metadata.page || src.metadata.page_number)) {
+                      page = src.metadata.page || src.metadata.page_number;
+                    }
+                    return (
+                      <List.Item style={{ background: '#fff', borderRadius: 12, marginBottom: 16, boxShadow: '0 2px 8px #e6eaf1', padding: 14, display: 'block' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, minHeight: 28 }}>
+                          <span style={{ display: 'inline-block', background: '#e6f4ff', color: '#1677ff', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px', marginRight: 8 }}>
+                            {src.metadata?.source || src.filename || src.source || '未知'}
+                          </span>
+                          {page !== '' && (
+                            <span style={{ display: 'inline-block', background: '#f6ffed', color: '#52c41a', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px', marginLeft: 0 }}>
+                              第{page}页
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ borderLeft: '4px solid #e6eaf1', paddingLeft: 16, fontSize: 14, color: '#444', lineHeight: 1.6 }}>
+                          <span style={{ color: '#bbb', fontSize: 13, marginRight: 8 }}>&ldquo;</span>
+                          {src.content || src.text || src.chunk || src}
+                          <span style={{ color: '#bbb', fontSize: 13, marginLeft: 8 }}>&rdquo;</span>
+                        </div>
+                      </List.Item>
+                    );
+                  }}
+                />
+              </div>
+            )}
+            <Modal
+              open={fileModalVisible}
+              title="可下载资料"
+              onCancel={() => setFileModalVisible(false)}
+              footer={null}
+            >
+              <List
+                dataSource={knowledgeFiles.filter(f => f.student_can_download)}
+                renderItem={file => (
+                  <List.Item>
+                    <span>{file.filename}</span>
+                    <span style={{ color: '#bbb', marginLeft: 12 }}>{file.upload_time}</span>
+                    <Button
+                      style={{ marginLeft: 16 }}
+                      onClick={() => handleDownload(file.filename)}
+                      type="link"
+                    >下载</Button>
+                  </List.Item>
+                )}
               />
-              <Button type="primary" onClick={handleAsk} loading={qaLoading} disabled={qaLoading || !question.trim()} style={{ height: 40, fontSize: 16, borderRadius: 8, fontWeight: 600 }}>
-                提问
-              </Button>
-            </div>
-          </div>
+            </Modal>
+          </Card>
         );
       case 'teaching':
         return (
@@ -1024,15 +1032,25 @@ function App() {
                 placeholder="请输入课程大纲，包括课程目标、主要知识点、 教学要求、学时安排等"
                 style={{ marginBottom: 16 }}
               />
-              <Space>
-                <Button type="primary" onClick={handleDesignTeachingPlan} loading={planLoading} icon={<FileTextOutlined />}>
-                  设计教学内容
+              <Space style={{ marginTop: 16 }}>
+                <Button type="primary" onClick={handleDesignTeachingPlan} loading={planLoading} icon={<FormOutlined />}>
+                  生成教学内容
                 </Button>
                 <Button onClick={() => setCourseOutline('')}>
                   清空大纲
                 </Button>
+                <Upload
+                  beforeUpload={() => false}
+                  showUploadList={false}
+                  accept=".txt,.md"
+                  customRequest={({ file }) => handleGeneratePPTFromUpload({ file })}
+                >
+                  <Button icon={<UploadOutlined />}>使用txt/md文件生成PPT</Button>
+                </Upload>
               </Space>
             </Card>
+            {/* 始终显示PPT历史记录栏 */}
+            <TeacherPPTHistory />
             {teachingPlan && (
               <Card title="教学内容设计结果" style={{ marginBottom: 24, maxWidth: 1200, margin: '0 auto' }}>
                 <MarkdownWithLatex>{teachingPlan}</MarkdownWithLatex>
@@ -1094,7 +1112,7 @@ function App() {
                 rows={6}
                 value={examOutline}
                 onChange={e => setExamOutline(e.target.value)}
-                placeholder="请输入课程大纲，包括：\n1. 课程目标\n2. 主要知识点\n3. 教学要求\n4. 学时安排等"
+                placeholder="请输入课程大纲，包括课程目标、主要知识点、教学要求等"
                 style={{ marginBottom: 16 }}
               />
               <Space>
@@ -1156,10 +1174,10 @@ function App() {
                   ]}
                 >
                   <List.Item.Meta
-                    title={exam.title}
+                    title={<div style={{fontWeight:700, fontSize:20, color:'#222'}}>{exam.title}</div>}
                     description={
                       <Space direction="vertical" size="small">
-                        <Text>{exam.description}</Text>
+                        <div style={{color:'#888', fontSize:15, marginTop:4}}>{exam.description}</div>
                         <Text type="secondary">时长: {exam.duration} 分钟</Text>
                         <Text type="secondary">参与学生: {exam.student_count} 人</Text>
                         <Text type="secondary">创建时间: {exam.created_at}</Text>
@@ -1248,7 +1266,7 @@ function App() {
           boxShadow: '0 2px 8px #e6eaf1',
         }}>
           <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-          <span style={{ color: '#fff' }}>教学AI助手</span>
+          <span style={{ color: '#fff' }}>智能教学助手</span>
         </div>
         <Menu
           mode="inline"
@@ -1310,7 +1328,7 @@ function App() {
             </Form>
           </Modal>
         </Layout.Content>
-        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>智能教学助手 ©2025</Footer>
       </Layout>
     </Layout>
   );
@@ -1326,31 +1344,30 @@ function App() {
           placeholder="请输入你的问题..."
             style={{ marginBottom: 16 }}
           />
-          <Button type="primary" onClick={handleAsk} loading={loading}>
+          <Button type="primary" onClick={handleAsk} loading={qaLoading} disabled={qaLoading}>
             提问
           </Button>
           <div style={{ marginTop: 16, minHeight: 60 }}>
-            {loading ? <Spin /> : answer && (
+            {qaLoading ? <Spin /> : answer && (
               <div style={{ padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
                 <Text strong>AI助手：</Text>
                 <MarkdownWithLatex>{answer}</MarkdownWithLatex>
               </div>
             )}
           </div>
-          {/* 新增：可下载资料列表 */}
+          {/* 新增：问答历史记录 */}
           <div style={{ marginTop: 32 }}>
-            <b>可下载资料：</b>
+            <b>问答历史记录：</b>
             <List
-              dataSource={knowledgeFiles.filter(f => f.student_can_download)}
-              renderItem={file => (
-                <List.Item>
-                  <span>{file.filename}</span>
-                  <span style={{ color: '#bbb', marginLeft: 12 }}>{file.upload_time}</span>
-                  <Button
-                    style={{ marginLeft: 16 }}
-                    onClick={() => handleDownload(file.filename)}
-                    type="link"
-                  >下载</Button>
+              dataSource={qaHistory}
+              locale={{ emptyText: '暂无历史记录' }}
+              renderItem={item => (
+                <List.Item style={{ alignItems: 'flex-start' }}>
+                  <div style={{ width: '100%' }}>
+                    <div><Text strong>Q：</Text>{item.question}</div>
+                    <div style={{ margin: '8px 0 0 0', color: '#1677ff' }}><Text strong>A：</Text>{item.answer}</div>
+                    <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{item.time}</div>
+                  </div>
                 </List.Item>
               )}
             />
@@ -1363,33 +1380,35 @@ function App() {
           <div style={{ width: 420, maxWidth: '95vw', marginTop: 32 }}>
             <Card title="可参加的考试" style={{ marginBottom: 24, borderRadius: 8, boxShadow: '0 2px 8px #f0f1f2', width: '100%', minHeight: 400, padding: 0 }} bodyStyle={{ padding: 0 }}>
           <List
+            grid={{ gutter: 16, column: 2 }}
             dataSource={studentExams}
-                style={{ width: '100%' }}
                 renderItem={exam => (
-                  <List.Item style={{ borderBottom: '1px solid #f0f0f0', padding: 20, width: '100%', margin: 0 }}>
-                    <div style={{ width: '100%' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: 18 }}>{exam.title}</div>
-                      <div style={{ color: '#888', margin: '8px 0' }}>{exam.description}</div>
-                      <div style={{ marginBottom: 8 }}>
+              <List.Item>
+                <Card
+                  hoverable
+                  style={{ minHeight: 120, marginBottom: 12, padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                  bodyStyle={{ padding: 16 }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 18 }}>{exam.title}</div>
+                  <div style={{ margin: '8px 0 4px 0', color: '#888', fontSize: 13 }}>
+                    创建时间: {formatDateTime(exam.created_at)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
                         <Tag color="blue">时长: {exam.duration} 分钟</Tag>
-                        <span style={{ color: '#aaa', marginLeft: 8 }}>创建时间: {exam.created_at?.slice(0, 16)}</span>
+                    {exam.completed && (
+                      <Tag color="green">
+                        得分: {typeof exam.score === 'number' ? exam.score : '--'}
+                        {exam.total_score || exam.max_score ? `/${exam.total_score || exam.max_score}` : ''}
+                      </Tag>
+                    )}
+                    {!exam.completed && <Tag color="red">未完成</Tag>}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        {exam.completed ? (
-                          <>
-                    <Tag color="green">已完成</Tag>
-                            <span style={{ color: '#52c41a', fontWeight: 'bold' }}>得分: {exam.score}</span>
-                            <Button size="small" style={{ marginLeft: 8 }} onClick={() => viewExamResult(exam.id)}>
-                              查看结果
+                  <div style={{ marginTop: 8, textAlign: 'right' }}>
+                    <Button type="primary" size="small" onClick={() => startExam(exam.id)} disabled={exam.completed}>
+                      {exam.completed ? '已完成' : '开始考试'}
                             </Button>
-                          </>
-                  ) : (
-                          <Button type="primary" onClick={() => startExam(exam.id)}>
-                      开始考试
-                    </Button>
-                      )}
                       </div>
-                    </div>
+                </Card>
               </List.Item>
             )}
           />
@@ -1402,7 +1421,23 @@ function App() {
 
   const renderExamInterface = () => {
     if (!currentExam) return null;
-
+    if (examStep === 'done') {
+      return (
+        <Result
+          status="success"
+          title="已成功提交！"
+          subTitle="您的考试答卷已成功提交。"
+          extra={[
+            <Button type="primary" key="result" onClick={() => viewExamResult(currentExam.exam.id)}>
+              查看考试结果
+            </Button>,
+            <Button key="back" onClick={handleReturnToExamList}>
+              返回
+            </Button>
+          ]}
+        />
+      );
+    }
     return (
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <Card title={`考试：${currentExam.exam.title}`} style={{ marginBottom: 24 }}>
@@ -1415,8 +1450,8 @@ function App() {
           </Space>
         </div>
 
-        <Steps current={0} style={{ marginBottom: 24 }}>
-          <Step title="答题中" />
+        <Steps current={examStep === 'answer' ? 0 : examStep === 'submit' ? 1 : 2} style={{ marginBottom: 24 }}>
+          <Step title="作答中" />
           <Step title="提交" />
           <Step title="完成" />
         </Steps>
@@ -1510,19 +1545,23 @@ function App() {
 
         <div style={{ textAlign: 'center', marginTop: 24 }}>
           <Space>
-            <Button type="primary" onClick={submitExam}>
-              提交考试
+            <Button type="primary" onClick={handleSubmitExam} disabled={examLoading}>
+              提交试卷
             </Button>
-            <Button onClick={() => {
-              setExamInProgress(false);
-              setCurrentExam(null);
-              setExamAnswers({});
-              setExamTimer(0);
-            }}>
-              退出考试
-        </Button>
           </Space>
         </div>
+        {/* 提交确认弹窗 */}
+        <Modal
+          open={examStep === 'submit'}
+          title="确认提交"
+          onOk={confirmSubmitExam}
+          onCancel={() => setExamStep('answer')}
+          okText="确认提交"
+          cancelText="继续作答"
+          confirmLoading={examLoading}
+        >
+          <p>提交后将无法修改答案，确定要提交吗？</p>
+        </Modal>
       </Card>
       </div>
     );
@@ -1685,11 +1724,30 @@ function App() {
     // 合并所有题目用于勾选索引
     const allQuestions = panels.flatMap(p => p.questions);
     let baseIdx = 0;
+
+    // 全选相关
+    const allSelected = selectedQuestions.length === allQuestions.length && allQuestions.length > 0;
+    const handleSelectAll = (checked) => {
+      if (checked) {
+        setSelectedQuestions(allQuestions.map((_, idx) => idx));
+      } else {
+        setSelectedQuestions([]);
+      }
+    };
+
     return (
-      <Card title="生成的题目（请勾选要加入考试的题目）" style={{ marginBottom: 24 }}>
+      <Card title="勾选要加入考试的题目" style={{ marginBottom: 24 }}>
         <div style={{ marginBottom: 16 }}>
-          <Text strong>生成时间: </Text>
-          <Text>{examContent.generated_time}</Text>
+          <Checkbox
+            checked={allSelected}
+            indeterminate={selectedQuestions.length > 0 && selectedQuestions.length < allQuestions.length}
+            onChange={e => handleSelectAll(e.target.checked)}
+          >
+            全选
+          </Checkbox>
+          <span style={{ marginLeft: 16, color: '#888' }}>
+            已选 {selectedQuestions.length} / {allQuestions.length} 题
+          </span>
         </div>
         <Collapse defaultActiveKey={panels.map(p => p.key)}>
           {panels.map(panel => {
@@ -1702,10 +1760,11 @@ function App() {
                   dataSource={panel.questions}
                   renderItem={(q, idx) => {
                     const globalIdx = startIdx + idx;
+                    const checked = selectedQuestions.includes(globalIdx);
                     return (
-                      <List.Item>
+                      <List.Item style={{ alignItems: 'flex-start' }}>
                         <Checkbox
-                          checked={selectedQuestions.includes(globalIdx)}
+                          checked={checked}
                           onChange={e => {
                             if (e.target.checked) {
                               setSelectedQuestions([...selectedQuestions, globalIdx]);
@@ -1713,24 +1772,33 @@ function App() {
                               setSelectedQuestions(selectedQuestions.filter(i => i !== globalIdx));
                             }
                           }}
+                          style={{ marginRight: 12, marginTop: 4 }}
                         />
-                        <div style={{ marginLeft: 8, width: '100%' }}>
-                          <span style={{ fontWeight: 'bold', color: '#1677ff' }}>{panel.label}</span>
-                          <span style={{ marginLeft: 8 }}>{q.question}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ marginBottom: 8 }}>
+                            <Text strong>第 {globalIdx + 1} 题 ({q.points} 分)</Text>
+                            <Tag style={{ marginLeft: 8 }}>{questionTypeMap[q.type] || q.type}</Tag>
+                          </div>
+                          <div style={{ marginBottom: 8 }}>{q.question}</div>
                           {q.options && Object.keys(q.options).length > 0 && (
-                            <div style={{ marginTop: 4 }}>
-                              {Object.entries(q.options).map(([k, v]) => (
-                                <div key={k}><b>{k}.</b> {v}</div>
-                              ))}
+                            <div style={{ marginBottom: 8 }}>
+                              <Text type="secondary">选项：</Text>
+                              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                                {Object.entries(q.options).map(([key, value]) => (
+                                  <li key={key}>{key}. {value}</li>
+                                ))}
+                              </ul>
                             </div>
                           )}
-                          {q.answer && <div style={{ color: '#d4380d', marginTop: 4 }}>答案：{q.answer}</div>}
-                          {q.correct_answer && <div style={{ color: '#1677ff', marginTop: 4 }}>答案：{q.correct_answer}</div>}
-                          <div style={{ color: '#52c41a', marginTop: 4 }}>分值：{q.points}</div>
-                          <div style={{ color: '#8c8c8c', marginTop: 4 }}>解析：{q.explanation}</div>
-                          <div style={{ marginTop: 4 }}>
-                            <Tag color="geekblue">知识点：{q.knowledge_points}</Tag>
-                          </div>
+                          {q.knowledge_points && (
+                            <div style={{ marginBottom: 8 }}>
+                              <Tag color="geekblue">知识点：{Array.isArray(q.knowledge_points) ? q.knowledge_points.join('，') : q.knowledge_points}</Tag>
+                            </div>
+                          )}
+                          {q.explanation && (
+                            <div style={{ color: '#888', fontSize: 13 }}>解析：{q.explanation}</div>
+                          )}
+                          <div style={{ color: '#1677ff', marginTop: 4 }}>正确答案：{Array.isArray(q.correct_answer) ? q.correct_answer.join(', ') : (typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : q.correct_answer || '--')}</div>
                         </div>
                       </List.Item>
                     );
@@ -1740,16 +1808,18 @@ function App() {
             );
           })}
         </Collapse>
-        <Space style={{ marginTop: 16 }}>
-          <Button 
-            type="primary" 
+        <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <Button
+            type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setExamModalVisible(true)}
+            size="large"
             disabled={selectedQuestions.length === 0}
+            onClick={() => setExamModalVisible(true)}
+            style={{ borderRadius: 8, fontWeight: 600 }}
           >
             创建考试
           </Button>
-        </Space>
+        </div>
       </Card>
     );
   };
@@ -1918,14 +1988,9 @@ function App() {
   const handleGeneratePPTFromUpload = async ({ file }) => {
     const formData = new FormData();
     formData.append('document', file);
-    const res = await axios.post('http://localhost:8000/teacher/generate-ppt-from-upload', formData, { responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'teaching-upload.pptx');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    await axios.post('http://localhost:8000/teacher/generate-ppt-from-upload', formData);
+    message.success('PPT生成成功，已加入历史列表');
+    if (typeof fetchPptHistory === 'function') fetchPptHistory();
   };
 
   // 在App组件内添加删除考试函数
@@ -2037,11 +2102,11 @@ function App() {
               placeholder="请输入你的问题..."
               style={{ marginBottom: 16 }}
             />
-            <Button type="primary" onClick={handleAsk} loading={loading}>
+            <Button type="primary" onClick={handleAsk} loading={qaLoading} disabled={qaLoading}>
               提问
             </Button>
             <div style={{ marginTop: 16, minHeight: 60 }}>
-              {loading ? <Spin /> : answer && (
+              {qaLoading ? <Spin /> : answer && (
                 <div style={{ padding: 16, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
                   <Text strong>AI助手：</Text>
                   <MarkdownWithLatex>{answer}</MarkdownWithLatex>
@@ -2113,7 +2178,7 @@ function App() {
                     <div style={{ color: '#888', marginBottom: 8 }}>{exam.description}</div>
                     <div style={{ marginBottom: 8 }}>
                       <Tag color="blue">时长: {exam.duration} 分钟</Tag>
-                      <span style={{ color: '#aaa', marginLeft: 8 }}>创建时间: {exam.created_at?.slice(0, 16)}</span>
+                      <span style={{ color: '#aaa', marginLeft: 8 }}>创建时间: {formatDateTime(exam.created_at)}</span>
                     </div>
                     {exam.completed && (
                       <div style={{ marginBottom: 8 }}>
@@ -2528,7 +2593,8 @@ function App() {
           answer: practiceAnswers[idx] || '',
           correct_answer: q.correct_answer,
           explanation: q.explanation,
-          knowledge_points: q.knowledge_points
+          knowledge_points: q.knowledge_points,
+          options: q.options // 关键：加上这一行
         }));
         const res = await axios.post('http://localhost:8000/student/submit-practice',
           new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
@@ -2630,20 +2696,16 @@ function App() {
                     <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
                       <div style={{ width: '100%' }}>
                         <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{h.question}</div>
-                        {/* 仅选择题显示选项 */}
-                        {h.options && Object.keys(h.options).length > 0 && (h.type === 'choice' || h.type === 'multi') && (
+                        {h.options && Object.keys(h.options).length > 0 && (
                           <div style={{ margin: '8px 0' }}>
                             {Object.entries(h.options).map(([k, v]) => (
                               <div key={k}>{k}. {v}</div>
                             ))}
                           </div>
                         )}
-                        <div style={{ margin: '8px 0' }}>
-                          <span>你的答案：{h.student_answer}</span>
-                        </div>
-                        <div style={{ margin: '8px 0' }}>
-                          判定：{h.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}
-                        </div>
+                        <div style={{ margin: '8px 0' }}>你的答案：{h.student_answer}</div>
+                        <div style={{ margin: '8px 0' }}>正确答案：{h.correct_answer}</div>
+                        <div style={{ margin: '8px 0' }}>解析：{h.explanation}</div>
                         <div style={{ color: '#888', fontSize: 12 }}>{h.time}</div>
                       </div>
                     </List.Item>
@@ -2715,8 +2777,17 @@ function App() {
           width={700}
         >
           <div style={{ marginBottom: 16 }}>
-            <span style={{ color: '#888', marginRight: 16 }}>共 {practiceQuestions.length} 题</span>
-            <Progress percent={practiceProgress} size="small" style={{ width: 200, display: 'inline-block' }} />
+            <Button
+              type="primary"
+              onClick={handleGeneratePractice}
+              loading={practiceLoading}
+              disabled={practiceLoading || !selectedKeyword}
+              style={{ marginRight: 16 }}
+            >
+              生成巩固练习
+            </Button>
+            <span style={{ color: '#888' }}>共 {practiceQuestions.length} 题</span>
+            <Progress percent={practiceProgress} size="small" style={{ width: 200, display: 'inline-block', marginLeft: 16 }} />
           </div>
           {practiceQuestions.length === 0 ? (
             <Empty description="暂无巩固练习题目" />
@@ -2812,12 +2883,13 @@ function App() {
     window.location.reload();
   };
 
-  if (!isLoggedIn) {
+  // 未登录时只渲染登录/注册界面和欢迎页
+  if (!currentUser) {
     return (
       <Layout style={{ minHeight: '100vh' }}>
         <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Title level={3} style={{ color: 'white', margin: 0 }}>
-            <BookOutlined /> 教学AI助手
+            <BookOutlined /> 智能教学助手
           </Title>
           <Space>
             <Button type="primary" icon={<LoginOutlined />} onClick={() => setLoginVisible(true)}>
@@ -2831,7 +2903,7 @@ function App() {
         <Content style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
           <Result
             icon={<BookOutlined style={{ color: '#1890ff' }} />}
-            title="欢迎使用教学AI助手"
+            title="欢迎使用智能教学助手"
             subTitle="登录后可以使用更多功能：知识库管理、教学内容设计、考核内容生成、考试系统等"
             extra={[
               <Button type="primary" key="login" icon={<LoginOutlined />} onClick={() => setLoginVisible(true)}>
@@ -2843,7 +2915,7 @@ function App() {
             ]}
           />
         </Content>
-        <Footer style={{ textAlign: 'center' }}>教学AI助手 ©2024</Footer>
+        <Footer style={{ textAlign: 'center' }}>智能教学助手 ©2025</Footer>
         {renderLoginModal()}
         {renderRegisterModal()}
       </Layout>
@@ -2873,7 +2945,7 @@ function App() {
             boxShadow: '0 2px 8px #e6eaf1',
           }}>
             <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-            <span style={{ color: '#fff' }}>教学AI助手</span>
+            <span style={{ color: '#fff' }}>智能教学助手</span>
           </div>
           <Menu
             mode="inline"
@@ -2908,7 +2980,7 @@ function App() {
               {examInProgress ? renderExamInterface() : renderStudentContent()}
             </div>
           </Layout.Content>
-          <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+          <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>智能教学助手 ©2025</Footer>
         </Layout>
       </Layout>
     )
@@ -2977,7 +3049,7 @@ function ExamResultPage() {
           boxShadow: '0 2px 8px #e6eaf1',
         }}>
           <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-          <span style={{ color: '#fff' }}>教学AI助手</span>
+          <span style={{ color: '#fff' }}>智能教学助手</span>
         </div>
         <Menu
           mode="inline"
@@ -3068,8 +3140,8 @@ function ExamResultPage() {
                 )}
                 <span style={{ marginLeft: 8 }}>得分：{a.is_correct === null ? '--' : a.points_earned}</span>
               </div>
-              <div style={{ marginBottom: 8 }}><b>你的答案：</b>{a.answer}</div>
-              <div style={{ marginBottom: 8 }}><b>正确答案：</b>{a.correct_answer}</div>
+              <div style={{ marginBottom: 8 }}><b>你的答案：</b>{formatAnswer(a.answer)}</div>
+              <div style={{ marginBottom: 8 }}><b>正确答案：</b>{formatAnswer(a.correct_answer)}</div>
               <div style={{ marginBottom: 8 }}><b>解析：</b>{a.explanation || '无'}</div>
                       {/* 新增：显示知识点关键词 */}
                       {a.knowledge_points && a.knowledge_points.length > 0 && (
@@ -3094,7 +3166,7 @@ function ExamResultPage() {
     </Card>
           </div>
         </Layout.Content>
-        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>教学AI助手 ©2024</Footer>
+        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>智能教学助手 ©2025</Footer>
       </Layout>
     </Layout>
   );
@@ -3230,52 +3302,16 @@ function SocraticAssistant() {
             </div>
           )}
           {history.map((msg, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: 'flex',
-                flexDirection: msg.role === 'ai' ? 'row' : 'row-reverse',
-                alignItems: 'flex-end',
-                margin: '16px 0',
-              }}
-            >
-              <Avatar
-                icon={msg.role === 'ai' ? <RobotOutlined /> : <UserOutlined />}
-                style={{
-                  backgroundColor: msg.role === 'ai' ? '#1677ff' : '#1890ff',
-                  margin: '0 8px',
-                }}
-              />
-              <div
-                style={{
-                  background: msg.role === 'ai' ? '#f6ffed' : '#e6f7ff',
-                  color: '#222',
-                  borderRadius: 16,
-                  padding: '12px 18px',
-                  maxWidth: 520,
-                  boxShadow: msg.role === 'ai'
-                    ? '0 2px 8px #b7eb8f'
-                    : '0 2px 8px #91d5ff',
-                  fontSize: 16,
-                  wordBreak: 'break-word',
-                  position: 'relative',
-                }}
-              >
-                <b>{msg.role === 'ai' ? 'AI助手' : '我'}：</b>
-                <span>{msg.content}</span>
-                {msg.knowledge_point && (
-                  <span
-                    style={{
-                      color: '#faad14',
-                      marginLeft: 8,
-                      fontSize: 13,
-                      fontWeight: 500,
-                    }}
-                  >
-                    [知识点: {msg.knowledge_point}]
-                  </span>
-                )}
+            <div key={idx} style={{ margin: '8px 0', textAlign: msg.role === 'ai' ? 'left' : 'right' }}>
+              {msg.role === 'ai' ? (
+                <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 12, display: 'inline-block', maxWidth: 700 }}>
+                  <MarkdownWithLatex>{msg.content}</MarkdownWithLatex>
               </div>
+              ) : (
+                <div style={{ background: '#e6f7ff', borderRadius: 8, padding: 12, display: 'inline-block', maxWidth: 700 }}>
+                  {msg.content}
+                </div>
+              )}
             </div>
           ))}
           {aiThinking && (
@@ -3332,17 +3368,19 @@ function AdminPPTExport() {
     }).finally(() => setLoading(false));
   }, []);
   const handleDownload = (filename) => {
-    window.open(`http://localhost:8000/admin/ppt-files/download/${filename}`);
+    downloadPPT(`http://localhost:8000/admin/ppt-files/download/${filename}`, filename);
   };
   return (
-    <Card title="教师PPT导出" style={{ maxWidth: 900, margin: '0 auto', marginTop: 32 }}>
+    <Card title="教师PPT导出" style={{ maxWidth: 1200, margin: '0 auto', marginTop: 32, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
       <List
         loading={loading}
         dataSource={files}
+        locale={{ emptyText: '暂无PPT文件' }}
         renderItem={file => (
           <List.Item actions={[<Button type="link" onClick={() => handleDownload(file.filename)}>下载</Button>]}> 
             <div style={{ width: '100%' }}>
               <b>{file.filename}</b>
+              <span style={{ marginLeft: 16, color: '#888' }}>教师: {file.teacher}</span>
               <span style={{ marginLeft: 16, color: '#888' }}>创建时间: {file.created_at}</span>
               <span style={{ marginLeft: 16, color: '#888' }}>大小: {(file.size/1024).toFixed(1)} KB</span>
             </div>
@@ -3407,5 +3445,243 @@ function AdminActivity() {
 const adminMenuItems = [
   { key: 'ppt', icon: <FileTextOutlined />, label: 'PPT导出' },
   { key: 'activity', icon: <BarChartOutlined />, label: '活跃度统计' },
+  { key: 'users', icon: <UserOutlined />, label: '用户管理' },
 ];
+
+function AdminUserManagement() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [resetModal, setResetModal] = useState({ visible: false, user: null });
+  const [resetPwd, setResetPwd] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await axios.get('http://localhost:8000/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsers(res.data || []);
+    } catch (e) {
+      setUsers([]);
+    }
+    setLoading(false);
+  };
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleResetPwd = async () => {
+    if (!resetPwd) return message.warning('请输入新密码');
+    setResetLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      await axios.post('http://localhost:8000/admin/users/reset-password', {
+        user_id: resetModal.user.id,
+        new_password: resetPwd,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      message.success('密码重置成功');
+      setResetModal({ visible: false, user: null });
+      setResetPwd('');
+    } catch (e) {
+      message.error('重置失败');
+    }
+    setResetLoading(false);
+  };
+
+  const handleDisable = async (user, disable) => {
+    const token = localStorage.getItem('token');
+    try {
+      await axios.post('http://localhost:8000/admin/users/disable', {
+        user_id: user.id,
+        disable,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      message.success(disable ? '已禁用' : '已启用');
+      fetchUsers();
+    } catch (e) {
+      message.error('操作失败');
+    }
+  };
+
+  const handleDelete = async (user) => {
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`http://localhost:8000/admin/users/delete/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      message.success('用户已删除');
+      fetchUsers();
+    } catch (e) {
+      message.error('删除失败');
+    }
+  };
+
+  return (
+    <Card title="用户管理" style={{ maxWidth: 1200, margin: '0 auto', marginTop: 32, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
+      <Table
+        dataSource={users}
+        rowKey="id"
+        loading={loading}
+        bordered
+        columns={[
+          { title: 'ID', dataIndex: 'id', width: 60 },
+          { title: '用户名', dataIndex: 'username', width: 120 },
+          { title: '角色', dataIndex: 'role', width: 100 },
+          { title: '注册时间', dataIndex: 'created_at', width: 160 },
+          { title: '状态', dataIndex: 'is_active', width: 80, render: v => v ? <Tag color="green">正常</Tag> : <Tag color="red">禁用</Tag> },
+          {
+            title: '操作',
+            key: 'action',
+            width: 260,
+            render: (_, user) => (
+              <Space>
+                <Button size="small" onClick={() => setResetModal({ visible: true, user })}>重置密码</Button>
+                <Button size="small" onClick={() => handleDisable(user, user.is_active)}>禁用</Button>
+                <Button size="small" onClick={() => handleDisable(user, !user.is_active)}>启用</Button>
+                <Popconfirm title="确定删除该用户？" onConfirm={() => handleDelete(user)} okText="确定" cancelText="取消">
+                  <Button size="small" danger>删除</Button>
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]}
+        pagination={false}
+      />
+      <Modal
+        open={resetModal.visible}
+        title={`重置密码 - ${resetModal.user?.username}`}
+        onCancel={() => setResetModal({ visible: false, user: null })}
+        onOk={handleResetPwd}
+        confirmLoading={resetLoading}
+      >
+        <Input.Password
+          placeholder="请输入新密码"
+          value={resetPwd}
+          onChange={e => setResetPwd(e.target.value)}
+        />
+      </Modal>
+    </Card>
+  );
+}
+
+// 管理员端主界面 Tab 切换
+function AdminPanel() {
+  const [activeMenu, setActiveMenu] = useState('ppt');
+  return (
+    <Layout>
+      <Menu
+        mode="horizontal"
+        selectedKeys={[activeMenu]}
+        onClick={e => setActiveMenu(e.key)}
+        items={adminMenuItems}
+        style={{ marginBottom: 0, borderRadius: 0, fontWeight: 600, fontSize: 16 }}
+      />
+      <Layout.Content style={{ padding: 24, minHeight: 360, background: '#f8fafc' }}>
+        {activeMenu === 'ppt' && <AdminPPTExport />}
+        {activeMenu === 'activity' && <AdminActivity />}
+        {activeMenu === 'users' && <AdminUserManagement />}
+      </Layout.Content>
+    </Layout>
+  );
+}
+
+function TeacherPPTHistory() {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  // 让外部可刷新
+  window.fetchPptHistory = fetchPptHistory;
+  function fetchPptHistory() {
+    setLoading(true);
+    axios.get('http://localhost:8000/teacher/ppt-history').then(res => {
+      setFiles(res.data.files || []);
+    }).finally(() => setLoading(false));
+  }
+  useEffect(() => { fetchPptHistory(); }, []);
+  const handleDownload = (filename) => {
+    downloadPPT(`http://localhost:8000/teacher/ppt-history/download/${filename}`, filename);
+  };
+  const handlePreview = (filename) => {
+    window.open(`http://localhost:8000/teacher/ppt-history/preview/${filename}`);
+  };
+  // 让宽度和教学内容栏一致
+  return (
+    <Card title="PPT历史记录" style={{ maxWidth: 1200, margin: '0 auto', marginBottom: 24, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }} loading={loading}>
+      <List
+        dataSource={files}
+        locale={{ emptyText: '暂无历史PPT' }}
+        renderItem={file => (
+          <List.Item actions={[
+            <Button type="link" onClick={() => handleDownload(file.filename)}>下载</Button>,
+            <Button type="link" danger onClick={() => handleDelete(file.filename)}>删除</Button>
+          ]}> 
+            <div style={{ width: '100%' }}>
+              <b>{file.filename}</b>
+              <span style={{ marginLeft: 16, color: '#888' }}>创建时间: {file.created_at}</span>
+              <span style={{ marginLeft: 16, color: '#888' }}>大小: {(file.size/1024).toFixed(1)} KB</span>
+            </div>
+          </List.Item>
+        )}
+      />
+    </Card>
+  );
+}
+
+const handleDelete = async (filename) => {
+  try {
+    const token = localStorage.getItem('token');
+    await axios.delete(`http://localhost:8000/teacher/ppt-history/delete/${filename}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    message.success('删除成功');
+    if (typeof fetchPptHistory === 'function') fetchPptHistory();
+  } catch (err) {
+    message.error('删除失败：' + (err.response?.data?.detail || err.message));
+  }
+};
+
+// 通用PPT下载函数，自动带token，适配不同接口
+const downloadPPT = async (url, filename) => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.get(url, {
+      responseType: 'blob',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    alert('下载失败：' + (err.response?.data?.detail || err.message));
+  }
+};
+
+// 工具函数：格式化时间字符串，去掉T，只保留到分钟
+function formatDateTime(str) {
+  if (!str) return '';
+  const s = str.replace('T', ' ');
+  // 只保留到分钟
+  return s.slice(0, 16);
+}
+
+// 工具函数：格式化答案显示
+function formatAnswer(ans) {
+  if (Array.isArray(ans)) return ans.join('、');
+  // 新增：处理字符串形式的数组
+  if (typeof ans === 'string' && ans.startsWith('[') && ans.endsWith(']')) {
+    try {
+      const arr = JSON.parse(ans);
+      if (Array.isArray(arr)) return arr.join('、');
+    } catch {}
+  }
+  if (typeof ans === 'object' && ans !== null) return JSON.stringify(ans);
+  return ans ?? '--';
+}
 

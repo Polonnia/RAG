@@ -34,6 +34,6 @@ async def login(request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username, User.password == password).first()
     if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    # 生成token（略）
-    token = f"token-{user.id}-{user.role}"
+    # 修复：生成并存储session_token
+    token = login_user(db, user)
     return {"token": token, "user": {"id": user.id, "username": user.username, "role": user.role}} 

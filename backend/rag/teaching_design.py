@@ -69,7 +69,7 @@ def generate_teaching_outline(course_outline):
         content_text = "暂无相关教学资源"
     
     prompt = f"""
-请根据以下资料内容，和教学大纲，梳理出本课程的知识点结构，要求只输出知识点框架（用Markdown标题，层级清晰，不要超过2级）。
+请根据以下资料内容，和教学大纲，梳理出本课程的知识点结构，要求只输出知识点框架。用Markdown标题，只能出现井号（#），不要出现星号（*），层级清晰，不要超过2级。
 
 【教学大纲】
 {course_outline}

@@ -77,7 +77,7 @@ async def generate_practice(
 
 @router.post("/student/submit-practice")
 async def submit_practice(
-    answers_data: str = Form(...),  # JSON: [{question, answer, correct_answer, explanation, knowledge_points}]
+    answers_data: str = Form(...),  # JSON: [{question, answer, correct_answer, explanation, knowledge_points, options}]
     keyword: str = Form(...),  # 新增：当前知识点
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -98,7 +98,8 @@ async def submit_practice(
                 "correct_answer": a.get('correct_answer', ''),
                 "is_correct": is_correct,
                 "explanation": a.get('explanation', ''),
-                "knowledge_points": keyword
+                "knowledge_points": keyword,
+                "options": a.get('options', {})
             })
             # 新增：直接用keyword更新正确率
             def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
@@ -106,15 +107,11 @@ async def submit_practice(
                 try:
                     if not keyword or keyword.strip() == "":
                         return
-                    
                     keyword = keyword.strip()
-                    
-                    # 查找或创建学生-关键词记录
                     accuracy_record = db.query(StudentKeywordAccuracy).filter(
                         StudentKeywordAccuracy.student_id == student_id,
                         StudentKeywordAccuracy.keyword == keyword
                     ).first()
-                    
                     if not accuracy_record:
                         accuracy_record = StudentKeywordAccuracy(
                             student_id=student_id,
@@ -125,21 +122,15 @@ async def submit_practice(
                             last_updated=datetime.now()
                         )
                         db.add(accuracy_record)
-                    
-                    # 更新统计
                     accuracy_record.total_count += 1
                     if is_correct:
                         accuracy_record.correct_count += 1
-                    
-                    # 计算正确率
                     accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
                     accuracy_record.last_updated = datetime.now()
-                    
                 except Exception as e:
                     print(f"更新学生关键词正确率失败: {str(e)}")
-            
             update_student_keyword_accuracy(db, current_user.id, keyword, is_correct)
-            # 新增：保存练习记录
+            # 新增：保存练习记录，options字段要有内容
             db.add(StudentPracticeRecord(
                 student_id=current_user.id,
                 keyword=keyword,

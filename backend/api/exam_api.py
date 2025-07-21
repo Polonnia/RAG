@@ -666,6 +666,21 @@ async def delete_exam(exam_id: int, current_user: User = Depends(get_current_use
     db.commit()
     return {"msg": "删除成功"} 
 
+@router.post("/teacher/exam/{exam_id}/reset-student/{student_id}")
+def reset_student_exam(exam_id: int, student_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 只允许本教师操作
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.teacher_id == current_user.id).first()
+    if not exam:
+        raise HTTPException(status_code=403, detail="无权操作该考试")
+    student_exam = db.query(StudentExam).filter(StudentExam.exam_id == exam_id, StudentExam.student_id == student_id).first()
+    if not student_exam:
+        raise HTTPException(status_code=404, detail="未找到该学生的考试记录")
+    # 删除学生答案
+    db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id).delete()
+    db.delete(student_exam)
+    db.commit()
+    return {"msg": "该学生已可重新参加考试"}
+
 @router.get("/student/keyword-accuracy")
 async def get_student_keyword_accuracy(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """获取学生的关键词正确率统计"""
@@ -692,3 +707,45 @@ async def get_student_keyword_accuracy(current_user: User = Depends(get_current_
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取关键词正确率失败: {str(e)}") 
+
+@router.get("/teacher/exam/{exam_id}/analysis")
+def exam_analysis(exam_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 只允许本教师
+    exam = db.query(Exam).filter(Exam.id == exam_id, Exam.teacher_id == current_user.id).first()
+    if not exam:
+        raise HTTPException(status_code=403, detail="无权操作该考试")
+    students = db.query(StudentExam).filter(StudentExam.exam_id == exam_id).all()
+    question_stats = {}
+    knowledge_stats = {}
+    for stu_exam in students:
+        for ans in stu_exam.answers:
+            q = db.query(Question).filter(Question.id == ans.question_id).first()
+            if not q: continue
+            # 题目统计
+            qid = q.id
+            if qid not in question_stats:
+                question_stats[qid] = {"total": 0, "wrong": 0, "text": q.question_text, "knowledge_points": q.knowledge_points}
+            question_stats[qid]["total"] += 1
+            if not ans.is_correct:
+                question_stats[qid]["wrong"] += 1
+            # 知识点统计
+            kps = []
+            try:
+                kps = json.loads(q.knowledge_points) if q.knowledge_points else []
+            except:
+                kps = [q.knowledge_points]
+            for kp in kps:
+                if not kp: continue
+                if kp not in knowledge_stats:
+                    knowledge_stats[kp] = {"total": 0, "wrong": 0}
+                knowledge_stats[kp]["total"] += 1
+                if not ans.is_correct:
+                    knowledge_stats[kp]["wrong"] += 1
+    # AI教学建议（简单字符串）
+    weak_kps = [k for k, v in knowledge_stats.items() if v['wrong']/v['total'] > 0.3]
+    ai_suggestion = "根据统计，建议重点讲解以下知识点：" + ("，".join(weak_kps) if weak_kps else "无明显薄弱点")
+    return {
+        "question_stats": question_stats,
+        "knowledge_stats": knowledge_stats,
+        "ai_suggestion": ai_suggestion
+    } 
