@@ -1,27 +1,11 @@
 import os
 import json
 from datetime import datetime
-from langchain_community.vectorstores.chroma import Chroma
-import torch
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+from .resources import get_vector_db
 
-DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
-
-model_name = "BAAI/bge-large-zh-v1.5"
-model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-encode_kwargs = {"normalize_embeddings": True}
-# 初始化向量数据库
-vector_db = Chroma(
-    persist_directory=DB_DIR,
-    embedding_function=HuggingFaceBgeEmbeddings(
-        model_name=model_name,
-        model_kwargs=model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
-)
+vector_db = get_vector_db()
 
 def get_knowledge_files():
     """获取知识库中的文件列表"""

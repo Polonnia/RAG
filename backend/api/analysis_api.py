@@ -14,8 +14,6 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     """获取学生历次考试正确率和薄弱知识点
     正确率曲线只统计每次考试所有题目的总正确率，不分知识点。
     """
-    if current_user.role != "student":
-        raise HTTPException(status_code=403, detail="只有学生可以查看学情分析")
     # 1. 正确率曲线
     exams = db.query(StudentExam).filter(StudentExam.student_id == current_user.id).order_by(StudentExam.start_time).all()
     accuracy_curve = []

@@ -64,7 +64,7 @@ async def generate_ppt_from_upload(document: UploadFile = File(...), current_use
         return {"msg": "ok"}
     except Exception as e:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=f"PPT生成异常: {e}")
+        raise HTTPException(status_code=500, detail=f"PPT生成异常: {e}") 
 
 @router.get("/teacher/ppt-history")
 def get_teacher_ppt_history(current_user: User = Depends(get_current_user)):

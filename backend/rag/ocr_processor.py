@@ -155,5 +155,19 @@ class OCRProcessor:
             print(f"创建文档失败: {str(e)}")
             return ""
 
-# 创建全局实例
-ocr_processor = OCRProcessor() 
+# 延迟创建全局实例（在首次使用时才创建）
+_ocr_processor_instance = None
+
+def get_ocr_processor():
+    """获取 OCR 处理器实例（单例模式，仅初始化一次）"""
+    global _ocr_processor_instance
+    if _ocr_processor_instance is None:
+        _ocr_processor_instance = OCRProcessor()
+    return _ocr_processor_instance
+
+# 保留向后兼容性
+ocr_processor = None
+def __getattr__(name):
+    if name == 'ocr_processor':
+        return get_ocr_processor()
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'") 

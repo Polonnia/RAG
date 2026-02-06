@@ -86,16 +86,27 @@ async def qa(question: str = Form(...)):
         return JSONResponse(status_code=500, content={"error": f"问答失败: {str(e)}"})
 
 @router.post("/qa-history")
-async def save_qa_history(question: str = Form(...), answer: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    record = QAHistory(user_id=current_user.id, question=question, answer=answer)
+async def save_qa_history(question: str = Form(...), answer: str = Form(...), sources: str = Form(default="[]"), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    record = QAHistory(user_id=current_user.id, question=question, answer=answer, sources=sources)
     db.add(record)
     db.commit()
     return {"msg": "ok"}
 
 @router.get("/qa-history")
 async def get_qa_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import json
     records = db.query(QAHistory).filter(QAHistory.user_id == current_user.id).order_by(QAHistory.time.desc()).all()
-    return [{"id": r.id, "question": r.question, "answer": r.answer, "time": r.time.strftime('%Y-%m-%d %H:%M:%S')} for r in records]
+    return [{"id": r.id, "question": r.question, "answer": r.answer, "sources": json.loads(r.sources) if r.sources else [], "time": r.time.strftime('%Y-%m-%d %H:%M:%S')} for r in records]
+
+@router.get("/qa-history/{history_id}/sources")
+async def get_qa_history_sources(history_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import json
+    record = db.query(QAHistory).filter(QAHistory.id == history_id, QAHistory.user_id == current_user.id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="历史记录不存在")
+    # 直接返回保存的sources，不再重新检索
+    sources = json.loads(record.sources) if record.sources else []
+    return {"sources": sources}
 
 @router.delete("/qa-history/{history_id}")
 async def delete_qa_history(history_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

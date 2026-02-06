@@ -1,24 +1,11 @@
-import os
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-import torch
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_community.vectorstores.chroma import Chroma
 from openai import OpenAI
+from rank_bm25 import BM25Okapi
+import jieba
 
-DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
+from .resources import get_vector_db
+
 API_KEY = "sk-9fabf0d9e8e84d0994756d5846207c04"
-
-model_name = "BAAI/bge-large-zh-v1.5"
-model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-encode_kwargs = {"normalize_embeddings": True}
-vector_db = Chroma(
-    persist_directory=DB_DIR,
-    embedding_function=HuggingFaceBgeEmbeddings(
-        model_name=model_name,
-        model_kwargs=model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
-)
+vector_db = get_vector_db()
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 
@@ -116,59 +103,70 @@ def process_text_fragments(text_fragments: list, question: str) -> list:
         print(f"处理文本片段失败: {str(e)}")
         return text_fragments
 
-def qa_query(question: str, top_k: int = 5, score_threshold: float = 0.7) -> dict:
-    """
-    使用与测试脚本相同的向量查找方式，只返回相似度大于0.7的片段
-    """
+# 新增：混合检索
+
+def hybrid_search(question, top_k=5, score_threshold=0.6):
+    # 1. 稠密向量检索
+    docs_with_scores = vector_db.similarity_search_with_score(question, k=top_k)
+    dense_docs = [(doc, score) for doc, score in docs_with_scores if score > score_threshold]
+    dense_ids = set([doc.metadata.get('chunk_id', doc.page_content[:30]) for doc, _ in dense_docs])
+
+    # 2. BM25检索
+    # 获取所有文档片段
+    all_docs = vector_db.get()['documents']
+    all_metas = vector_db.get()['metadatas']
+    all_chunks = [
+        {'content': doc, 'metadata': meta}
+        for doc, meta in zip(all_docs, all_metas)
+    ]
+    corpus = [c['content'] for c in all_chunks]
+    tokenized_corpus = [list(jieba.cut(doc)) for doc in corpus]
+    bm25 = BM25Okapi(tokenized_corpus)
+    bm25_scores = bm25.get_scores(list(jieba.cut(question)))
+    bm25_top = sorted(enumerate(bm25_scores), key=lambda x: -x[1])[:top_k]
+    bm25_docs = [all_chunks[i] for i, _ in bm25_top]
+    bm25_ids = set([c['metadata'].get('chunk_id', c['content'][:30]) for c in bm25_docs])
+
+    # 3. 合并去重，优先稠密检索，再补充BM25
+    final_chunks = []
+    seen = set()
+    # 稠密检索结果
+    for doc, score in dense_docs:
+        cid = doc.metadata.get('chunk_id', doc.page_content[:30])
+        if cid not in seen:
+            final_chunks.append({'content': doc.page_content, 'metadata': doc.metadata})
+            seen.add(cid)
+    # BM25补充
+    for c in bm25_docs:
+        cid = c['metadata'].get('chunk_id', c['content'][:30])
+        if cid not in seen:
+            final_chunks.append(c)
+            seen.add(cid)
+        if len(final_chunks) >= top_k:
+            break
+    return final_chunks[:top_k]
+
+
+def qa_query(question: str, top_k: int = 5, score_threshold: float = 0.6) -> dict:
     try:
-        # 使用与测试脚本相同的检索方式
-        docs_with_scores = vector_db.similarity_search_with_score(question, k=top_k)
-        
-        # 只保留相似度大于score_threshold的片段
-        filtered_docs_with_scores = [
-            (doc, score) for doc, score in docs_with_scores if score > score_threshold
-        ]
-        
-        # 调试输出
-        for i, (doc, score) in enumerate(filtered_docs_with_scores):
-            print(f"[调试] 片段{i+1}: 相似度={score:.4f}, 来源={doc.metadata.get('source', '未知')}, 页码={doc.metadata.get('page', '?')}, 内容长度={len(doc.page_content)}")
-        
-        if not filtered_docs_with_scores:
+        # 混合检索
+        retrieved_chunks = hybrid_search(question, top_k=top_k, score_threshold=score_threshold)
+        if not retrieved_chunks:
             return {
                 "answer": "抱歉，没有找到与您问题相关的资料片段。",
                 "sources": []
             }
-        
-        # 准备原始片段数据
-        original_fragments = [
-            {
-                'content': doc.page_content,
-                'metadata': {
-                    k: v for k, v in doc.metadata.items()
-                    if k in ['source', 'page', 'chunk_id']
-                }
-            }
-            for doc, score in filtered_docs_with_scores
-        ]
-        
-        # 使用LLM处理文本片段
-        processed_fragments = process_text_fragments(original_fragments, question)
-        
-        # 构建上下文
+        # 调试输出
+        for i, fragment in enumerate(retrieved_chunks):
+            print(f"[混合检索] 片段{i+1}: 来源={fragment['metadata'].get('source', '未知')}, 页码={fragment['metadata'].get('page', '?')}, 内容长度={len(fragment['content'])}")
+        # LLM处理片段
+        processed_fragments = process_text_fragments(retrieved_chunks, question)
         context = "\n\n".join(
             f"【资料片段 {i+1}】{fragment['content']}\n"
             f"（来源：{fragment['metadata'].get('source', '未知')} 第{fragment['metadata'].get('page', '?')}页）"
             for i, fragment in enumerate(processed_fragments)
         )
-
-        prompt = f"""基于以下课程资料：
-{context}
-
-请严格根据资料回答：{question}
-注意：
-1.如果涉及数学公式用$...$或$$...$$表示
-2.每个结论需标注来源编号如【1】"""
-
+        prompt = f"""基于以下课程资料：\n{context}\n\n请严格根据资料回答：{question}\n注意：\n1.如果涉及数学公式用$...$或$$...$$表示\n2.每个结论需标注来源编号如【1】"""
         return {
             "answer": get_completion(prompt),
             "sources": [
@@ -180,7 +178,7 @@ def qa_query(question: str, top_k: int = 5, score_threshold: float = 0.7) -> dic
             ]
         }
     except Exception as e:
-        print(f"向量查找失败: {str(e)}")
+        print(f"混合检索失败: {str(e)}")
         return {
             "answer": "抱歉，检索相关文档时出现错误，请稍后重试。",
             "sources": []

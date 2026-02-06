@@ -4,40 +4,20 @@ from datetime import datetime
 from typing import List, Dict, Any, Union
 from langchain.schema import Document
 from langchain.text_splitter import CharacterTextSplitter
-import torch
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_community.vectorstores.chroma import Chroma
 
 # 导入LLM调用模块
 from .qa import get_completion
+from .resources import get_embeddings, get_vector_db
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
-
-model_name = "BAAI/bge-large-zh-v1.5"
-model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-encode_kwargs = {"normalize_embeddings": True}
-# 初始化向量数据库
-vector_db = Chroma(
-    persist_directory=DB_DIR,
-    embedding_function=HuggingFaceBgeEmbeddings(
-        model_name=model_name,
-        model_kwargs=model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
-)
-
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+vector_db = get_vector_db()
 
 class ExamGenerator:
     """考核内容生成器"""
     
     def __init__(self):
-        self.embeddings = HuggingFaceBgeEmbeddings(
-            model_name=model_name,
-            model_kwargs=model_kwargs,
-            encode_kwargs=encode_kwargs
-        )
+        self.embeddings = get_embeddings()
     
     def get_existing_keywords(self) -> List[str]:
         """获取已有关词池（从知识库、历史关键词等）"""

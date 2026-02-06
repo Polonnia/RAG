@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Upload, Button, Input, message, Typography, Spin, Card, Space, List, Popconfirm, Tag, Divider, Select, Collapse, Modal, Form, Radio, Checkbox, Progress, Steps, Result, Table, InputNumber, Menu, Switch, Empty, Avatar } from 'antd';
-import { UploadOutlined, BookOutlined, FileTextOutlined, ClockCircleOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined, FormOutlined, UserOutlined, LoginOutlined, LogoutOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, LockOutlined, BarChartOutlined, RobotOutlined } from '@ant-design/icons';
+import { UploadOutlined, BookOutlined, FileTextOutlined, ClockCircleOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined, FormOutlined, UserOutlined, LoginOutlined, LogoutOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, LockOutlined, BarChartOutlined, RobotOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import getApiUrl from './apiConfig';
 import ExamDetail from './ExamDetail';
 import ReactMarkdown from 'react-markdown';
 import { Tabs } from 'antd';
@@ -63,8 +64,7 @@ function renderAdminLayout(activeAdminMenu, setActiveAdminMenu, handleLogout) {
           borderRadius: '0 0 18px 18px',
           boxShadow: '0 2px 8px #e6eaf1',
         }}>
-          <BarChartOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-          <span style={{ color: '#fff' }}>管理员后台</span>
+          <span style={{ color: '#fff', fontWeight: 800, fontSize: 24, letterSpacing: 2 }}>智能教学助手</span>
         </div>
         <Menu
           mode="inline"
@@ -228,9 +228,9 @@ function App() {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         const user = JSON.parse(userStr);
         if (user.role === 'teacher') {
-          await axios.get('http://localhost:8000/teacher/exams');
+          await axios.get(`${getApiUrl()}/teacher/exams`);
         } else if (user.role === 'student') {
-          await axios.get('http://localhost:8000/student/exams');
+          await axios.get(`${getApiUrl()}/student/exams`);
         }
         setCurrentUser(user);
         setIsLoggedIn(true);
@@ -255,7 +255,7 @@ function App() {
   // 认证相关函数
   const handleLogin = async (values) => {
     try {
-      const res = await axios.post('http://localhost:8000/login', {
+      const res = await axios.post(`${getApiUrl()}/login`, {
         username: values.username,
         password: values.password,
       });
@@ -275,7 +275,7 @@ function App() {
 
   const handleRegister = async (values) => {
     try {
-      const res = await axios.post('http://localhost:8000/register', {
+      const res = await axios.post(`${getApiUrl()}/register`, {
         username: values.username,
         password: values.password,
         role: values.role,
@@ -305,7 +305,7 @@ function App() {
   const fetchKnowledgeFiles = async () => {
     setFileLoading(true);
     try {
-      const response = await axios.get('http://localhost:8000/knowledge-files');
+      const response = await axios.get(`${getApiUrl()}/knowledge-files`);
       setKnowledgeFiles(response.data.files);
     } catch (err) {
       console.error('获取文件列表失败:', err);
@@ -325,7 +325,7 @@ function App() {
     });
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:8000/upload', formData, {
+      const response = await axios.post(`${getApiUrl()}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
@@ -371,7 +371,7 @@ function App() {
 
   const handleDeleteFile = async (filename) => {
     try {
-      await axios.delete(`http://localhost:8000/delete-file/${encodeURIComponent(filename)}`);
+      await axios.delete(`${getApiUrl()}/delete-file/${encodeURIComponent(filename)}`);
       message.success('文件删除成功');
       fetchKnowledgeFiles();
     } catch (err) {
@@ -395,13 +395,13 @@ function App() {
 
   const fetchQaHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/qa-history');
+      const res = await axios.get(`${getApiUrl()}/qa-history`);
       setQaHistory(res.data);
     } catch {}
   };
   const fetchTeachingPlanHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/teaching-plan-history');
+      const res = await axios.get(`${getApiUrl()}/teaching-plan-history`);
       setTeachingPlanHistory(res.data);
       console.log('teachingPlanHistory', res.data);
     } catch (e) {
@@ -410,7 +410,7 @@ function App() {
   };
   const fetchExamHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/exam-history');
+      const res = await axios.get(`${getApiUrl()}/exam-history`);
       setExamHistory(res.data);
     } catch {}
   };
@@ -423,7 +423,7 @@ function App() {
       return;
     }
     try {
-      await axios.delete(`http://localhost:8000/qa-history/${id}`);
+      await axios.delete(`${getApiUrl()}/qa-history/${id}`);
       message.success('删除成功');
       fetchQaHistory();
     } catch (e) {
@@ -433,7 +433,7 @@ function App() {
   };
   const handleDeleteTeachingPlanHistory = async (id) => {
     try {
-      await axios.delete(`http://localhost:8000/teaching-plan-history/${id}`);
+      await axios.delete(`${getApiUrl()}/teaching-plan-history/${id}`);
       message.success('删除成功');
       fetchTeachingPlanHistory();
     } catch (e) {
@@ -443,7 +443,7 @@ function App() {
   const handleDeleteExamHistory = async (id) => {
     console.log('delete exam history id:', id);
     try {
-      await axios.delete(`http://localhost:8000/exam-history/${id}`);
+      await axios.delete(`${getApiUrl()}/exam-history/${id}`);
       message.success('删除成功');
       fetchExamHistory();
     } catch (e) {
@@ -462,14 +462,14 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('question', question);
-      const res = await axios.post('http://localhost:8000/qa', formData);
+      const res = await axios.post(`${getApiUrl()}/qa`, formData);
       setAnswer(res.data.answer);
       setQaSources(res.data.sources || []);
       // 存入localStorage
       localStorage.setItem('qa_answer', res.data.answer);
       localStorage.setItem('qa_sources', JSON.stringify(res.data.sources || []));
       // 保存历史到后端
-      await axios.post('http://localhost:8000/qa-history', new URLSearchParams({ question, answer: res.data.answer }));
+      await axios.post(`${getApiUrl()}/qa-history`, new URLSearchParams({ question, answer: res.data.answer }));
       fetchQaHistory();
     } catch (err) {
       console.error('问答失败:', err);
@@ -480,6 +480,14 @@ function App() {
       }
     }
     setQaLoading(false);
+  };
+  const fetchQaHistorySources = async (id) => {
+    try {
+      const res = await axios.get(`${getApiUrl()}/qa-history/${id}/sources`);
+      setQaSources(res.data.sources || []);
+    } catch {
+      setQaSources([]);
+    }
   };
 
   // 修改教学内容设计
@@ -492,18 +500,18 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('course_outline', courseOutline);
-      const response = await axios.post('http://localhost:8000/design-teaching-plan', formData, {
+      const response = await axios.post(`${getApiUrl()}/design-teaching-plan`, formData, {
         timeout: 120000,
       });
       setTeachingPlan(response.data.plan); // 只显示知识框架
       let schedule = response.data.lesson_schedule || '';
       schedule = schedule.trim();
       if (schedule.startsWith('```')) {
-        schedule = schedule.replace(/```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
+        schedule = schedule.replace(/```[a-zA-Z]*\\n?/g, '').replace(/```$/g, '').trim();
       }
       setLessonSchedule(schedule); // 新增：保存学时安排表
       // 保存历史到后端
-      await axios.post('http://localhost:8000/teaching-plan-history', new URLSearchParams({
+      await axios.post(`${getApiUrl()}/teaching-plan-history`, new URLSearchParams({
         outline: courseOutline,
         plan: response.data.plan,
         lesson_schedule: schedule // 新增
@@ -532,14 +540,14 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('outline', teachingPlan);
-      const detailRes = await axios.post('http://localhost:8000/generate-teaching-detail', formData, { timeout: 180000 });
+      const detailRes = await axios.post(`${getApiUrl()}/generate-teaching-detail`, formData, { timeout: 180000 });
       setPptDetailContent(detailRes.data.detail); // 不显示，仅用于PPT
 
       setPptStep('正在生成PPT...');
       // 传给PPT agent
       const pptForm = new FormData();
       pptForm.append('outline', detailRes.data.detail);
-      await axios.post('http://localhost:8000/teacher/generate-ppt-from-outline', pptForm);
+      await axios.post(`${getApiUrl()}/teacher/generate-ppt-from-outline`, pptForm);
       message.success('PPT生成成功，已加入历史列表');
       // 生成后刷新PPT历史
       if (typeof fetchPptHistory === 'function') fetchPptHistory();
@@ -563,13 +571,13 @@ function App() {
       formData.append('course_outline', examOutline);
       formData.append('question_config', JSON.stringify(questionConfig));
       formData.append('difficulty', difficulty); // 添加难度参数
-      const response = await axios.post('http://localhost:8000/generate-exam', formData, {
+      const response = await axios.post(`${getApiUrl()}/generate-exam`, formData, {
         timeout: 180000,
       });
       setExamContent(response.data.exam_content);
       setSelectedQuestions([]); // 清空勾选
       // 保存历史到后端
-      await axios.post('http://localhost:8000/exam-history', new URLSearchParams({ outline: examOutline, exam_content: JSON.stringify(response.data.exam_content) }));
+      await axios.post(`${getApiUrl()}/exam-history`, new URLSearchParams({ outline: examOutline, exam_content: JSON.stringify(response.data.exam_content) }));
       fetchExamHistory();
       message.success('考核内容生成完成');
     } catch (err) {
@@ -591,7 +599,7 @@ function App() {
   // 考试管理函数（教师端）
   const fetchTeacherExams = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/teacher/exams');
+      const response = await axios.get(`${getApiUrl()}/teacher/exams`);
       setExams(response.data.exams);
     } catch (err) {
       console.error('获取考试列表失败:', err);
@@ -614,7 +622,7 @@ function App() {
       formData.append('description', values.description);
       formData.append('duration', values.duration);
       formData.append('questions_data', JSON.stringify(selected));
-      await axios.post('http://localhost:8000/create-exam', formData);
+      await axios.post(`${getApiUrl()}/create-exam`, formData);
       message.success('考试创建成功');
       setExamModalVisible(false);
       examForm.resetFields();
@@ -628,7 +636,7 @@ function App() {
   // 学生考试函数
   const fetchStudentExams = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/student/exams');
+      const response = await axios.get(`${getApiUrl()}/student/exams`);
       setStudentExams(response.data.exams);
     } catch (err) {
       console.error('获取考试列表失败:', err);
@@ -637,7 +645,7 @@ function App() {
 
   const startExam = async (examId) => {
     try {
-      const response = await axios.get(`http://localhost:8000/student/exam/${examId}`);
+      const response = await axios.get(`${getApiUrl()}/student/exam/${examId}`);
       setCurrentExam(response.data);
       setExamInProgress(true);
       setExamTimer(response.data.exam.duration * 60); // 转换为秒
@@ -662,7 +670,7 @@ function App() {
       const formData = new FormData();
       formData.append('exam_id', currentExam.exam.id);
       formData.append('answers_data', JSON.stringify(examAnswers));
-      const response = await axios.post('http://localhost:8000/student/submit-exam', formData);
+      const response = await axios.post(`${getApiUrl()}/student/submit-exam`, formData);
       message.success(`考试提交成功！得分：${response.data.score}`);
       setExamStep('done');
       setExamInProgress(false);
@@ -676,7 +684,7 @@ function App() {
       window.dispatchEvent(new Event('updateStudentAnalysis'));
       setTimeout(async () => {
         try {
-          const analysisRes = await axios.get(`http://localhost:8000/student/latest-analysis/${currentExam.exam.id}`);
+          const analysisRes = await axios.get(`${getApiUrl()}/student/latest-analysis/${currentExam.exam.id}`);
           const studentAnalysisComponent = document.querySelector('[data-testid="student-analysis"]');
           if (studentAnalysisComponent) {
             window.dispatchEvent(new CustomEvent('updateLatestAnalysis', { detail: analysisRes.data }));
@@ -708,7 +716,7 @@ function App() {
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const response = await axios.get(`http://localhost:8000/student/exam-result/${examId}`);
+        const response = await axios.get(`${getApiUrl()}/student/exam-result/${examId}`);
         if (response.data.ai_summary && response.data.ai_summary.trim()) {
           message.success('AI薄弱点分析完成！');
           return;
@@ -889,7 +897,7 @@ function App() {
                             checkedChildren="可下载"
                             unCheckedChildren="不可下载"
                             onChange={checked => {
-                              axios.post('http://localhost:8000/set-student-download', new URLSearchParams({
+                              axios.post(`${getApiUrl()}/set-student-download`, new URLSearchParams({
                                 filename: file.filename,
                                 can_download: checked
                               })).then(() => {
@@ -987,38 +995,43 @@ function App() {
                             </span>
                           )}
                         </div>
-                        <div style={{ borderLeft: '4px solid #e6eaf1', paddingLeft: 16, fontSize: 14, color: '#444', lineHeight: 1.6 }}>
-                          <span style={{ color: '#bbb', fontSize: 13, marginRight: 8 }}>&ldquo;</span>
-                          {src.content || src.text || src.chunk || src}
-                          <span style={{ color: '#bbb', fontSize: 13, marginLeft: 8 }}>&rdquo;</span>
-                        </div>
+                        <div>{src.content}</div>
                       </List.Item>
                     );
                   }}
                 />
               </div>
             )}
-            <Modal
-              open={fileModalVisible}
-              title="可下载资料"
-              onCancel={() => setFileModalVisible(false)}
-              footer={null}
-            >
-              <List
-                dataSource={knowledgeFiles.filter(f => f.student_can_download)}
-                renderItem={file => (
-                  <List.Item>
-                    <span>{file.filename}</span>
-                    <span style={{ color: '#bbb', marginLeft: 12 }}>{file.upload_time}</span>
-                    <Button
-                      style={{ marginLeft: 16 }}
-                      onClick={() => handleDownload(file.filename)}
-                      type="link"
-                    >下载</Button>
-                  </List.Item>
-                )}
-              />
-            </Modal>
+            {/* 教师端新增：问答历史记录 */}
+            <div style={{ marginTop: 40, maxWidth: 1200, margin: '0 auto' }}>
+              <Card title="问答历史记录">
+                <List
+                  dataSource={qaHistory}
+                  locale={{ emptyText: '暂无历史记录' }}
+                  renderItem={item => (
+                    <List.Item
+                      style={{ alignItems: 'flex-start', cursor: 'pointer' }}
+                      actions={[
+                        <Popconfirm title="确定删除该条记录吗？" onConfirm={() => handleDeleteQaHistory(item.id)} okText="删除" cancelText="取消">
+                          <Button type="link" icon={<DeleteOutlined />} danger size="small">删除</Button>
+                        </Popconfirm>
+                      ]}
+                      onClick={e => {
+                        if (e.target.closest('button')) return;
+                        setQuestion(item.question);
+                        setAnswer(item.answer);
+                        fetchQaHistorySources(item.id);
+                      }}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div>{item.question}</div>
+                        <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{item.time}</div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            </div>
           </Card>
         );
       case 'teaching':
@@ -1265,8 +1278,7 @@ function App() {
           borderRadius: '0 0 18px 18px',
           boxShadow: '0 2px 8px #e6eaf1',
         }}>
-          <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-          <span style={{ color: '#fff' }}>智能教学助手</span>
+          <span style={{ color: '#fff', fontWeight: 800, fontSize: 24, letterSpacing: 2 }}>智能教学助手</span>
         </div>
         <Menu
           mode="inline"
@@ -1364,8 +1376,7 @@ function App() {
               renderItem={item => (
                 <List.Item style={{ alignItems: 'flex-start' }}>
                   <div style={{ width: '100%' }}>
-                    <div><Text strong>Q：</Text>{item.question}</div>
-                    <div style={{ margin: '8px 0 0 0', color: '#1677ff' }}><Text strong>A：</Text>{item.answer}</div>
+                    <div>{item.question}</div>
                     <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{item.time}</div>
                   </div>
                 </List.Item>
@@ -1887,11 +1898,11 @@ function App() {
   const fetchGradingList = async () => {
     setGradingLoading(true);
     try {
-      const examsRes = await axios.get('http://localhost:8000/teacher/exams');
+      const examsRes = await axios.get(`${getApiUrl()}/teacher/exams`);
       const exams = examsRes.data.exams || [];
       let questionMap = {};
       for (const exam of exams) {
-        const ansRes = await axios.get(`http://localhost:8000/teacher/exam/${exam.id}/answers`);
+        const ansRes = await axios.get(`${getApiUrl()}/teacher/exam/${exam.id}/answers`);
         const students = ansRes.data.students || [];
         for (const stu of students) {
           for (const ans of stu.answers) {
@@ -1933,7 +1944,7 @@ function App() {
 
   const handleGrade = async (record, score, comment) => {
     try {
-      await axios.post('http://localhost:8000/teacher/grade-answer', new URLSearchParams({
+      await axios.post(`${getApiUrl()}/teacher/grade-answer`, new URLSearchParams({
         student_exam_id: record.studentExamId,
         question_id: record.questionId,
         points_earned: score,
@@ -1970,7 +1981,7 @@ function App() {
   // 批改弹窗提交
   const handleModalGrade = async (studentExamId, questionId, score, comment) => {
     try {
-      await axios.post('http://localhost:8000/teacher/grade-answer', new URLSearchParams({
+      await axios.post(`${getApiUrl()}/teacher/grade-answer`, new URLSearchParams({
         student_exam_id: studentExamId,
         question_id: questionId,
         points_earned: score,
@@ -1988,7 +1999,7 @@ function App() {
   const handleGeneratePPTFromUpload = async ({ file }) => {
     const formData = new FormData();
     formData.append('document', file);
-    await axios.post('http://localhost:8000/teacher/generate-ppt-from-upload', formData);
+    await axios.post(`${getApiUrl()}/teacher/generate-ppt-from-upload`, formData);
     message.success('PPT生成成功，已加入历史列表');
     if (typeof fetchPptHistory === 'function') fetchPptHistory();
   };
@@ -1996,7 +2007,7 @@ function App() {
   // 在App组件内添加删除考试函数
   const handleDeleteExam = async (id) => {
     try {
-      await axios.delete(`http://localhost:8000/exam/${id}`);
+      await axios.delete(`${getApiUrl()}/exam/${id}`);
       message.success('考试删除成功');
       fetchTeacherExams(); // 重新拉取考试列表
     } catch (e) {
@@ -2224,7 +2235,7 @@ function App() {
 
     const fetchStudentAnalysis = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/student/analysis');
+        const res = await axios.get(`${getApiUrl()}/student/analysis`);
         setAccuracyData(res.data.accuracy_curve || []);
         setKeywordAccuracy(res.data.keyword_accuracy || []);
       } catch (error) {
@@ -2234,7 +2245,7 @@ function App() {
 
     useEffect(() => {
       fetchStudentAnalysis();
-      axios.get('http://localhost:8000/student/keyword-accuracy').then(res => {
+      axios.get(`${getApiUrl()}/student/keyword-accuracy`).then(res => {
         setKeywordAccuracy(res.data.keyword_accuracy || []);
       });
       // 新增：监听 updateStudentAnalysis 事件
@@ -2276,11 +2287,11 @@ function App() {
           const examId = d.exam_id;
           setTooltipExamId(examId); // 触发 useEffect
           setHoveredExamId(examId); // 新增：记录悬停考试id
-          let content = `<div><div>考试：${d.exam_title || '-'}<\/div><div>总正确率：${d.accuracy != null ? d.accuracy + '%' : '-'}<\/div><div>知识点正确率：<\/div>`;
+          let content = `<div><div>考试：${d.exam_title || '-'}</div><div>总正确率：${d.accuracy != null ? d.accuracy + '%' : '-'}</div><div>知识点正确率：</div>`;
           const keywordData = examKeywordAccuracy[examId];
           if (!keywordData) {
             // 触发异步请求
-            axios.get(`http://localhost:8000/student/exam-keyword-accuracy/${examId}`)
+            axios.get(`${getApiUrl()}/student/exam-keyword-accuracy/${examId}`)
               .then(res => {
                 setExamKeywordAccuracy(prev => ({ ...prev, [examId]: res.data }));
               })
@@ -2495,11 +2506,11 @@ function App() {
     const [practiceHistory, setPracticeHistory] = useState([]); // 新增：巩固练习历史
 
     useEffect(() => {
-      axios.get('http://localhost:8000/student/wrongbook/keywords').then(res => {
+      axios.get(`${getApiUrl()}/student/wrongbook/keywords`).then(res => {
         setKeywords(res.data || []);
       });
       // 拉取知识点正确率
-      axios.get('http://localhost:8000/student/keyword-accuracy').then(res => {
+      axios.get(`${getApiUrl()}/student/keyword-accuracy`).then(res => {
         const map = {};
         (res.data.keyword_accuracy || []).forEach(item => {
           map[item.keyword] = item.accuracy;
@@ -2511,11 +2522,11 @@ function App() {
     useEffect(() => {
       if (selectedKeyword) {
         setLoading(true);
-        axios.get('http://localhost:8000/student/wrongbook/questions', { params: { keyword: selectedKeyword } })
+        axios.get(`${getApiUrl()}/student/wrongbook/questions`, { params: { keyword: selectedKeyword } })
           .then(res => setQuestions(res.data || []))
           .finally(() => setLoading(false));
         // 新增：拉取巩固练习历史
-        axios.get('http://localhost:8000/student/practice-records', { params: { keyword: selectedKeyword } })
+        axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } })
           .then(res => setPracticeHistory(res.data || []));
       }
     }, [selectedKeyword]);
@@ -2558,7 +2569,7 @@ function App() {
       if (!activeQuestion) return;
       setLoading(true);
       try {
-        const res = await axios.post('http://localhost:8000/student/wrongbook/submit',
+        const res = await axios.post(`${getApiUrl()}/student/wrongbook/submit`,
           new URLSearchParams({ wrong_id: activeQuestion.id, answer })
         );
         setResult(res.data);
@@ -2576,7 +2587,7 @@ function App() {
       setPracticeResult(null);
       setPracticeAnswers({});
       try {
-        const res = await axios.post('http://localhost:8000/student/generate-practice',
+        const res = await axios.post(`${getApiUrl()}/student/generate-practice`,
           new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
         );
         setPracticeQuestions(res.data.questions || []);
@@ -2596,19 +2607,19 @@ function App() {
           knowledge_points: q.knowledge_points,
           options: q.options // 关键：加上这一行
         }));
-        const res = await axios.post('http://localhost:8000/student/submit-practice',
+        const res = await axios.post(`${getApiUrl()}/student/submit-practice`,
           new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
         );
         setPracticeResult(res.data);
         // 新增：提交后刷新正确率
-        const accRes = await axios.get('http://localhost:8000/student/keyword-accuracy');
+        const accRes = await axios.get(`${getApiUrl()}/student/keyword-accuracy`);
         const map = {};
         (accRes.data.keyword_accuracy || []).forEach(item => {
           map[item.keyword] = item.accuracy;
         });
         setAccuracyMap(map);
         // 新增：刷新巩固练习历史
-        const historyRes = await axios.get('http://localhost:8000/student/practice-records', { params: { keyword: selectedKeyword } });
+        const historyRes = await axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } });
         setPracticeHistory(historyRes.data || []);
       } catch (e) {
         message.error('提交失败');
@@ -2857,7 +2868,7 @@ function App() {
   const handleDownload = async (filename) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8000/download/${filename}`, {
+      const response = await axios.get(`${getApiUrl()}/download/${filename}`, {
         responseType: 'blob',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -2886,36 +2897,61 @@ function App() {
   // 未登录时只渲染登录/注册界面和欢迎页
   if (!currentUser) {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title level={3} style={{ color: 'white', margin: 0 }}>
-            <BookOutlined /> 智能教学助手
+      <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 100%)' }}>
+        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', boxShadow: 'none', height: 100 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              background: 'conic-gradient(from 90deg at 50% 50%, #1677ff 0%, #49c7f7 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 24px #b6d0ff44',
+            }}>
+              <BulbOutlined style={{ fontSize: 36, color: '#fff' }} />
+            </div>
+            <Title level={1} style={{ color: '#1677ff', margin: 0, letterSpacing: 4, fontWeight: 900, fontSize: 44, textShadow: '0 2px 12px #b6d0ff44' }}>
+              溯知
           </Title>
-          <Space>
-            <Button type="primary" icon={<LoginOutlined />} onClick={() => setLoginVisible(true)}>
+          </div>
+        </Header>
+        <Content style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 600 }}>
+          <Card style={{ maxWidth: 980, margin: '16px auto', borderRadius: 28, boxShadow: '0 8px 32px #b6d0ff44', padding: 44, background: '#fff', textAlign: 'center' }}>
+            <Title level={3} style={{ color: '#222', fontWeight: 800, marginBottom: 12, fontSize: 32 }}>欢迎使用溯知</Title>
+            <Text style={{ fontSize: 20, color: '#666', marginBottom: 32, display: 'block', fontWeight: 500 }}>
+              一站式AI驱动的教学与学习助手
+            </Text>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 40, margin: '36px 0 28px 0', textAlign: 'left' }}>
+              <div style={{ flex: 1, background: '#f6faff', borderRadius: 18, padding: 32, boxShadow: '0 2px 8px #e6f4ff44', minHeight: 220 }}>
+                <b style={{ color: '#1677ff', fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><FormOutlined /> 教师端</b>
+                <ul style={{ margin: '18px 0 0 28px', padding: 0, color: '#555', fontSize: 16, lineHeight: 2 }}>
+                  <li><DatabaseOutlined style={{ color: '#1677ff', marginRight: 6 }} /> 知识库管理与智能检索</li>
+                  <li><FileTextOutlined style={{ color: '#1677ff', marginRight: 6 }} /> 教学设计与课件生成</li>
+                  <li><FormOutlined style={{ color: '#1677ff', marginRight: 6 }} /> 考试系统与自动批改</li>
+                  <li><BarChartOutlined style={{ color: '#1677ff', marginRight: 6 }} /> 学情分析与AI教学建议</li>
+                  <li><CheckCircleOutlined style={{ color: '#1677ff', marginRight: 6 }} /> 错题本与巩固练习管理</li>
+                </ul>
+              </div>
+              <div style={{ flex: 1, background: '#f9f6ff', borderRadius: 18, padding: 32, boxShadow: '0 2px 8px #e6eaff44', minHeight: 220 }}>
+                <b style={{ color: '#a259ec', fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><BookOutlined /> 学生端</b>
+                <ul style={{ margin: '18px 0 0 28px', padding: 0, color: '#555', fontSize: 16, lineHeight: 2 }}>
+                  <li><RobotOutlined style={{ color: '#a259ec', marginRight: 6 }} /> 知识库问答与学习助手</li>
+                  <li><FormOutlined style={{ color: '#a259ec', marginRight: 6 }} /> 在线考试与成绩查询</li>
+                  <li><CheckCircleOutlined style={{ color: '#a259ec', marginRight: 6 }} /> 错题本与巩固练习</li>
+                  <li><BarChartOutlined style={{ color: '#a259ec', marginRight: 6 }} /> 学情分析与个性化建议</li>
+                  <li><DownloadOutlined style={{ color: '#a259ec', marginRight: 6 }} /> 资料下载与自主复习</li>
+                </ul>
+              </div>
+            </div>
+            <Space style={{ marginTop: 40 }}>
+              <Button type="primary" size="large" icon={<LoginOutlined />} style={{ borderRadius: 28, fontWeight: 700, minWidth: 140, fontSize: 18, background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)', boxShadow: '0 2px 12px #b6d0ff44' }} onClick={() => setLoginVisible(true)}>
               登录
             </Button>
-            <Button icon={<UserOutlined />} onClick={() => setRegisterVisible(true)}>
-              注册
-            </Button>
-          </Space>
-        </Header>
-        <Content style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
-          <Result
-            icon={<BookOutlined style={{ color: '#1890ff' }} />}
-            title="欢迎使用智能教学助手"
-            subTitle="登录后可以使用更多功能：知识库管理、教学内容设计、考核内容生成、考试系统等"
-            extra={[
-              <Button type="primary" key="login" icon={<LoginOutlined />} onClick={() => setLoginVisible(true)}>
-                立即登录
-              </Button>,
-              <Button key="register" icon={<UserOutlined />} onClick={() => setRegisterVisible(true)}>
+              <Button size="large" icon={<UserOutlined />} style={{ borderRadius: 28, fontWeight: 700, minWidth: 140, fontSize: 18, background: 'linear-gradient(90deg, #a259ec 0%, #49c7f7 100%)', color: '#fff', boxShadow: '0 2px 12px #e6eaff44', border: 'none' }} onClick={() => setRegisterVisible(true)}>
                 注册账号
               </Button>
-            ]}
-          />
+            </Space>
+          </Card>
+          <Footer style={{ textAlign: 'center', background: 'transparent', color: '#888', fontWeight: 500, letterSpacing: 1, marginTop: 36 }}>溯知 ©2025</Footer>
         </Content>
-        <Footer style={{ textAlign: 'center' }}>智能教学助手 ©2025</Footer>
         {renderLoginModal()}
         {renderRegisterModal()}
       </Layout>
@@ -2944,8 +2980,7 @@ function App() {
             borderRadius: '0 0 18px 18px',
             boxShadow: '0 2px 8px #e6eaf1',
           }}>
-            <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-            <span style={{ color: '#fff' }}>智能教学助手</span>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 24, letterSpacing: 2 }}>智能教学助手</span>
           </div>
           <Menu
             mode="inline"
@@ -3010,7 +3045,7 @@ function ExamResultPage() {
     const fetchResult = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`http://localhost:8000/student/exam-result/${id}`);
+        const res = await axios.get(`${getApiUrl()}/student/exam-result/${id}`);
         setResult(res.data);
         setAiSummary(res.data.ai_summary || '');
       } catch (e) {
@@ -3048,8 +3083,7 @@ function ExamResultPage() {
           borderRadius: '0 0 18px 18px',
           boxShadow: '0 2px 8px #e6eaf1',
         }}>
-          <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
-          <span style={{ color: '#fff' }}>智能教学助手</span>
+          <span style={{ color: '#fff', fontWeight: 800, fontSize: 24, letterSpacing: 2 }}>智能教学助手</span>
         </div>
         <Menu
           mode="inline"
@@ -3201,7 +3235,7 @@ function SocraticAssistant() {
     setLoading(true);
     setAiThinking(true);
     try {
-      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+      const res = await axios.post(`${getApiUrl()}/student/socratic-assistant`, {
         history,
         action: 'next',
         current_knowledge_point: lastKnowledgePoint
@@ -3222,7 +3256,7 @@ function SocraticAssistant() {
     setInput('');
     setAiThinking(true);
     try {
-      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+      const res = await axios.post(`${getApiUrl()}/student/socratic-assistant`, {
         history: [...history, { role: 'student', content: input }],
         action: 'answer',
         answer: input,
@@ -3241,7 +3275,7 @@ function SocraticAssistant() {
     setHistory(h => [...h, { role: 'student', content: '我不会' }]);
     setAiThinking(true);
     try {
-      const res = await axios.post('http://localhost:8000/student/socratic-assistant', {
+      const res = await axios.post(`${getApiUrl()}/student/socratic-assistant`, {
         history: [...history, { role: 'student', content: '我不会' }],
         action: 'explain',
         current_knowledge_point: lastKnowledgePoint
@@ -3363,12 +3397,12 @@ function AdminPPTExport() {
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     setLoading(true);
-    axios.get('http://localhost:8000/admin/ppt-files').then(res => {
+    axios.get(`${getApiUrl()}/admin/ppt-files`).then(res => {
       setFiles(res.data.files || []);
     }).finally(() => setLoading(false));
   }, []);
   const handleDownload = (filename) => {
-    downloadPPT(`http://localhost:8000/admin/ppt-files/download/${filename}`, filename);
+    downloadPPT(`${getApiUrl()}/admin/ppt-files/download/${filename}`, filename);
   };
   return (
     <Card title="教师PPT导出" style={{ maxWidth: 1200, margin: '0 auto', marginTop: 32, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
@@ -3397,7 +3431,7 @@ function AdminActivity() {
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     setLoading(true);
-    axios.get('http://localhost:8000/admin/activity').then(res => {
+    axios.get(`${getApiUrl()}/admin/activity`).then(res => {
       setData(res.data || { teachers: [], students: [] });
     }).finally(() => setLoading(false));
   }, []);
@@ -3459,7 +3493,7 @@ function AdminUserManagement() {
     setLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await axios.get('http://localhost:8000/admin/users', {
+      const res = await axios.get(`${getApiUrl()}/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUsers(res.data || []);
@@ -3475,7 +3509,7 @@ function AdminUserManagement() {
     setResetLoading(true);
     const token = localStorage.getItem('token');
     try {
-      await axios.post('http://localhost:8000/admin/users/reset-password', {
+      await axios.post(`${getApiUrl()}/admin/users/reset-password`, {
         user_id: resetModal.user.id,
         new_password: resetPwd,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -3491,7 +3525,7 @@ function AdminUserManagement() {
   const handleDisable = async (user, disable) => {
     const token = localStorage.getItem('token');
     try {
-      await axios.post('http://localhost:8000/admin/users/disable', {
+      await axios.post(`${getApiUrl()}/admin/users/disable`, {
         user_id: user.id,
         disable,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -3505,7 +3539,7 @@ function AdminUserManagement() {
   const handleDelete = async (user) => {
     const token = localStorage.getItem('token');
     try {
-      await axios.delete(`http://localhost:8000/admin/users/delete/${user.id}`, {
+      await axios.delete(`${getApiUrl()}/admin/users/delete/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       message.success('用户已删除');
@@ -3591,16 +3625,16 @@ function TeacherPPTHistory() {
   window.fetchPptHistory = fetchPptHistory;
   function fetchPptHistory() {
     setLoading(true);
-    axios.get('http://localhost:8000/teacher/ppt-history').then(res => {
+    axios.get(`${getApiUrl()}/teacher/ppt-history`).then(res => {
       setFiles(res.data.files || []);
     }).finally(() => setLoading(false));
   }
   useEffect(() => { fetchPptHistory(); }, []);
   const handleDownload = (filename) => {
-    downloadPPT(`http://localhost:8000/teacher/ppt-history/download/${filename}`, filename);
+    downloadPPT(`${getApiUrl()}/teacher/ppt-history/download/${filename}`, filename);
   };
   const handlePreview = (filename) => {
-    window.open(`http://localhost:8000/teacher/ppt-history/preview/${filename}`);
+    window.open(`${getApiUrl()}/teacher/ppt-history/preview/${filename}`);
   };
   // 让宽度和教学内容栏一致
   return (
@@ -3628,7 +3662,7 @@ function TeacherPPTHistory() {
 const handleDelete = async (filename) => {
   try {
     const token = localStorage.getItem('token');
-    await axios.delete(`http://localhost:8000/teacher/ppt-history/delete/${filename}`, {
+    await axios.delete(`${getApiUrl()}/teacher/ppt-history/delete/${filename}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -3684,4 +3718,3 @@ function formatAnswer(ans) {
   if (typeof ans === 'object' && ans !== null) return JSON.stringify(ans);
   return ans ?? '--';
 }
-

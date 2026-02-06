@@ -70,7 +70,7 @@ def get_activity(db: Session = Depends(get_db)):
             'qa_count': qa_count,
             'last_active': last_active
         })
-    return {"teachers": teacher_stats, "students": student_stats}
+    return {"teachers": teacher_stats, "students": student_stats} 
 
 @router.get("/users")
 def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -94,6 +94,7 @@ class QAHistory(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     question = Column(Text)
     answer = Column(Text)
+    sources = Column(Text, nullable=True)  # JSON array stored as string
     time = Column(DateTime, default=datetime.now)
 
 class TeachingPlanHistory(Base):
@@ -173,8 +174,15 @@ DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'exam_system.db')}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# 创建表
-Base.metadata.create_all(bind=engine)
+# 初始化数据库表（延迟执行，避免重复）
+def init_db():
+    """初始化数据库表"""
+    Base.metadata.create_all(bind=engine)
+
+# 在第一次导入时调用一次
+if not hasattr(Base.metadata, '_init_done'):
+    init_db()
+    Base.metadata._init_done = True
 
 def get_db():
     """获取数据库会话"""

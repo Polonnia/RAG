@@ -1,26 +1,10 @@
-import os
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 import re
-import torch
-from langchain_community.vectorstores.chroma import Chroma
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from openai import OpenAI
 
-DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
+from .resources import get_vector_db
+
 API_KEY = "sk-9fabf0d9e8e84d0994756d5846207c04"
-model_name = "BAAI/bge-large-zh-v1.5"
-model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-encode_kwargs = {"normalize_embeddings": True}
-
-vector_db = Chroma(
-    persist_directory=DB_DIR,
-    embedding_function=HuggingFaceBgeEmbeddings(
-        model_name=model_name,
-        model_kwargs=model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
-)
-
+vector_db = get_vector_db()
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 
 def get_completion(prompt, model="deepseek-chat"):

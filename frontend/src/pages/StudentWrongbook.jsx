@@ -1,0 +1,359 @@
+import React, { useState, useEffect } from 'react';
+import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox } from 'antd';
+import { BookOutlined } from '@ant-design/icons';
+import axios from 'axios';
+import getApiUrl from '../apiConfig';
+import AppLayout from '../components/layout/AppLayout';
+import { message } from 'antd';
+
+const { TextArea } = Input;
+
+export default function StudentWrongbook() {
+  const [keywords, setKeywords] = useState([]);
+  const [accuracyMap, setAccuracyMap] = useState({});
+  const [selectedKeyword, setSelectedKeyword] = useState('');
+  const [questions, setQuestions] = useState([]);
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [answer, setAnswer] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [practiceModal, setPracticeModal] = useState(false);
+  const [practiceCount, setPracticeCount] = useState(5);
+  const [practiceQuestions, setPracticeQuestions] = useState([]);
+  const [practiceAnswers, setPracticeAnswers] = useState({});
+  const [practiceResult, setPracticeResult] = useState(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
+  const [practiceHistory, setPracticeHistory] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${getApiUrl()}/student/wrongbook/keywords`).then(res => {
+      setKeywords(res.data || []);
+    });
+    axios.get(`${getApiUrl()}/student/keyword-accuracy`).then(res => {
+      const map = {};
+      (res.data.keyword_accuracy || []).forEach(item => {
+        map[item.keyword] = item.accuracy;
+      });
+      setAccuracyMap(map);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (selectedKeyword) {
+      setLoading(true);
+      axios.get(`${getApiUrl()}/student/wrongbook/questions`, { params: { keyword: selectedKeyword } })
+        .then(res => setQuestions(res.data || []))
+        .finally(() => setLoading(false));
+      axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } })
+        .then(res => setPracticeHistory(res.data || []));
+    }
+  }, [selectedKeyword]);
+
+  const handleSelectKeyword = (keyword) => {
+    if (selectedKeyword === keyword) {
+      setSelectedKeyword('');
+      setQuestions([]);
+      setPracticeHistory([]);
+    } else {
+      setSelectedKeyword(keyword);
+      setResult(null);
+      setActiveQuestion(null);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!activeQuestion) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${getApiUrl()}/student/wrongbook/submit`,
+        new URLSearchParams({ wrong_id: activeQuestion.id, answer })
+      );
+      setResult(res.data);
+    } catch (e) {
+      message.error('提交失败');
+    }
+    setLoading(false);
+  };
+
+  const handleGeneratePractice = async () => {
+    if (!selectedKeyword) return;
+    setPracticeLoading(true);
+    setPracticeQuestions([]);
+    setPracticeResult(null);
+    setPracticeAnswers({});
+    try {
+      const res = await axios.post(`${getApiUrl()}/student/generate-practice`,
+        new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
+      );
+      setPracticeQuestions(res.data.questions || []);
+    } catch (e) {
+      message.error('生成习题失败');
+    }
+    setPracticeLoading(false);
+  };
+
+  const handleSubmitPractice = async () => {
+    setPracticeLoading(true);
+    try {
+      const answers = practiceQuestions.map((q, idx) => ({
+        question: q.question,
+        answer: practiceAnswers[idx] || '',
+        correct_answer: q.correct_answer,
+        explanation: q.explanation,
+        knowledge_points: q.knowledge_points,
+        options: q.options
+      }));
+      const res = await axios.post(`${getApiUrl()}/student/submit-practice`,
+        new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
+      );
+      setPracticeResult(res.data);
+      const accRes = await axios.get(`${getApiUrl()}/student/keyword-accuracy`);
+      const map = {};
+      (accRes.data.keyword_accuracy || []).forEach(item => {
+        map[item.keyword] = item.accuracy;
+      });
+      setAccuracyMap(map);
+      const historyRes = await axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } });
+      setPracticeHistory(historyRes.data || []);
+    } catch (e) {
+      message.error('提交失败');
+    }
+    setPracticeLoading(false);
+  };
+
+  const practiceProgress = practiceQuestions.length > 0 ? Math.round(Object.keys(practiceAnswers).length / practiceQuestions.length * 100) : 0;
+
+  return (
+    <AppLayout>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />错题本</span>} 
+            style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', marginBottom: 24 }}>
+        <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+          <b style={{ marginRight: 12 }}>知识点标签：</b>
+          {keywords.length === 0 ? <Empty description="暂无错题" /> :
+            keywords.map(k => (
+              <Tag.CheckableTag
+                key={k.keyword}
+                checked={selectedKeyword === k.keyword}
+                onChange={() => handleSelectKeyword(k.keyword)}
+                style={{
+                  fontSize: 16,
+                  margin: 6,
+                  background: selectedKeyword === k.keyword ? '#e6f7ff' : '#f5f5f5',
+                  border: selectedKeyword === k.keyword ? '1.5px solid #1890ff' : '1px solid #eee',
+                  color: accuracyMap[k.keyword] < 60 ? '#f5222d' : accuracyMap[k.keyword] < 80 ? '#faad14' : '#52c41a',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                  boxShadow: selectedKeyword === k.keyword ? '0 2px 8px #bae7ff' : 'none'
+                }}
+                title={`正确率：${accuracyMap[k.keyword] !== undefined ? accuracyMap[k.keyword] + '%' : '--'}`}
+              >
+                {k.keyword}
+                <span style={{ color: '#bbb', fontSize: 12, marginLeft: 4 }}>正确率：{accuracyMap[k.keyword] !== undefined ? accuracyMap[k.keyword] + '%' : '--'}</span>
+              </Tag.CheckableTag>
+            ))}
+        </div>
+
+        {selectedKeyword && (
+          <div>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+              <span style={{ color: '#888', marginRight: 16 }}>
+                正确率：{accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] + '%' : '--'}
+              </span>
+              <Button size="small" type="primary" ghost onClick={() => setPracticeModal(true)} style={{ borderRadius: 16, fontWeight: 600 }}>
+                巩固练习
+              </Button>
+            </div>
+            <b style={{ fontSize: 18 }}>错题列表{selectedKeyword ? `（${selectedKeyword}）` : ''}：</b>
+            {loading ? <Spin style={{ marginLeft: 16 }} /> : (
+              <List
+                dataSource={questions}
+                locale={{ emptyText: <Empty description="该知识点暂无错题" /> }}
+                renderItem={q => (
+                  <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ width: '100%' }}>
+                      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{q.question}</div>
+                      {q.options && Object.keys(q.options).length > 0 && (
+                        <div style={{ margin: '8px 0' }}>
+                          {Object.entries(q.options).map(([k, v]) => (
+                            <div key={k}>{k}. {v}</div>
+                          ))}
+                        </div>
+                      )}
+                      <Button type="primary" ghost onClick={() => {
+                        setActiveQuestion(q);
+                        setAnswer('');
+                        setResult(null);
+                      }} style={{ marginTop: 8, borderRadius: 12, fontWeight: 600 }}>重做</Button>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            )}
+
+            <div style={{ marginTop: 32 }}>
+              <b style={{ fontSize: 16 }}>巩固练习历史：</b>
+              {practiceHistory.length === 0 ? (
+                <div style={{ color: '#aaa', margin: '12px 0' }}><Empty description="暂无巩固练习记录" /></div>
+              ) : (
+                <List
+                  dataSource={practiceHistory}
+                  renderItem={h => (
+                    <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{h.question}</div>
+                        {h.options && Object.keys(h.options).length > 0 && (
+                          <div style={{ margin: '8px 0' }}>
+                            {Object.entries(h.options).map(([k, v]) => (
+                              <div key={k}>{k}. {v}</div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ margin: '8px 0' }}>你的答案：{h.student_answer}</div>
+                        <div style={{ margin: '8px 0' }}>正确答案：{h.correct_answer}</div>
+                        <div style={{ margin: '8px 0' }}>解析：{h.explanation}</div>
+                        <div style={{ color: '#888', fontSize: 12 }}>{h.time}</div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        <Modal
+          open={!!activeQuestion}
+          onCancel={() => { setActiveQuestion(null); setResult(null); setAnswer(''); }}
+          footer={null}
+          title={<span style={{ fontWeight: 700, fontSize: 20 }}>错题重做</span>}
+          bodyStyle={{ padding: 24 }}
+        >
+          {activeQuestion && (
+            <div>
+              <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 16 }}>{activeQuestion.question}</div>
+              {activeQuestion.options && Object.keys(activeQuestion.options).length > 0 ? (
+                <Radio.Group
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Space direction="vertical">
+                    {Object.entries(activeQuestion.options).map(([k, v]) => (
+                      <Radio key={k} value={k}>{k}. {v}</Radio>
+                    ))}
+                  </Space>
+                </Radio.Group>
+              ) : (
+                <Input
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="请输入答案"
+                  style={{ width: '100%', marginBottom: 16, fontSize: 16, padding: 8, borderRadius: 8 }}
+                />
+              )}
+              <Button type="primary" onClick={handleSubmit} loading={loading} style={{ marginTop: 8, width: '100%', borderRadius: 12, fontWeight: 600 }}>
+                提交
+              </Button>
+              {result && (
+                <Result
+                  status={result.is_correct ? 'success' : 'error'}
+                  title={result.is_correct ? '回答正确' : '回答错误'}
+                  subTitle={
+                    <div style={{ marginTop: 8 }}>
+                      <div>你的答案：<span style={{ color: result.is_correct ? '#52c41a' : '#d4380d' }}>{result.your_answer}</span></div>
+                      <div>正确答案：<span style={{ color: '#52c41a' }}>{result.correct_answer}</span></div>
+                      <div>解析：{result.explanation}</div>
+                    </div>
+                  }
+                />
+              )}
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          open={practiceModal}
+          onCancel={() => { setPracticeModal(false); setPracticeQuestions([]); setPracticeResult(null); setPracticeAnswers({}); }}
+          footer={null}
+          title={<span style={{ fontWeight: 700, fontSize: 20 }}>巩固练习 - {selectedKeyword}</span>}
+          bodyStyle={{ padding: 24 }}
+          width={700}
+        >
+          <div style={{ marginBottom: 16 }}>
+            <Button
+              type="primary"
+              onClick={handleGeneratePractice}
+              loading={practiceLoading}
+              disabled={practiceLoading || !selectedKeyword}
+              style={{ marginRight: 16 }}
+            >
+              生成巩固练习
+            </Button>
+            <span style={{ color: '#888' }}>共 {practiceQuestions.length} 题</span>
+            <Progress percent={practiceProgress} size="small" style={{ width: 200, display: 'inline-block', marginLeft: 16 }} />
+          </div>
+          {practiceQuestions.length === 0 ? (
+            <Empty description="暂无巩固练习题目" />
+          ) : (
+            <List
+              dataSource={practiceQuestions}
+              renderItem={(q, idx) => (
+                <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                  <div style={{ width: '100%' }}>
+                    <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>题目{idx + 1}：{q.question}</div>
+                    {q.options && Object.keys(q.options).length > 0 ? (
+                      <Radio.Group
+                        value={practiceAnswers[idx]}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Space direction="vertical">
+                          {Object.entries(q.options).map(([k, v]) => (
+                            <Radio key={k} value={k}>{k}. {v}</Radio>
+                          ))}
+                        </Space>
+                      </Radio.Group>
+                    ) : (
+                      <Input
+                        value={practiceAnswers[idx] || ''}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        placeholder="请输入答案"
+                        style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                      />
+                    )}
+                  </div>
+                </List.Item>
+              )}
+            />
+          )}
+          {practiceQuestions.length > 0 && !practiceResult && (
+            <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 600 }}>
+              提交练习
+            </Button>
+          )}
+          {practiceResult && (
+            <Card title={<span>练习得分：<span style={{ color: '#52c41a' }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12 }}>
+              <List
+                dataSource={practiceResult.results}
+                renderItem={(r, idx) => (
+                  <List.Item>
+                    <div style={{ width: '100%' }}>
+                      <div><b>题目{idx + 1}：</b>{r.question}</div>
+                      <div>你的答案：<span style={{ color: r.is_correct ? '#52c41a' : '#d4380d' }}>{r.answer}</span></div>
+                      <div>正确答案：<span style={{ color: '#52c41a' }}>{r.correct_answer}</span></div>
+                      <div>解析：{r.explanation}</div>
+                      <div>知识点：{Array.isArray(r.knowledge_points) ? r.knowledge_points.join('，') : r.knowledge_points}</div>
+                      <div>判定：{r.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}</div>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          )}
+        </Modal>
+      </Card>
+      </div>
+    </AppLayout>
+  );
+}

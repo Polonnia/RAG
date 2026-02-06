@@ -1,16 +1,15 @@
 import os
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-import torch
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_community.vectorstores.chroma import Chroma
 from datetime import datetime
-from langchain.schema import Document
 from typing import List
 
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+
+from .resources import get_vector_db
+
 # 导入OCR处理器
-from .ocr_processor import ocr_processor
+from .ocr_processor import get_ocr_processor
 
 # 尝试导入更多PDF解析器
 try:
@@ -48,19 +47,7 @@ except ImportError:
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
-
-model_name = "BAAI/bge-large-zh-v1.5"
-model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-encode_kwargs = {"normalize_embeddings": True}
-# 初始化向量数据库
-vector_db = Chroma(
-    persist_directory=DB_DIR,
-    embedding_function=HuggingFaceBgeEmbeddings(
-        model_name=model_name,
-        model_kwargs=model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
-)
+vector_db = get_vector_db()
 
 def is_scanned_pdf(file_path: str) -> bool:
     """检测是否为扫描版PDF"""
@@ -183,7 +170,7 @@ def process_scanned_pdf(file_path: str) -> List[Document]:
         print("检测到扫描版PDF，开始OCR处理...")
         
         # 使用OCR处理PDF
-        ocr_results = ocr_processor.ocr_pdf(file_path)
+        ocr_results = get_ocr_processor().ocr_pdf(file_path)
         
         if not ocr_results:
             print("OCR处理失败，无法提取文本")
@@ -554,9 +541,13 @@ def ingest_file(file_path):
         print(f"处理了 {len(valid_docs)} 个文档片段")
         
         print("准备入库...")
-        # 入库
-        vector_db.add_documents(valid_docs)
-        print("入库完成")
+        # 入库（加进度打印）
+        total = len(valid_docs)
+        for i, doc in enumerate(valid_docs):
+            vector_db.add_documents([doc])
+            if (i+1) % 10 == 0 or (i+1) == total:
+                print(f"已入库 {i+1}/{total} 个片段")
+        print("全部片段入库完成")
         
     except Exception as e:
         import traceback
