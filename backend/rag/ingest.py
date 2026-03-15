@@ -1,15 +1,25 @@
 import os
+import sys
 from datetime import datetime
 from typing import List
-
+from pathlib import Path
+from typing import List, Dict, Any
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 
-from .resources import get_vector_db
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)  # backend目录
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 现在可以统一使用绝对导入
+from rag.resources import get_vector_db
+from rag.utils.video2audio import AudioConverter
 
 # 导入OCR处理器
-from .ocr_processor import get_ocr_processor
+# from .ocr_processor import get_ocr_processor
 
 # 尝试导入更多PDF解析器
 try:
@@ -44,43 +54,138 @@ try:
 except ImportError:
     HAS_PYTHON_DOCX = False
     print("python-docx未安装，无法解析旧版.doc文件")
+    
+from funasr import AutoModel
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
 vector_db = get_vector_db()
 
-def is_scanned_pdf(file_path: str) -> bool:
-    """检测是否为扫描版PDF"""
+# 全局ASR模型（单例）
+_asr_model = None
+
+SUPPORTED_VIDEO = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv'}
+SUPPORTED_AUDIO = {'.mp3', '.wav', '.m4a', '.aac', '.ogg'}
+
+def get_asr_model():
+    """获取ASR模型单例"""
+    global _asr_model
+    if _asr_model is None:
+        print("加载语音识别模型...")
+        _asr_model = AutoModel(
+            model="paraformer-zh",
+            vad_model="fsmn-vad",
+            punc_model="ct-punc",
+            # 长音频处理参数
+            vad_kwargs={"max_single_segment_time": 30000},  # 30秒切片
+            device="cpu"  # 或"cuda:0，注意pytorch要安装cuda版本"
+        )
+    return _asr_model
+
+def is_media_file(file_path: str) -> str:
+    """检查文件类型，返回 'video', 'audio' 或 None"""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in SUPPORTED_VIDEO:
+        return 'video'
+    if ext in SUPPORTED_AUDIO:
+        return 'audio'
+    return None
+
+def process_media_file(file_path: str) -> List[Dict[str, Any]]:
+    """
+    统一的媒体文件处理函数（视频和音频）
+    """
+    media_type = is_media_file(file_path)
+    if not media_type:
+        return []
+    
     try:
-        import fitz  # PyMuPDF
+        print(f"处理{media_type}文件: {os.path.basename(file_path)}")
         
-        doc = fitz.open(file_path)
-        scanned_pages = 0
-        total_pages = len(doc)
-        
-        for page_num in range(min(total_pages, 3)):  # 检查前3页
-            page = doc.load_page(page_num)
+        # 音频预处理
+        audio_path = file_path
+        if media_type == 'audio':
+            from pydub import AudioSegment
+            import tempfile
             
-            # 尝试提取文本
-            text = page.get_text()
-            
-            # 如果文本很少或为空，可能是扫描版
-            if len(text.strip()) < 50:  # 少于50个字符
-                scanned_pages += 1
+            # 如果不是WAV格式，自动转换
+            if not file_path.lower().endswith('.wav'):
+                print(f"检测到非WAV格式 ({os.path.splitext(file_path)[1]})，正在转换...")
+                
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+                temp_path = temp_file.name
+                temp_file.close()
+                
+                audio = AudioSegment.from_file(file_path)
+                audio = audio.set_frame_rate(16000).set_channels(1)
+                audio.export(temp_path, format='wav')
+                
+                audio_path = temp_path
+                print(f"转换完成: {temp_path}")
         
-        doc.close()
+        # 视频文件处理
+        elif media_type == 'video':
+            print("提取音频...")
+            audio_path = str(AudioConverter.extract_audio_from_video(Path(file_path)))
         
-        # 如果超过一半的页面都是扫描版，则认为是扫描版PDF
-        return scanned_pages >= min(2, total_pages // 2)
+        # 语音识别
+        print("语音识别中...")
+        model = get_asr_model()
+        results = model.generate(
+            input=audio_path,
+            )
+        
+        print(f"识别完成，获得 {len(results)} 个结果")
+        print(results)
+        
+        
+        # 清理临时文件
+        if audio_path != file_path:
+            try:
+                os.remove(audio_path)
+                print("临时文件已清理")
+            except:
+                pass
+        
+        return results
         
     except Exception as e:
-        print(f"检测扫描版PDF失败: {str(e)}")
-        return False
+        print(f"处理失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+# def is_scanned_pdf(file_path: str) -> bool:
+#     """检测是否为扫描版PDF"""
+#     try:
+#         import fitz  # PyMuPDF
+        
+#         doc = fitz.open(file_path)
+#         scanned_pages = 0
+#         total_pages = len(doc)
+        
+#         for page_num in range(min(total_pages, 3)):  # 检查前3页
+#             page = doc.load_page(page_num)
+            
+#             # 尝试提取文本
+#             text = page.get_text()
+            
+#             # 如果文本很少或为空，可能是扫描版
+#             if len(text.strip()) < 50:  # 少于50个字符
+#                 scanned_pages += 1
+        
+#         doc.close()
+        
+#         # 如果超过一半的页面都是扫描版，则认为是扫描版PDF
+#         return scanned_pages >= min(2, total_pages // 2)
+        
+#     except Exception as e:
+#         print(f"检测扫描版PDF失败: {str(e)}")
+#         return False
 
 def parse_doc_file(file_path):
     """解析旧版.doc文件"""
     try:
-        # 方法1: 使用python-docx尝试解析
         if HAS_PYTHON_DOCX:
             try:
                 print("尝试使用python-docx解析.doc文件...")
@@ -93,110 +198,43 @@ def parse_doc_file(file_path):
                     return [{"page_content": text, "metadata": {}}]
             except Exception as e:
                 print(f"python-docx解析失败: {str(e)}")
-        
-        # 方法2: 尝试使用系统工具
-        try:
-            print("尝试使用系统工具解析.doc文件...")
-            import subprocess
-            import platform
-            
-            system = platform.system().lower()
-            
-            if system == "windows":
-                # Windows系统尝试使用PowerShell
-                try:
-                    result = subprocess.run([
-                        'powershell', '-Command', 
-                        f'$word = New-Object -ComObject Word.Application; $word.Visible = $false; $doc = $word.Documents.Open("{file_path}"); $text = $doc.Content.Text; $doc.Close(); $word.Quit(); $text'
-                    ], capture_output=True, text=True, timeout=60)
-                    if result.returncode == 0 and result.stdout.strip():
-                        print("成功使用PowerShell解析.doc文件")
-                        return [{"page_content": result.stdout, "metadata": {}}]
-                except Exception as e:
-                    print(f"PowerShell解析失败: {str(e)}")
-            
-            elif system == "linux":
-                # Linux系统尝试使用antiword
-                try:
-                    result = subprocess.run(['antiword', file_path], capture_output=True, text=True, timeout=30)
-                    if result.returncode == 0 and result.stdout.strip():
-                        print("成功使用antiword解析.doc文件")
-                        return [{"page_content": result.stdout, "metadata": {}}]
-                except Exception as e:
-                    print(f"antiword解析失败: {str(e)}")
-                
-                # 尝试使用catdoc
-                try:
-                    result = subprocess.run(['catdoc', file_path], capture_output=True, text=True, timeout=30)
-                    if result.returncode == 0 and result.stdout.strip():
-                        print("成功使用catdoc解析.doc文件")
-                        return [{"page_content": result.stdout, "metadata": {}}]
-                except Exception as e:
-                    print(f"catdoc解析失败: {str(e)}")
-            
-            elif system == "darwin":  # macOS
-                # macOS尝试使用textutil
-                try:
-                    result = subprocess.run(['textutil', '-convert', 'txt', '-stdout', file_path], capture_output=True, text=True, timeout=30)
-                    if result.returncode == 0 and result.stdout.strip():
-                        print("成功使用textutil解析.doc文件")
-                        return [{"page_content": result.stdout, "metadata": {}}]
-                except Exception as e:
-                    print(f"textutil解析失败: {str(e)}")
-                    
-        except Exception as e:
-            print(f"系统工具解析失败: {str(e)}")
-        
-        # 方法3: 尝试使用unstructured (如果可用)
-        try:
-            from langchain_community.document_loaders import UnstructuredFileLoader
-            print("尝试使用unstructured解析.doc文件...")
-            loader = UnstructuredFileLoader(file_path)
-            docs = loader.load()
-            if docs and any(len(doc.page_content.strip()) > 0 for doc in docs):
-                print("成功使用unstructured解析.doc文件")
-                return docs
-        except Exception as e:
-            print(f"unstructured解析失败: {str(e)}")
-        
-        return None
     except Exception as e:
         print(f"解析.doc文件时出错: {str(e)}")
         return None
 
-def process_scanned_pdf(file_path: str) -> List[Document]:
-    """处理扫描版PDF"""
-    try:
-        print("检测到扫描版PDF，开始OCR处理...")
+# def process_scanned_pdf(file_path: str) -> List[Document]:
+#     """处理扫描版PDF"""
+#     try:
+#         print("检测到扫描版PDF，开始OCR处理...")
         
-        # 使用OCR处理PDF
-        ocr_results = get_ocr_processor().ocr_pdf(file_path)
+#         # 使用OCR处理PDF
+#         ocr_results = get_ocr_processor().ocr_pdf(file_path)
         
-        if not ocr_results:
-            print("OCR处理失败，无法提取文本")
-            return []
+#         if not ocr_results:
+#             print("OCR处理失败，无法提取文本")
+#             return []
         
-        # 转换为Document对象
-        docs = []
-        for result in ocr_results:
-            if result['text'].strip():
-                doc = Document(
-                    page_content=result['text'],
-                    metadata={
-                        'source': os.path.basename(file_path),
-                        'page': result['page'],
-                        'processing_method': 'OCR',
-                        'file_path': file_path
-                    }
-                )
-                docs.append(doc)
+#         # 转换为Document对象
+#         docs = []
+#         for result in ocr_results:
+#             if result['text'].strip():
+#                 doc = Document(
+#                     page_content=result['text'],
+#                     metadata={
+#                         'source': os.path.basename(file_path),
+#                         'page': result['page'],
+#                         'processing_method': 'OCR',
+#                         'file_path': file_path
+#                     }
+#                 )
+#                 docs.append(doc)
        
-        print(f"OCR处理完成，生成了 {len(docs)} 个文档片段")
-        return docs
+#         print(f"OCR处理完成，生成了 {len(docs)} 个文档片段")
+#         return docs
         
-    except Exception as e:
-        print(f"处理扫描版PDF失败: {str(e)}")
-        return []
+#     except Exception as e:
+#         print(f"处理扫描版PDF失败: {str(e)}")
+#         return []
 
 def add_page_numbers_to_word(file_path: str) -> str:
     """为Word文档添加页码，返回带页码的临时文件路径"""
@@ -292,123 +330,108 @@ def process_word_with_pages(file_path: str) -> List[Document]:
         print(f"处理Word文档失败: {str(e)}")
         return []
 
-def custom_split_documents(docs, chunk_size=500, chunk_overlap=50):
-    """
-    保证切分成完整的段落，并且不同章节不会分到一段
-    """
-    import re
-
-    split_docs = []
-    chapter_pattern = re.compile(r'^\s*(第[一二三四五六七八九十百千万\d]+[章节篇部分]|Chapter\s*\d+|CHAPTER\s*\d+|[一二三四五六七八九十百千万\d]+\s*、|[一二三四五六七八九十百千万\d]+\.)', re.MULTILINE)
-
-    for doc in docs:
-        text = doc.page_content
-        # 先按章节切分
-        chapter_splits = []
-        last_idx = 0
-        for m in chapter_pattern.finditer(text):
-            idx = m.start()
-            if idx != 0:
-                chapter_splits.append((last_idx, idx))
-            last_idx = idx
-        chapter_splits.append((last_idx, len(text)))
-
-        chapter_texts = [text[start:end] for start, end in chapter_splits if text[start:end].strip()]
-
-        chunk_id = 0
-        for chapter in chapter_texts:
-            # 按段落切分（以两个换行或一个换行+空行为段落分隔）
-            paragraphs = [p for p in re.split(r'\n\s*\n', chapter) if p.strip()]
-            buffer = ""
-            for para in paragraphs:
-                if len(buffer) + len(para) <= chunk_size:
-                    buffer += (("\n\n" if buffer else "") + para)
-                else:
-                    if buffer.strip():
-                        meta = doc.metadata.copy()
-                        meta['chunk_id'] = chunk_id
-                        split_docs.append(Document(page_content=buffer, metadata=meta))
-                        chunk_id += 1
-                    # 段落本身太长，直接切
-                    if len(para) > chunk_size:
-                        # 按句号等分割
-                        sentences = re.split(r'(?<=[。！？；\n])', para)
-                        sent_buf = ""
-                        for sent in sentences:
-                            if len(sent_buf) + len(sent) <= chunk_size:
-                                sent_buf += sent
-                            else:
-                                if sent_buf.strip():
-                                    meta = doc.metadata.copy()
-                                    meta['chunk_id'] = chunk_id
-                                    split_docs.append(Document(page_content=sent_buf, metadata=meta))
-                                    chunk_id += 1
-                                sent_buf = sent
-                        if sent_buf.strip():
-                            meta = doc.metadata.copy()
-                            meta['chunk_id'] = chunk_id
-                            split_docs.append(Document(page_content=sent_buf, metadata=meta))
-                            chunk_id += 1
-                        buffer = ""
-                    else:
-                        buffer = para
-            if buffer.strip():
-                meta = doc.metadata.copy()
-                meta['chunk_id'] = chunk_id
-                split_docs.append(Document(page_content=buffer, metadata=meta))
-                chunk_id += 1
-    return split_docs
+def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
+    """时间戳直接对应分词结果"""
+    docs = []
+    
+    for item in asr_data:
+        text = item.get('text', '')
+        text = text.replace(' ', '')
+        timestamps = item.get('timestamp', [])
+        
+        # 分词
+        import jieba
+        words = list(jieba.cut(text))
+        
+        # 按标点分组
+        current_words = []
+        current_timestamps = []
+        
+        for i, (word, ts) in enumerate(zip(words, timestamps)):
+            current_words.append(word)
+            current_timestamps.append(ts)
+            
+            # 如果词以标点结尾，或这是最后一个词
+            if word[-1] in "。！？；.!?;" or i == len(words) - 1:
+                if current_words:
+                    sentence = "".join(current_words)
+                    start_time = current_timestamps[0][0] / 1000.0
+                    end_time = current_timestamps[-1][1] / 1000.0
+                    
+                    docs.append(Document(
+                        page_content=sentence,
+                        metadata={
+                            'start_time': start_time,
+                            'end_time': end_time
+                        }
+                    ))
+                    
+                    current_words = []
+                    current_timestamps = []
+    print(docs)
+    return docs
 
 def ingest_file(file_path):
     try:
-        ext = os.path.splitext(file_path)[1].lower()
+        media_type = is_media_file(file_path)
+        if media_type:
+            print(f"检测到媒体文件，类型: {media_type}")
+            asr_result = process_media_file(file_path)
+            docs = process_asr_result(asr_result)
+            if docs:
+                vector_db.add_documents(docs)
+                print(f"已处理并入库 {len(docs)} 个文档片段")
+            else:
+                print("媒体文件处理失败，未生成文档")
+            return
         
+        ext = os.path.splitext(file_path)[1].lower()
         # 尝试多种PDF解析器
         if ext == '.pdf':
             # 首先检测是否为扫描版PDF
-            if is_scanned_pdf(file_path):
-                print("检测到扫描版PDF，使用OCR处理...")
-                docs = process_scanned_pdf(file_path)
-                if docs:
-                    # 直接处理OCR结果
-                    print(f"OCR处理完成，获得 {len(docs)} 个文档片段")
+            # if is_scanned_pdf(file_path):
+            #     print("检测到扫描版PDF，使用OCR处理...")
+            #     docs = process_scanned_pdf(file_path)
+            #     if docs:
+            #         # 直接处理OCR结果
+            #         print(f"OCR处理完成，获得 {len(docs)} 个文档片段")
                     
-                    # 文本分割
-                    docs_split = custom_split_documents(docs)
-                    print(f"分割后文档数量: {len(docs_split)}")
+            #         # 文本分割
+            #         docs_split = custom_split_documents(docs)
+            #         print(f"分割后文档数量: {len(docs_split)}")
                     
-                    if not docs_split:
-                        raise ValueError('OCR处理后文档分割为空，无法处理')
+            #         if not docs_split:
+            #             raise ValueError('OCR处理后文档分割为空，无法处理')
                     
-                    # 过滤空内容并添加元数据
-                    valid_docs = []
-                    filename = os.path.basename(file_path)
-                    upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            #         # 过滤空内容并添加元数据
+            #         valid_docs = []
+            #         filename = os.path.basename(file_path)
+            #         upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     
-                    for doc in docs_split:
-                        if doc.page_content.strip():
-                            # 添加元数据
-                            doc.metadata.update({
-                                'source': filename,
-                                'upload_time': upload_time,
-                                'file_path': file_path,
-                                'processing_method': 'OCR'
-                            })
-                            valid_docs.append(doc)
+            #         for doc in docs_split:
+            #             if doc.page_content.strip():
+            #                 # 添加元数据
+            #                 doc.metadata.update({
+            #                     'source': filename,
+            #                     'upload_time': upload_time,
+            #                     'file_path': file_path,
+            #                     'processing_method': 'OCR'
+            #                 })
+            #                 valid_docs.append(doc)
                     
-                    print(f"有效文档数量: {len(valid_docs)}")
+            #         print(f"有效文档数量: {len(valid_docs)}")
                     
-                    if not valid_docs:
-                        raise ValueError('OCR处理后没有有效的文档内容')
+            #         if not valid_docs:
+            #             raise ValueError('OCR处理后没有有效的文档内容')
                     
-                    print(f"处理了 {len(valid_docs)} 个文档片段")
+            #         print(f"处理了 {len(valid_docs)} 个文档片段")
                     
-                    # 入库
-                    vector_db.add_documents(valid_docs)
-                    print("文档入库完成")
-                    return
-                else:
-                    print("OCR处理失败，尝试常规PDF解析...")
+            #         # 入库
+            #         vector_db.add_documents(valid_docs)
+            #         print("文档入库完成")
+            #         return
+            #     else:
+            #         print("OCR处理失败，尝试常规PDF解析...")
             
             # 常规PDF解析
             docs = None
@@ -435,42 +458,6 @@ def ingest_file(file_path):
                     print(f"{loader_name} 解析失败: {str(e)}")
                     continue
             
-            if not docs or not any(len(doc.page_content.strip()) > 0 for doc in docs):
-                # 如果常规解析都失败，尝试OCR
-                print("常规PDF解析失败，尝试OCR处理...")
-                docs = process_scanned_pdf(file_path)
-                if not docs:
-                    raise ValueError('所有PDF解析器都无法提取到有效内容')
-                
-                # 处理OCR结果
-                docs_split = custom_split_documents(docs)
-                
-                if not docs_split:
-                    raise ValueError('OCR处理后文档分割为空，无法处理')
-                
-                # 过滤空内容并添加元数据
-                valid_docs = []
-                filename = os.path.basename(file_path)
-                upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
-                for doc in docs_split:
-                    if doc.page_content.strip():
-                        doc.metadata.update({
-                            'source': filename,
-                            'upload_time': upload_time,
-                            'file_path': file_path,
-                            'processing_method': 'OCR'
-                        })
-                        valid_docs.append(doc)
-                
-                if not valid_docs:
-                    raise ValueError('OCR处理后没有有效的文档内容')
-                
-                print(f"OCR处理完成，处理了 {len(valid_docs)} 个文档片段")
-                vector_db.add_documents(valid_docs)
-                print("文档入库完成")
-                return
-                
         elif ext == '.doc':
             # 处理旧版.doc文件
             print("检测到旧版.doc文件，使用特殊解析方法...")
@@ -495,8 +482,6 @@ def ingest_file(file_path):
         else:
             raise ValueError('仅支持PDF和Word文档')
         
-        print(f"原始文档数量: {len(docs)}")
-        
         if not docs:
             raise ValueError('文档内容为空，无法处理')
         
@@ -504,12 +489,16 @@ def ingest_file(file_path):
         for i, doc in enumerate(docs):
             content_length = len(doc.page_content.strip())
             print(f"文档 {i+1}: 内容长度 {content_length} 字符")
-            if content_length == 0:
-                print(f"警告: 文档 {i+1} 内容为空")
         
         print(f"准备分割文档，原始文档数量: {len(docs)}")
-        docs_split = custom_split_documents(docs)
-        print(f"分割完成，分割后文档数量: {len(docs_split)}")
+        text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=500,
+                chunk_overlap=50,
+                separators=["\n\n", "\n", "。", "！", "？", "；", "，", "、", " ", ""],
+                length_function=len
+            )
+            
+        docs_split = text_splitter.split_documents(docs)
         
         if not docs_split:
             raise ValueError('文档分割后为空，无法处理')
@@ -554,3 +543,7 @@ def ingest_file(file_path):
         print(f"文档处理错误: {str(e)}")
         traceback.print_exc()
         raise e 
+
+if __name__ == "__main__":
+    test_file = "C:/Users/1haha/Music/test.mp3"
+    ingest_file(test_file)
