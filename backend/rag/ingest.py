@@ -93,7 +93,7 @@ def is_media_file(file_path: str) -> str:
 
 def process_media_file(file_path: str) -> List[Dict[str, Any]]:
     """
-    统一的媒体文件处理函数（视频和音频）
+    音视频处理
     """
     media_type = is_media_file(file_path)
     if not media_type:
@@ -347,6 +347,7 @@ def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
         current_words = []
         current_timestamps = []
         
+        
         for i, (word, ts) in enumerate(zip(words, timestamps)):
             current_words.append(word)
             current_timestamps.append(ts)
@@ -368,7 +369,6 @@ def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
                     
                     current_words = []
                     current_timestamps = []
-    print(docs)
     return docs
 
 def ingest_file(file_path):
@@ -378,6 +378,15 @@ def ingest_file(file_path):
             print(f"检测到媒体文件，类型: {media_type}")
             asr_result = process_media_file(file_path)
             docs = process_asr_result(asr_result)
+            
+            filename = os.path.basename(file_path)
+            file_path_str = str(file_path)  # 确保是字符串
+    
+            # 为每个文档添加元数据
+            for doc in docs:
+                doc.metadata['file_name'] = filename
+                doc.metadata['file_path'] = file_path_str
+            
             if docs:
                 vector_db.add_documents(docs)
                 print(f"已处理并入库 {len(docs)} 个文档片段")
@@ -485,11 +494,6 @@ def ingest_file(file_path):
         if not docs:
             raise ValueError('文档内容为空，无法处理')
         
-        # 打印每个文档的内容长度
-        for i, doc in enumerate(docs):
-            content_length = len(doc.page_content.strip())
-            print(f"文档 {i+1}: 内容长度 {content_length} 字符")
-        
         print(f"准备分割文档，原始文档数量: {len(docs)}")
         text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=500,
@@ -522,8 +526,6 @@ def ingest_file(file_path):
                 })
                 valid_docs.append(doc)
         
-        print(f"过滤完成，有效文档数量: {len(valid_docs)}")
-        
         if not valid_docs:
             raise ValueError('没有有效的文档内容')
         
@@ -545,5 +547,5 @@ def ingest_file(file_path):
         raise e 
 
 if __name__ == "__main__":
-    test_file = "C:/Users/1haha/Music/test.mp3"
+    test_file = "E:\\TraceLearn\\uploads\\asrtest.mp4"
     ingest_file(test_file)

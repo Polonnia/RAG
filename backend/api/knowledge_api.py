@@ -4,7 +4,7 @@ from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, Kn
 from rag.ingest import ingest_file
 from rag.qa import qa_query
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
-from rag.knowledge_manager import get_knowledge_files, delete_knowledge_file
+from rag.knowledge_manager import delete_knowledge_file
 from sqlalchemy.orm import Session
 import os, shutil, re
 from datetime import datetime
@@ -15,6 +15,13 @@ router = APIRouter()
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+import json
+from pathlib import Path
+
+# 文件信息存储
+FILES_INFO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files_info.json')
+
+
 def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
     if len(filename) > 100:
@@ -22,23 +29,69 @@ def sanitize_filename(filename):
         filename = name[:100-len(ext)] + ext
     return filename
 
+def load_files_info():
+    """加载文件信息"""
+    if os.path.exists(FILES_INFO_PATH):
+        try:
+            with open(FILES_INFO_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_files_info(files_info):
+    """保存文件信息"""
+    with open(FILES_INFO_PATH, 'w', encoding='utf-8') as f:
+        json.dump(files_info, f, ensure_ascii=False, indent=2)
+        
+def format_file_size(size_bytes):
+    """将字节转换为人类可读格式"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f} TB"
+
 @router.post("/upload")
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以上传文件")
     results = []
     db = next(get_db())
+    
+    # 加载现有文件信息
+    files_info = load_files_info()
+    
     for file in files:
         try:
             safe_filename = sanitize_filename(file.filename)
             file_path = os.path.join(UPLOAD_DIR, safe_filename)
             os.makedirs(UPLOAD_DIR, exist_ok=True)
+            
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"文件保存失败: {file_path}")
+            
+            stat = os.stat(file_path)
+            file_info = {
+                'filename': safe_filename,
+                'original_filename': file.filename,
+                'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'file_size': stat.st_size,
+                'file_size_display': format_file_size(stat.st_size),
+                'file_type': os.path.splitext(safe_filename)[1].lower(),
+                'uploaded_by': current_user.username,
+                'student_can_download': False,
+                'status': 'uploaded'  # uploaded, processing, completed, failed
+            }
+            
+            # 保存到文件信息存储
+            files_info[safe_filename] = file_info
+            save_files_info(files_info)
+            
             ingest_file(file_path)
-            # 新增：插入权限表
+            files_info[safe_filename]['status'] = 'completed'
+            
+            # 插入权限表
             perm = db.query(KnowledgeFilePermission).filter_by(filename=safe_filename).first()
             if not perm:
                 db.add(KnowledgeFilePermission(filename=safe_filename, student_can_download=False))
@@ -56,23 +109,44 @@ async def upload_files(files: list[UploadFile] = File(...), current_user: User =
         return {"msg": f"部分文件上传成功 ({success_count} 成功, {error_count} 失败)", "results": results}
 
 @router.get("/knowledge-files")
-async def get_knowledge_files_api(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_knowledge_files_api(current_user: User = Depends(get_current_user)):
     try:
-        files = get_knowledge_files()
-        # 合并权限
+        # 从文件信息存储中获取文件列表
+        files_info = load_files_info()
+        
+        # 转换为列表格式
+        files_list = list(files_info.values())
+        
+        # 合并权限信息
+        db = next(get_db())
         perms = {p.filename: p.student_can_download for p in db.query(KnowledgeFilePermission).all()}
-        for f in files:
+        
+        for f in files_list:
             f['student_can_download'] = perms.get(f['filename'], False)
-        return {"files": files}
+            
+            # 检查物理文件是否存在
+            file_path = os.path.join(UPLOAD_DIR, f['filename'])
+            f['file_exists'] = os.path.exists(file_path)
+        
+        # 按上传时间排序
+        files_list.sort(key=lambda x: x['upload_time'], reverse=True)
+        
+        return {"files": files_list}
+        
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"获取文件列表失败: {str(e)}"})
 
 @router.delete("/delete-file/{filename}")
 async def delete_knowledge_file_api(filename: str, current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以删除文件")
     try:
         delete_knowledge_file(filename)
+        
+        # 从文件信息存储中删除记录
+        files_info = load_files_info()
+        if filename in files_info:
+            del files_info[filename]
+            save_files_info(files_info)
+            
         return {"msg": f"文件 {filename} 已删除"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"删除文件失败: {str(e)}"})
@@ -96,7 +170,7 @@ async def save_qa_history(question: str = Form(...), answer: str = Form(...), so
 async def get_qa_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     import json
     records = db.query(QAHistory).filter(QAHistory.user_id == current_user.id).order_by(QAHistory.time.desc()).all()
-    return [{"id": r.id, "question": r.question, "answer": r.answer, "sources": json.loads(r.sources) if r.sources else [], "time": r.time.strftime('%Y-%m-%d %H:%M:%S')} for r in records]
+    return [{"id": r.id, "question": r.question, "answer": r.answer, "sources": json.loads(str(r.sources)) if str(r.sources) else [], "time": r.time.strftime('%Y-%m-%d %H:%M:%S')} for r in records]
 
 @router.get("/qa-history/{history_id}/sources")
 async def get_qa_history_sources(history_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -105,7 +179,7 @@ async def get_qa_history_sources(history_id: int, current_user: User = Depends(g
     if not record:
         raise HTTPException(status_code=404, detail="历史记录不存在")
     # 直接返回保存的sources，不再重新检索
-    sources = json.loads(record.sources) if record.sources else []
+    sources = json.loads(str(record.sources)) if str(record.sources) else []
     return {"sources": sources}
 
 @router.delete("/qa-history/{history_id}")
