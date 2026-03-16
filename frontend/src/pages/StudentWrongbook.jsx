@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox } from 'antd';
 import { BookOutlined } from '@ant-design/icons';
-import axios from 'axios';
-import getApiUrl from '../apiConfig';
+import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
 import { message } from 'antd';
 
@@ -26,10 +25,10 @@ export default function StudentWrongbook() {
   const [practiceHistory, setPracticeHistory] = useState([]);
 
   useEffect(() => {
-    axios.get(`${getApiUrl()}/student/wrongbook/keywords`).then(res => {
+    http.get('/student/wrongbook/keywords').then(res => {
       setKeywords(res.data || []);
     });
-    axios.get(`${getApiUrl()}/student/keyword-accuracy`).then(res => {
+    http.get('/student/keyword-accuracy').then(res => {
       const map = {};
       (res.data.keyword_accuracy || []).forEach(item => {
         map[item.keyword] = item.accuracy;
@@ -41,10 +40,10 @@ export default function StudentWrongbook() {
   useEffect(() => {
     if (selectedKeyword) {
       setLoading(true);
-      axios.get(`${getApiUrl()}/student/wrongbook/questions`, { params: { keyword: selectedKeyword } })
+      http.get('/student/wrongbook/questions', { params: { keyword: selectedKeyword } })
         .then(res => setQuestions(res.data || []))
         .finally(() => setLoading(false));
-      axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } })
+      http.get('/student/practice-records', { params: { keyword: selectedKeyword } })
         .then(res => setPracticeHistory(res.data || []));
     }
   }, [selectedKeyword]);
@@ -65,7 +64,7 @@ export default function StudentWrongbook() {
     if (!activeQuestion) return;
     setLoading(true);
     try {
-      const res = await axios.post(`${getApiUrl()}/student/wrongbook/submit`,
+      const res = await http.post('/student/wrongbook/submit',
         new URLSearchParams({ wrong_id: activeQuestion.id, answer })
       );
       setResult(res.data);
@@ -82,7 +81,7 @@ export default function StudentWrongbook() {
     setPracticeResult(null);
     setPracticeAnswers({});
     try {
-      const res = await axios.post(`${getApiUrl()}/student/generate-practice`,
+      const res = await http.post('/student/generate-practice',
         new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
       );
       setPracticeQuestions(res.data.questions || []);
@@ -103,17 +102,17 @@ export default function StudentWrongbook() {
         knowledge_points: q.knowledge_points,
         options: q.options
       }));
-      const res = await axios.post(`${getApiUrl()}/student/submit-practice`,
+      const res = await http.post('/student/submit-practice',
         new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
       );
       setPracticeResult(res.data);
-      const accRes = await axios.get(`${getApiUrl()}/student/keyword-accuracy`);
+      const accRes = await http.get('/student/keyword-accuracy');
       const map = {};
       (accRes.data.keyword_accuracy || []).forEach(item => {
         map[item.keyword] = item.accuracy;
       });
       setAccuracyMap(map);
-      const historyRes = await axios.get(`${getApiUrl()}/student/practice-records`, { params: { keyword: selectedKeyword } });
+      const historyRes = await http.get('/student/practice-records', { params: { keyword: selectedKeyword } });
       setPracticeHistory(historyRes.data || []);
     } catch (e) {
       message.error('提交失败');

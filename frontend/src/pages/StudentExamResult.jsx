@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Spin, Result, Card, List, Tag, Divider, Typography } from 'antd';
-import axios from 'axios';
-import getApiUrl from '../apiConfig';
+import { Spin, Result, Card, List, Tag, Divider, Typography, Button } from 'antd';
 import AppLayout from '../components/layout/AppLayout';
+import { getExamResult } from '../services/studentExamService';
 
 const { Text, Title } = Typography;
 
@@ -18,9 +17,9 @@ export default function StudentExamResult() {
     const fetchResult = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`${getApiUrl()}/student/exam-result/${id}`);
-        setResult(res.data);
-        setAiSummary(res.data.ai_summary || '');
+        const data = await getExamResult(id);
+        setResult(data);
+        setAiSummary(data.ai_summary || '');
       } catch (e) {
         console.error('获取考试结果失败:', e);
         setResult(null);
@@ -48,7 +47,10 @@ export default function StudentExamResult() {
 
   return (
     <AppLayout>
-      <Card title={<span style={{ fontWeight: 700, fontSize: 20 }}>考试结果</span>} style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
+      <Card 
+        title={<span style={{ fontWeight: 700, fontSize: 20 }}>考试结果</span>} 
+        extra={<Button onClick={() => navigate('/student')}>返回</Button>}
+        style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
         <div style={{ marginBottom: 24 }}>
           <Title level={3} style={{ color: '#52c41a', marginBottom: 8 }}>总分：{result.score}</Title>
           <Text type="secondary">用时：{minutes}分{seconds}秒</Text>
@@ -110,7 +112,7 @@ export default function StudentExamResult() {
                   <div style={{ marginBottom: 8 }}>
                     <Text strong>你的答案：</Text>
                     <div style={{ marginLeft: 16, color: '#666' }}>
-                      {formatAnswer(a.student_answer)}
+                      {formatAnswer(a.answer)}
                     </div>
                   </div>
                   {a.type !== 'short_answer' && a.type !== 'programming' && (

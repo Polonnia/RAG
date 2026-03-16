@@ -8,6 +8,12 @@ export const submitExam = (examId, answers) => {
   formData.append('answers_data', JSON.stringify(answers));
   return http.post('/student/submit-exam', formData).then(r => r.data);
 };
+export const saveExamDraft = (examId, answers) => {
+  const formData = new FormData();
+  formData.append('exam_id', examId);
+  formData.append('answers_data', JSON.stringify(answers));
+  return http.post('/student/save-exam-draft', formData).then(r => r.data);
+};
 export const getLatestAnalysis = (examId) => http.get(`/student/latest-analysis/${examId}`).then(r => r.data);
 export const getExamResult = (examId) => http.get(`/student/exam-result/${examId}`).then(r => r.data);
 
