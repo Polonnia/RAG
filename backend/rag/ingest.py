@@ -384,7 +384,7 @@ def ingest_file(file_path):
     
             # 为每个文档添加元数据
             for doc in docs:
-                doc.metadata['file_name'] = filename
+                doc.metadata['source'] = filename
                 doc.metadata['file_path'] = file_path_str
             
             if docs:
@@ -520,9 +520,7 @@ def ingest_file(file_path):
                 # 添加元数据
                 doc.metadata.update({
                     'source': filename,
-                    'upload_time': upload_time,
                     'file_path': file_path,
-                    'student_can_download': False
                 })
                 valid_docs.append(doc)
         
