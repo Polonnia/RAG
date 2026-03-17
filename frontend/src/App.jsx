@@ -326,7 +326,6 @@ function App() {
     setLoading(true);
     try {
       const response = await axios.post(`${getApiUrl()}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
       
@@ -371,7 +370,7 @@ function App() {
 
   const handleDeleteFile = async (filename) => {
     try {
-      await axios.delete(`${getApiUrl()}/delete-file/${encodeURIComponent(filename)}`);
+      await http.delete(`/delete-file/${encodeURIComponent(filename)}`);
       message.success('文件删除成功');
       fetchKnowledgeFiles();
     } catch (err) {
