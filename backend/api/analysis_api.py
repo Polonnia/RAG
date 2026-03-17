@@ -14,8 +14,11 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     """获取学生历次考试正确率和薄弱知识点
     正确率曲线只统计每次考试所有题目的总正确率，不分知识点。
     """
-    # 1. 正确率曲线
-    exams = db.query(StudentExam).filter(StudentExam.student_id == current_user.id).order_by(StudentExam.start_time).all()
+    # 1. 正确率曲线 - 只统计已完成的考试（有end_time的）
+    exams = db.query(StudentExam).filter(
+        StudentExam.student_id == current_user.id,
+        StudentExam.end_time.isnot(None)
+    ).order_by(StudentExam.start_time.desc()).all()
     accuracy_curve = []
     for se in exams:
         # 只统计已判分（is_correct为True或False）的题目
@@ -23,10 +26,12 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
         total = len(valid_answers)
         correct = sum(1 for ans in valid_answers if ans.is_correct)
         accuracy = round(correct / total * 100, 2) if total > 0 else None
+        # 安全处理start_time可能为None的情况
+        date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
         accuracy_curve.append({
             "exam_id": se.exam_id,
             "exam_title": se.exam.title if se.exam else "",
-            "date": se.start_time.strftime('%Y-%m-%d'),
+            "date": date_str,
             "accuracy": accuracy
         })
     # 2. 薄弱知识点云（统计weak_keywords字段）

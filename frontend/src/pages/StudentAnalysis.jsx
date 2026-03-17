@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, List, Empty, Spin, Tag, Button, Input, Modal, Radio, Space, Progress, Result, Checkbox } from 'antd';
 import { DeleteOutlined, BookOutlined } from '@ant-design/icons';
-import axios from 'axios';
-import getApiUrl from '../apiConfig';
+import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
 
 const { TextArea } = Input;
@@ -16,7 +15,7 @@ export default function StudentAnalysis() {
   const fetchStudentAnalysis = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${getApiUrl()}/student/analysis`);
+      const res = await http.get('/student/analysis');
       setAccuracyData(res.data.accuracy_curve || []);
       setKeywordAccuracy(res.data.keyword_accuracy || []);
     } catch (error) {
@@ -27,9 +26,6 @@ export default function StudentAnalysis() {
 
   useEffect(() => {
     fetchStudentAnalysis();
-    axios.get(`${getApiUrl()}/student/keyword-accuracy`).then(res => {
-      setKeywordAccuracy(res.data.keyword_accuracy || []);
-    });
   }, []);
 
   const weakKeywords = keywordAccuracy.filter(item => item.accuracy < 80);
