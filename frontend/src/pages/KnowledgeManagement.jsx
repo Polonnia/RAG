@@ -3,6 +3,7 @@ import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Swit
 const { Text } = Typography;
 import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
 import http from '../api/http';
+import AppLayout from '../components/layout/AppLayout';
 
 export default function KnowledgeManagement() {
   const [fileList, setFileList] = useState([]);
@@ -110,7 +111,8 @@ export default function KnowledgeManagement() {
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+    <AppLayout>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><DatabaseOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识库管理</span>} 
             style={{ marginBottom: 24, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
         <div style={{ marginBottom: 16 }}>
@@ -219,5 +221,6 @@ export default function KnowledgeManagement() {
         )}
       </Card>
     </div>
+    </AppLayout>
   );
 }
