@@ -37,8 +37,7 @@ export default function KnowledgeManagement() {
     });
     setLoading(true);
     try {
-      const response = await axios.post(`${getApiUrl()}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const response = await http.post('/upload', formData, {
         timeout: 120000,
       });
       
@@ -83,7 +82,7 @@ export default function KnowledgeManagement() {
 
   const handleDeleteFile = async (filename) => {
     try {
-      await axios.delete(`${getApiUrl()}/delete-file/${encodeURIComponent(filename)}`);
+      await http.delete(`/delete-file/${encodeURIComponent(filename)}`);
       message.success('文件删除成功');
       fetchKnowledgeFiles();
     } catch (err) {
