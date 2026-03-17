@@ -319,8 +319,9 @@ async def get_student_exams(current_user: User = Depends(get_current_user)):
             "description": exam.description,
             "duration": exam.duration,
             "created_at": exam.created_at.isoformat(),
-            "completed": student_exam is not None,
-            "score": student_exam.score if student_exam else None
+            "completed": student_exam is not None and student_exam.end_time is not None,
+            "has_draft": student_exam is not None and student_exam.end_time is None,
+            "score": student_exam.score if student_exam and student_exam.end_time else None
         })
     return {"exams": result}
 
@@ -333,14 +334,30 @@ async def get_student_exam(exam_id: int, current_user: User = Depends(get_curren
     if not exam:
         raise HTTPException(status_code=404, detail="考试不存在")
     existing_exam = db.query(StudentExam).filter(StudentExam.exam_id == exam_id, StudentExam.student_id == current_user.id).first()
-    if existing_exam:
-        raise HTTPException(status_code=400, detail="您已经参加过这个考试")
-    # 学生开始考试时创建StudentExam记录，写入start_time
-    student_exam = StudentExam(exam_id=exam_id, student_id=current_user.id, start_time=datetime.now())
-    db.add(student_exam)
-    db.commit()
-    db.refresh(student_exam)
+    
+    # 如果还没有开始考试，创建新记录
+    if not existing_exam:
+        student_exam = StudentExam(exam_id=exam_id, student_id=current_user.id, start_time=datetime.now())
+        db.add(student_exam)
+        db.commit()
+        db.refresh(student_exam)
+    else:
+        # 如果已经提交过，不允许重做
+        if existing_exam.end_time:
+            raise HTTPException(status_code=400, detail="您已经提交过这个考试")
+        student_exam = existing_exam
+    
     questions = db.query(Question).filter(Question.exam_id == exam_id).all()
+    
+    # 加载已保存的答题
+    saved_answers = {}
+    student_answers = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id).all()
+    for ans in student_answers:
+        try:
+            saved_answers[ans.question_id] = json.loads(ans.answer) if (isinstance(ans.answer, str) and (ans.answer.startswith('[') or ans.answer.startswith('{'))) else ans.answer
+        except:
+            saved_answers[ans.question_id] = ans.answer
+    
     return {
         "exam": {
             "id": exam.id,
@@ -358,8 +375,48 @@ async def get_student_exam(exam_id: int, current_user: User = Depends(get_curren
                 "knowledge_points": json.loads(q.knowledge_points) if q.knowledge_points else []
             }
             for q in questions
-        ]
+        ],
+        "saved_answers": saved_answers
     }
+
+@router.post("/student/save-exam-draft")
+async def save_exam_draft(exam_id: int = Form(...), answers_data: str = Form(...), current_user: User = Depends(get_current_user)):
+    """保存考试草稿，不提交"""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="只有学生可以保存考试草稿")
+    db = next(get_db())
+    try:
+        student_exam = db.query(StudentExam).filter(StudentExam.exam_id == exam_id, StudentExam.student_id == current_user.id).first()
+        if not student_exam:
+            raise HTTPException(status_code=400, detail="未找到考试记录")
+        if student_exam.end_time:
+            raise HTTPException(status_code=400, detail="已提交的考试无法修改")
+        
+        answers = json.loads(answers_data)
+        questions = db.query(Question).filter(Question.exam_id == exam_id).all()
+        
+        # 删除已有的答题记录，重新保存
+        db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id).delete()
+        
+        for question in questions:
+            answer_text = answers.get(str(question.id), "")
+            student_answer = StudentAnswer(
+                student_exam_id=student_exam.id,
+                question_id=question.id,
+                answer=json.dumps(answer_text) if isinstance(answer_text, (list, dict)) else answer_text,
+                is_correct=None,
+                points_earned=0,
+                comment=""
+            )
+            db.add(student_answer)
+        
+        db.commit()
+        return {"message": "草稿已保存"}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="答题数据格式错误")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/student/submit-exam")
 async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), current_user: User = Depends(get_current_user)):

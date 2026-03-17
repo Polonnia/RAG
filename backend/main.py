@@ -33,6 +33,14 @@ def init_database():
     except ImportError:
         pass
     
+    try:
+        from migrate_add_saved_answers import migrate as migrate_saved_answers
+        migrate_saved_answers()
+    except ImportError:
+        print("⚠️  migrate_add_saved_answers 模块不存在，跳过迁移")
+    except Exception as e:
+        print(f"⚠️  saved_answers迁移失败: {str(e)}")
+    
     _initialization_done = True
 
 # 使用 lifespan 事件在应用启动时执行初始化
