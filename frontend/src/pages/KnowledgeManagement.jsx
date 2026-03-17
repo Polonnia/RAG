@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message } from 'antd';
 const { Text } = Typography;
 import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
-import axios from 'axios';
-import getApiUrl from '../apiConfig';
+import http from '../api/http';
 
 export default function KnowledgeManagement() {
   const [fileList, setFileList] = useState([]);
@@ -18,7 +17,7 @@ export default function KnowledgeManagement() {
   const fetchKnowledgeFiles = async () => {
     setFileLoading(true);
     try {
-      const response = await axios.get(`${getApiUrl()}/knowledge-files`);
+      const response = await http.get('/knowledge-files');
       setKnowledgeFiles(response.data.files);
     } catch (err) {
       console.error('获取文件列表失败:', err);
