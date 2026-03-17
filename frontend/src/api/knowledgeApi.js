@@ -7,5 +7,3 @@ export const deleteDocument = (filename) => http.delete(`/delete-file/${encodeUR
 export const askQuestion = (formData) => http.post('/qa', formData).then(r => r.data);
 
 export default { listDocuments, uploadDocument, deleteDocument, askQuestion };
-
-

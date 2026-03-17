@@ -36,6 +36,25 @@ export default function QAPage() {
 
   useEffect(() => { fetchQaHistory(); }, []);
 
+  const formatSource = (source, index) => {
+    if (typeof source === 'string') {
+      return { title: source, preview: '' };
+    }
+
+    if (source && typeof source === 'object') {
+      const metadata = source.metadata || {};
+      const sourceName = metadata.source || '未知来源';
+      const page = metadata.page ?? '?';
+      const preview = source.content ? String(source.content).slice(0, 120) : '';
+      return {
+        title: `${sourceName} 第${page}页`,
+        preview,
+      };
+    }
+
+    return { title: `参考片段 ${index + 1}`, preview: '' };
+  };
+
   const handleAsk = async () => {
     if (!question) { message.warning('请输入问题'); return; }
     setQaLoading(true);
@@ -75,7 +94,22 @@ export default function QAPage() {
           <List
             size="small"
             dataSource={qaSources}
-            renderItem={(s, i) => (<List.Item><Tag color="blue">{i + 1}</Tag> {s}</List.Item>)}
+            renderItem={(s, i) => {
+              const formatted = formatSource(s, i);
+              return (
+                <List.Item>
+                  <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                    <div>
+                      <Tag color="blue">{i + 1}</Tag>
+                      <span>{formatted.title}</span>
+                    </div>
+                    {formatted.preview ? (
+                      <div style={{ color: '#666', fontSize: 12 }}>{formatted.preview}...</div>
+                    ) : null}
+                  </Space>
+                </List.Item>
+              );
+            }}
           />
         </div>
         <div>

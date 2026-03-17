@@ -10,6 +10,47 @@ import threading
 
 router = APIRouter()
 
+
+def normalize_question_config(raw_config: dict) -> dict:
+    """兼容前端两种题型配置格式：
+    1) 新格式: {"choice": {"enabled": true, "count": 5, "points": 2}, ...}
+    2) 旧格式: {"choice": 5, "multi": 3, ...}
+    """
+    if not isinstance(raw_config, dict):
+        return {}
+
+    default_points = {
+        "choice": 2,
+        "multi": 3,
+        "fill_blank": 4,
+        "short_answer": 5,
+        "programming": 10,
+    }
+
+    normalized = {}
+    for key in ["choice", "multi", "fill_blank", "short_answer", "programming"]:
+        value = raw_config.get(key, 0)
+
+        if isinstance(value, dict):
+            count = int(value.get("count", 0) or 0)
+            points = int(value.get("points", default_points[key]) or default_points[key])
+            enabled = bool(value.get("enabled", count > 0))
+            normalized[key] = {"enabled": enabled, "count": max(0, count), "points": max(1, points)}
+
+    return normalized
+
+
+def normalize_difficulty(difficulty: str) -> str:
+    mapping = {
+        "easy": "简单",
+        "medium": "中等",
+        "hard": "困难",
+        "简单": "简单",
+        "中等": "中等",
+        "困难": "困难",
+    }
+    return mapping.get((difficulty or "").strip(), "中等")
+
 def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
     """更新学生-关键词的正确率统计"""
     try:
@@ -62,13 +103,14 @@ async def generate_exam(
         raise HTTPException(status_code=403, detail="只有教师可以生成考核内容")
     try:
         # 解析题型配置
-        config = json.loads(question_config)
+        config = normalize_question_config(json.loads(question_config))
+        difficulty_text = normalize_difficulty(difficulty)
         
         # 生成考核内容
         exam_content = exam_generator.generate_exam_content(
             outline=course_outline,
             question_config=config,
-            difficulty=difficulty  # 传递难度参数
+            difficulty=difficulty_text  # 传递标准化难度参数
         )
         
         return {"exam_content": exam_content}
