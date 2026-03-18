@@ -38,6 +38,32 @@ export default function StudentWrongbook() {
       });
       setAccuracyMap(map);
     });
+
+    // 监听来自学情分析页面的知识点选择事件
+    const handleSelectKeyword = (event) => {
+      const keyword = event.detail;
+      if (keyword) {
+        // 查找匹配的知识点，支持两种格式（带特殊字符或清理后）
+        const matchedKeyword = keywords.find(kw => {
+          const cleanedKw = kw.keyword.replace(/[\[\]"']/g, '').trim();
+          return cleanedKw === keyword || kw.keyword === keyword;
+        })?.keyword;
+        
+        if (matchedKeyword) {
+          setSelectedKeyword(matchedKeyword);
+        } else {
+          // 如果没有精确匹配，尝试直接使用清理后的关键字
+          setSelectedKeyword(keyword);
+        }
+        setResult(null);
+        setActiveQuestion(null);
+      }
+    };
+
+    window.addEventListener('selectKeyword', handleSelectKeyword);
+    return () => {
+      window.removeEventListener('selectKeyword', handleSelectKeyword);
+    };
   }, []);
 
   useEffect(() => {

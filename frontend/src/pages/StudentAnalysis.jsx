@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, List, Empty, Spin, Tag, Button, Input, Modal, Radio, Space, Progress, Result, Checkbox } from 'antd';
 import { DeleteOutlined, BookOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
 import ReactECharts from 'echarts-for-react';
@@ -8,9 +9,12 @@ import ReactECharts from 'echarts-for-react';
 const { TextArea } = Input;
 
 export default function StudentAnalysis() {
+  const navigate = useNavigate();
+  const chartRef = useRef(null);
   const [accuracyData, setAccuracyData] = useState([]);
   const [keywordAccuracy, setKeywordAccuracy] = useState([]);
   const [examKeywordAccuracy, setExamKeywordAccuracy] = useState({});
+  const [hoveredExamIndex, setHoveredExamIndex] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const fetchStudentAnalysis = async () => {
@@ -29,7 +33,40 @@ export default function StudentAnalysis() {
     fetchStudentAnalysis();
   }, []);
 
-  const weakKeywords = keywordAccuracy.filter(item => item.accuracy < 80);
+  const chartContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (chartRef.current && accuracyData.length > 0) {
+      const echartsInstance = chartRef.current.getEchartsInstance();
+      
+      // 监听showTip事件 - 当悬停到某个考试时更新索引
+      echartsInstance.on('showTip', (params) => {
+        if (params.dataIndex !== undefined) {
+          setHoveredExamIndex(params.dataIndex);
+        }
+      });
+
+      return () => {
+        echartsInstance.off('showTip');
+      };
+    }
+  }, [accuracyData]);
+
+  const weakKeywords = hoveredExamIndex !== null && accuracyData[hoveredExamIndex]?.keyword_accuracy
+    ? accuracyData[hoveredExamIndex].keyword_accuracy.filter(item => item.accuracy < 80)
+    : [];
+
+  const displayKeywords = hoveredExamIndex !== null && accuracyData[hoveredExamIndex]?.keyword_accuracy
+    ? accuracyData[hoveredExamIndex].keyword_accuracy
+    : [];
+
+  const handleKeywordClick = (keyword) => {
+    navigate('/wrongbook');
+    // 延迟设置选中的知识点，确保页面转移完成
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('selectKeyword', { detail: keyword }));
+    }, 100);
+  };
 
   return (
     <AppLayout>
@@ -110,6 +147,7 @@ export default function StudentAnalysis() {
                 <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, textAlign: 'center' }}>历次考试正确率曲线</h4>
                 <Card style={{ borderRadius: 12 }}>
                   <ReactECharts 
+                    ref={chartRef}
                     option={{
                       tooltip: {
                         trigger: 'axis',
@@ -185,33 +223,64 @@ export default function StudentAnalysis() {
               </div>
             )}
 
-            <div style={{ background: '#f5f5f5', padding: '20px', borderRadius: '12px' }}>
-              <h4>知识点掌握情况：</h4>
-              {keywordAccuracy.length === 0 ? (
-                <Empty description="暂无数据" />
-              ) : (
-                <List
-                  dataSource={keywordAccuracy}
-                  renderItem={item => (
-                    <List.Item style={{ padding: '12px 0', borderBottom: '1px solid #e8e8e8' }}>
-                      <div style={{ width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 600 }}>{item.keyword}</span>
-                          <span style={{ color: item.accuracy < 60 ? '#f5222d' : item.accuracy < 80 ? '#faad14' : '#52c41a' }}>
-                            {item.accuracy}%
-                          </span>
-                        </div>
-                        <Progress percent={item.accuracy} strokeColor={{
-                          '0%': '#f5222d',
-                          '50%': '#faad14',
-                          '100%': '#52c41a',
-                        }} />
-                      </div>
-                    </List.Item>
+            {hoveredExamIndex !== null && (
+              <div style={{ background: '#eefcff', padding: '20px', borderRadius: '12px', marginTop: '32px' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, textAlign: 'center' }}>
+                  知识点掌握情况：
+                  {hoveredExamIndex !== null && accuracyData[hoveredExamIndex] && (
+                    <span style={{ marginLeft: '16px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                      ({accuracyData[hoveredExamIndex].exam_title}相关知识点)
+                    </span>
                   )}
-                />
-              )}
-            </div>
+                </h4>
+                {displayKeywords.length === 0 ? (
+                  <Empty description="暂无数据" />
+                ) : (
+                  <List
+                    dataSource={displayKeywords}
+                    renderItem={item => {
+                      const cleanedKeyword = item.keyword.replace(/[\[\]"']/g, '').trim();
+                      return (
+                        <List.Item 
+                          style={{ 
+                            padding: '12px 0', 
+                            borderBottom: '1px solid #e8e8e8',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f0f0f0';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                          onClick={() => handleKeywordClick(cleanedKeyword)}
+                        >
+                          <div style={{ width: '100%' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                              <span style={{ fontWeight: 600, color: '#1677ff' }}>
+                                {cleanedKeyword}
+                              </span>
+                              <span style={{ color: item.accuracy < 60 ? '#f5222d' : item.accuracy < 80 ? '#faad14' : '#52c41a' }}>
+                                {item.accuracy}%
+                              </span>
+                            </div>
+                            <Progress percent={item.accuracy} strokeColor={{
+                              '0%': '#8fc0d2',
+                              '16.67%': '#77d2d9',
+                              '33.33%': '#70e2ce',
+                              '50%': '#8aefb3',
+                              '66.67%': '#bcf790',
+                              '100%': '#f9f871',
+                            }} />
+                          </div>
+                        </List.Item>
+                      );
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </>
         )}
       </Card>
