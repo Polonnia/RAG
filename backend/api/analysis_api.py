@@ -18,7 +18,7 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     exams = db.query(StudentExam).filter(
         StudentExam.student_id == current_user.id,
         StudentExam.end_time.isnot(None)
-    ).order_by(StudentExam.start_time.desc()).all()
+    ).order_by(StudentExam.start_time.asc()).all()  # 按时间升序，便于绘制曲线
     accuracy_curve = []
     for se in exams:
         # 只统计已判分（is_correct为True或False）的题目
@@ -28,11 +28,39 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
         accuracy = round(correct / total * 100, 2) if total > 0 else None
         # 安全处理start_time可能为None的情况
         date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
+        
+        # 统计该次考试每个知识点的正确率
+        keyword_stats = {}
+        for ans in valid_answers:
+            question = ans.question
+            if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
+                keywords = question.knowledge_points.split(',')
+                for kw in keywords:
+                    kw = kw.strip()
+                    if kw:
+                        if kw not in keyword_stats:
+                            keyword_stats[kw] = {'total': 0, 'correct': 0}
+                        keyword_stats[kw]['total'] += 1
+                        if ans.is_correct:
+                            keyword_stats[kw]['correct'] += 1
+        
+        # 计算每个知识点的正确率
+        keyword_accuracy_list = []
+        for kw, stats in keyword_stats.items():
+            kw_accuracy = round(stats['correct'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
+            keyword_accuracy_list.append({
+                "keyword": kw,
+                "accuracy": kw_accuracy,
+                "total": stats['total'],
+                "correct": stats['correct']
+            })
+        
         accuracy_curve.append({
             "exam_id": se.exam_id,
             "exam_title": se.exam.title if se.exam else "",
             "date": date_str,
-            "accuracy": accuracy
+            "accuracy": accuracy,
+            "keyword_accuracy": keyword_accuracy_list
         })
     # 2. 薄弱知识点云（统计weak_keywords字段）
     histories = db.query(ExamHistory).filter(ExamHistory.user_id == current_user.id).all()

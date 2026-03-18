@@ -25,10 +25,13 @@ export default function StudentWrongbook() {
   const [practiceHistory, setPracticeHistory] = useState([]);
 
   useEffect(() => {
-    http.get('/student/wrongbook/keywords').then(res => {
-      setKeywords(res.data || []);
-    });
     http.get('/student/keyword-accuracy').then(res => {
+      // 使用 keyword-accuracy 作为知识点列表，确保与学情分析保持一致
+      const keywords = (res.data.keyword_accuracy || []).map(item => ({
+        keyword: item.keyword,
+        count: item.total_count
+      }));
+      setKeywords(keywords);
       const map = {};
       (res.data.keyword_accuracy || []).forEach(item => {
         map[item.keyword] = item.accuracy;

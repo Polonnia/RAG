@@ -3,6 +3,7 @@ import { Card, List, Empty, Spin, Tag, Button, Input, Modal, Radio, Space, Progr
 import { DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
+import ReactECharts from 'echarts-for-react';
 
 const { TextArea } = Input;
 
@@ -96,6 +97,93 @@ export default function StudentAnalysis() {
                 <div style={{ fontSize: '14px', color: '#666' }}>需加强考试</div>
               </div>
             </div>
+
+            <div style={{ 
+              height: '4px', 
+              background: 'linear-gradient(to right, #8fc0d2, #77d2d9, #70e2ce, #8aefb3, #bcf790, #f9f871)',
+              marginBottom: '32px',
+              borderRadius: '2px'
+            }} />
+
+            {accuracyData.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, textAlign: 'center' }}>历次考试正确率曲线</h4>
+                <Card style={{ borderRadius: 12 }}>
+                  <ReactECharts 
+                    option={{
+                      tooltip: {
+                        trigger: 'axis',
+                        formatter: (params) => {
+                          if (!params || params.length === 0) return '';
+                          const dataIndex = params[0].dataIndex;
+                          const exam = accuracyData[dataIndex];
+                          if (!exam) return '';
+                          
+                          let html = `<div style="padding: 8px;">`;
+                          html += `<strong>${exam.exam_title}</strong><br/>`;
+                          html += `日期: ${exam.date}<br/>`;
+                          html += `总正确率: <strong style="color: #1677ff;">${exam.accuracy}%</strong><br/>`;
+                          
+                          if (exam.keyword_accuracy && exam.keyword_accuracy.length > 0) {
+                            html += `<hr style="margin: 8px 0; border: none; border-top: 1px solid #ddd;"/>`;
+                            html += `<strong>知识点正确率：</strong><br/>`;
+                            exam.keyword_accuracy.forEach(kw => {
+                              const color = kw.accuracy >= 80 ? '#52c41a' : kw.accuracy >= 60 ? '#faad14' : '#f5222d';
+                              // 清理知识点名称中的特殊字符 ([], ", 等)
+                              const cleanedKeyword = kw.keyword.replace(/[\[\]"']/g, '').trim();
+                              html += `<div style="margin: 4px 0;">
+                                • ${cleanedKeyword}：<span style="color: ${color}; font-weight: bold;">${kw.accuracy}%</span>（${kw.correct}/${kw.total}）
+                              </div>`;
+                            });
+                          }
+                          html += `</div>`;
+                          return html;
+                        }
+                      },
+                      xAxis: {
+                        type: 'category',
+                        data: accuracyData.map(item => item.exam_title),
+                        boundaryGap: false
+                      },
+                      yAxis: {
+                        type: 'value',
+                        min: 0,
+                        max: 100,
+                        axisLabel: {
+                          formatter: '{value}%'
+                        }
+                      },
+                      series: [
+                        {
+                          name: '正确率',
+                          type: 'line',
+                          data: accuracyData.map(item => item.accuracy),
+                          smooth: true,
+                          itemStyle: {
+                            color: '#82aaca'
+                          },
+                          areaStyle: {
+                            color: 'rgba(130, 160, 202, 0.1)'
+                          },
+                          lineStyle: {
+                            color: '#82aaca',
+                            width: 3
+                          }
+                        }
+                      ],
+                      grid: {
+                        left: '3%',
+                        right: '3%',
+                        bottom: '3%',
+                        top: '3%',
+                        containLabel: true
+                      }
+                    }}
+                    style={{ height: '300px' }}
+                  />
+                </Card>
+              </div>
+            )}
 
             <div style={{ background: '#f5f5f5', padding: '20px', borderRadius: '12px' }}>
               <h4>知识点掌握情况：</h4>
