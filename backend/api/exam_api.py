@@ -608,9 +608,10 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                     for ans in wrong_answers:
                         q = db2.query(Question).filter(Question.id == ans.question_id).first()
                         if q and q.knowledge_points:
-                            # 假设knowledge_points是JSON字符串数组，取第一个知识点
-                            keyword = json.loads(q.knowledge_points)[0] if isinstance(q.knowledge_points, str) else q.knowledge_points
-                            weak_keywords.add(keyword)
+                            # 假设knowledge_points是JSON字符串数组，收集所有知识点
+                            keywords_list = json.loads(q.knowledge_points) if isinstance(q.knowledge_points, str) else (q.knowledge_points if isinstance(q.knowledge_points, list) else [q.knowledge_points])
+                            for kw in keywords_list:
+                                weak_keywords.add(kw)
                 # 保存AI分析结果到ExamHistory
                 record = db2.query(ExamHistory).filter(ExamHistory.user_id == user_id, ExamHistory.exam_id == exam_id).first()
                 if not record:
@@ -626,8 +627,8 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                         q = db2.query(Question).filter(Question.id == ans.question_id).first()
                         if not q:
                             continue
-                        # 直接使用题目的knowledge_point字段作为关键词
-                        keyword = json.loads(q.knowledge_points)[0] if isinstance(q.knowledge_points, str) else q.knowledge_points
+                        # 为每个知识点都创建一条错题记录
+                        keywords_list = json.loads(q.knowledge_points) if isinstance(q.knowledge_points, str) else (q.knowledge_points if isinstance(q.knowledge_points, list) else [q.knowledge_points])
                         # 题目快照
                         qdata = {
                             "question": q.question_text,
@@ -636,23 +637,27 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                             "knowledge_points": q.knowledge_points,
                             "explanation": q.explanation
                         }
-                        # 检查是否已存在相同的错题记录
-                        exists = db2.query(StudentWrongQuestion).filter(
-                            StudentWrongQuestion.student_id == user_id,
-                            StudentWrongQuestion.question_id == q.id
-                        ).first()
-                        if not exists:
-                            db2.add(StudentWrongQuestion(
-                                student_id=user_id,
-                                question_id=q.id,
-                                exam_id=exam_id,
-                                keyword=keyword,
-                                question_data=pyjson.dumps(qdata, ensure_ascii=False),
-                                answer=ans.answer,
-                                correct_answer=q.correct_answer,
-                                explanation=q.explanation,
-                                time=datetime.now()
-                            ))
+                        
+                        # 为每个知识点都创建一条错题记录
+                        for keyword in keywords_list:
+                            # 检查是否已存在相同的错题记录（同一题目同一关键词）
+                            exists = db2.query(StudentWrongQuestion).filter(
+                                StudentWrongQuestion.student_id == user_id,
+                                StudentWrongQuestion.question_id == q.id,
+                                StudentWrongQuestion.keyword == keyword
+                            ).first()
+                            if not exists:
+                                db2.add(StudentWrongQuestion(
+                                    student_id=user_id,
+                                    question_id=q.id,
+                                    exam_id=exam_id,
+                                    keyword=keyword,
+                                    question_data=pyjson.dumps(qdata, ensure_ascii=False),
+                                    answer=ans.answer,
+                                    correct_answer=q.correct_answer,
+                                    explanation=q.explanation,
+                                    time=datetime.now()
+                                ))
                     db2.commit()
                 print(f"学生 {user_id} 的考试 {exam_id} AI薄弱点分析完成并已存储到数据库")
             except Exception as e:

@@ -25,6 +25,10 @@ export default function StudentWrongbook() {
   const [practiceHistory, setPracticeHistory] = useState([]);
 
   useEffect(() => {
+    // 自动修复错题本数据（为多知识点的错题补充缺失记录）
+    http.post('/student/fix-wrongbook')
+      .catch(err => console.log('修复错题本:', err.message));
+    
     http.get('/student/keyword-accuracy').then(res => {
       // 使用 keyword-accuracy 作为知识点列表，确保与学情分析保持一致
       const keywords = (res.data.keyword_accuracy || []).map(item => ({
