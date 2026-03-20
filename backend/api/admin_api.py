@@ -9,6 +9,20 @@ router = APIRouter()
 
 PPT_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ppt_agent', 'uploads')
 
+
+def _ensure_admin(current_user: User):
+    if current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail='需要管理员权限')
+
+
+def _safe_ppt_file_path(filename: str) -> str:
+    safe_name = os.path.basename(filename)
+    base_dir = os.path.abspath(PPT_UPLOAD_DIR)
+    full_path = os.path.abspath(os.path.join(base_dir, safe_name))
+    if os.path.commonpath([base_dir, full_path]) != base_dir:
+        raise HTTPException(status_code=400, detail='非法文件名')
+    return full_path
+
 def get_file_info(filepath):
     stat = os.stat(filepath)
     return {
@@ -19,7 +33,8 @@ def get_file_info(filepath):
     }
 
 @router.get("/ppt-files")
-def list_ppt_files():
+def list_ppt_files(current_user: User = Depends(get_current_user)):
+    _ensure_admin(current_user)
     files = []
     if os.path.exists(PPT_UPLOAD_DIR):
         for fname in os.listdir(PPT_UPLOAD_DIR):
@@ -29,15 +44,17 @@ def list_ppt_files():
     return {"files": files}
 
 @router.get("/ppt-files/download/{filename}")
-def download_ppt_file(filename: str):
-    fpath = os.path.join(PPT_UPLOAD_DIR, filename)
+def download_ppt_file(filename: str, current_user: User = Depends(get_current_user)):
+    _ensure_admin(current_user)
+    fpath = _safe_ppt_file_path(filename)
     if not os.path.isfile(fpath):
         raise HTTPException(status_code=404, detail="文件不存在")
     from fastapi.responses import FileResponse
-    return FileResponse(fpath, filename=filename, media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+    return FileResponse(fpath, filename=os.path.basename(filename), media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 
 @router.get("/activity")
-def get_activity(db: Session = Depends(get_db)):
+def get_activity(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _ensure_admin(current_user)
     # 教师活跃度
     teachers = db.query(User).filter(User.role == 'teacher').all()
     teacher_stats = []
@@ -74,8 +91,7 @@ def get_activity(db: Session = Depends(get_db)):
 
 @router.get("/users")
 def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail='需要管理员权限')
+    _ensure_admin(current_user)
     users = db.query(User).all()
     return [{
         'id': u.id,
@@ -87,8 +103,7 @@ def list_users(current_user: User = Depends(get_current_user), db: Session = Dep
 
 @router.post("/users/reset-password")
 def reset_password(user_id: int = Body(...), new_password: str = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail='需要管理员权限')
+    _ensure_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail='用户不存在')
@@ -99,8 +114,7 @@ def reset_password(user_id: int = Body(...), new_password: str = Body(...), curr
 
 @router.post("/users/disable")
 def disable_user(user_id: int = Body(...), disable: bool = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail='需要管理员权限')
+    _ensure_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail='用户不存在')
@@ -115,8 +129,7 @@ def disable_user(user_id: int = Body(...), disable: bool = Body(...), current_us
 
 @router.delete("/users/delete/{user_id}")
 def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail='需要管理员权限')
+    _ensure_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail='用户不存在')

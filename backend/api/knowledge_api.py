@@ -143,6 +143,8 @@ async def delete_exam_history(history_id: int, current_user: User = Depends(get_
 
 @router.post("/set-student-download")
 async def set_student_download(filename: str = Form(...), can_download: bool = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["teacher", "admin"]:
+        raise HTTPException(status_code=403, detail="只有教师或管理员可以设置下载权限")
     set_student_download_permission(filename=filename, can_download=can_download, db=db)
     return {"msg": "设置成功"}
 
