@@ -99,12 +99,38 @@ async def generate_practice(
     current_user: User = Depends(get_current_user)
 ):
     """根据知识点生成巩固习题"""
-    # 直接用 exam_generator 生成概念题
-    outline = "巩固以下知识点：" + keyword
-    # 这里只生成单选题和填空题
-    questions = exam_generator.generate_concept_questions(outline, [], count=count//2+1, difficulty=difficulty)
-    fill_questions = exam_generator.generate_fill_blank_questions(outline, [], count=max(0, count//2-1), difficulty=difficulty)
-    return {"questions": questions + fill_questions}
+    try:
+        print(f"[API] 开始生成练习题，知识点={keyword}, 数量={count}, 难度={difficulty}")
+        
+        # 直接用 exam_generator 生成概念题
+        outline = "巩固以下知识点：" + keyword
+        
+        # 分配题目数量：选择题占 60%，填空题占 40%（向上取整确保总数等于count）
+        choice_count = (count * 3 + 2) // 5  # 向上取整 60%
+        fill_count = count - choice_count      # 剩余的全是填空题
+        
+        print(f"[API] 分配题目：选择题={choice_count}, 填空题={fill_count}, 总计={choice_count + fill_count}")
+        
+        print(f"[API] 生成选择题，数量={choice_count}")
+        questions = exam_generator.generate_concept_questions(outline, [], count=choice_count, difficulty=difficulty)
+        print(f"[API] 选择题生成完毕，数量={len(questions)}")
+        
+        print(f"[API] 生成填空题，数量={fill_count}")
+        fill_questions = exam_generator.generate_fill_blank_questions(outline, [], count=fill_count, difficulty=difficulty)
+        print(f"[API] 填空题生成完毕，数量={len(fill_questions)}")
+        
+        all_questions = questions + fill_questions
+        print(f"[API] 习题生成完毕，总数={len(all_questions)}")
+        
+        if len(all_questions) != count:
+            print(f"[警告] 生成的题数({len(all_questions)}) 与请求不符({count})")
+        
+        return {"questions": all_questions}
+    except Exception as e:
+        print(f"[API] 生成练习题失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"生成习题失败: {str(e)}")
 
 @router.post("/student/submit-practice")
 async def submit_practice(

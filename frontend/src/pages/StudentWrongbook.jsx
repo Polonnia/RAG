@@ -114,12 +114,23 @@ export default function StudentWrongbook() {
     setPracticeResult(null);
     setPracticeAnswers({});
     try {
+      console.log('[巩固练习] 开始生成习题，知识点:', selectedKeyword, '数量:', practiceCount);
       const res = await http.post('/student/generate-practice',
         new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
       );
-      setPracticeQuestions(res.data.questions || []);
+      console.log('[巩固练习] 生成习题响应:', res);
+      const questionsData = res.data?.questions || res.data || [];
+      console.log('[巩固练习] 设置习题数据，数量:', questionsData.length);
+      setPracticeQuestions(questionsData);
+      if (questionsData.length === 0) {
+        message.warning('生成的习题为空');
+      } else {
+        message.success(`成功生成 ${questionsData.length} 道习题`);
+      }
     } catch (e) {
-      message.error('生成习题失败');
+      console.error('[巩固练习] 生成习题失败:', e);
+      console.error('[巩固练习] 错误详情:', e.response?.data || e.message);
+      message.error('生成习题失败: ' + (e.response?.data?.detail || e.message));
     }
     setPracticeLoading(false);
   };
@@ -127,6 +138,7 @@ export default function StudentWrongbook() {
   const handleSubmitPractice = async () => {
     setPracticeLoading(true);
     try {
+      console.log('[巩固练习] 开始提交练习，题数:', practiceQuestions.length);
       const answers = practiceQuestions.map((q, idx) => ({
         question: q.question,
         answer: practiceAnswers[idx] || '',
@@ -135,20 +147,29 @@ export default function StudentWrongbook() {
         knowledge_points: q.knowledge_points,
         options: q.options
       }));
+      console.log('[巩固练习] 提交数据:', answers);
       const res = await http.post('/student/submit-practice',
         new URLSearchParams({ answers_data: JSON.stringify(answers), keyword: selectedKeyword })
       );
+      console.log('[巩固练习] 提交响应:', res);
       setPracticeResult(res.data);
+      message.success(`练习得分: ${res.data.score} 分`);
+      
+      // 更新知识点正确率
       const accRes = await http.get('/student/keyword-accuracy');
       const map = {};
       (accRes.data.keyword_accuracy || []).forEach(item => {
         map[item.keyword] = item.accuracy;
       });
       setAccuracyMap(map);
+      
+      // 更新练习历史
       const historyRes = await http.get('/student/practice-records', { params: { keyword: selectedKeyword } });
       setPracticeHistory(historyRes.data || []);
     } catch (e) {
-      message.error('提交失败');
+      console.error('[巩固练习] 提交失败:', e);
+      console.error('[巩固练习] 错误详情:', e.response?.data || e.message);
+      message.error('提交失败: ' + (e.response?.data?.detail || e.message));
     }
     setPracticeLoading(false);
   };
@@ -312,18 +333,21 @@ export default function StudentWrongbook() {
           bodyStyle={{ padding: 24 }}
           width={700}
         >
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
             <Button
               type="primary"
               onClick={handleGeneratePractice}
               loading={practiceLoading}
               disabled={practiceLoading || !selectedKeyword}
-              style={{ marginRight: 16 }}
             >
-              生成巩固练习
+              {practiceLoading ? '生成中...' : '生成巩固练习'}
             </Button>
-            <span style={{ color: '#888' }}>共 {practiceQuestions.length} 题</span>
-            <Progress percent={practiceProgress} size="small" style={{ width: 200, display: 'inline-block', marginLeft: 16 }} />
+            {practiceQuestions.length > 0 && (
+              <span style={{ color: '#888' }}>共 {practiceQuestions.length} 题</span>
+            )}
+            {practiceQuestions.length > 0 && (
+              <Progress percent={practiceProgress} size="small" style={{ width: 150 }} />
+            )}
           </div>
           {practiceQuestions.length === 0 ? (
             <Empty description="暂无巩固练习题目" />
