@@ -263,12 +263,15 @@ async def set_student_download(filename: str = Form(...), can_download: bool = F
     return {"msg": "设置成功"}
 
 @router.get("/download/{filename}")
-async def download_file(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def download_file(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db), from_qa: bool = False):
     perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
     if not perm:
         raise HTTPException(status_code=404, detail="文件不存在")
-    if current_user.role == "student" and not perm.student_can_download:
+
+    # 如果是来自知识问答的下载请求，允许学生下载被引用的文件
+    if current_user.role == "student" and not perm.student_can_download and not from_qa:
         raise HTTPException(status_code=403, detail="该文件不允许学生下载")
+
     file_path = os.path.join("uploads", filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")

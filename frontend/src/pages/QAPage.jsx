@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ask as askService } from '../services/knowledgeService';
 import http from '../api/http';
+import { DownloadOutlined } from '@ant-design/icons';
 const { TextArea } = Input;
 
 export default function QAPage() {
@@ -102,6 +103,45 @@ export default function QAPage() {
                     <div>
                       <Tag color="blue">{i + 1}</Tag>
                       <span>{formatted.title}</span>
+                      <Button
+                        type="text"
+                        icon={<DownloadOutlined />}
+                        size="small"
+                        style={{ marginLeft: 8 }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            // 从标题中提取文件名（移除"第x页"部分）
+                            const fileName = formatted.title.split(' 第')[0];
+                            const token = localStorage.getItem('token');
+                            const response = await fetch(`/download/${encodeURIComponent(fileName)}?from_qa=true`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            });
+
+                            if (response.ok) {
+                              const blob = await response.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = fileName;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                              message.success('文件下载成功');
+                            } else {
+                              message.error('文件下载失败');
+                            }
+                          } catch (error) {
+                            console.error('下载错误:', error);
+                            message.error('文件下载失败');
+                          }
+                        }}
+                      >
+                        下载
+                      </Button>
                     </div>
                     {formatted.preview ? (
                       <div style={{ color: '#666', fontSize: 12 }}>{formatted.preview}...</div>
