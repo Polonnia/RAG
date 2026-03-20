@@ -185,8 +185,6 @@ async def create_exam(title: str = Form(...), description: str = Form(""), durat
 
 @router.get("/teacher/exams")
 async def get_teacher_exams(current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以查看考试列表")
     db = next(get_db())
     exams = db.query(Exam).filter(Exam.teacher_id == current_user.id).all()
     result = []
@@ -204,8 +202,6 @@ async def get_teacher_exams(current_user: User = Depends(get_current_user)):
 
 @router.get("/teacher/exam/{exam_id}")
 async def get_teacher_exam_detail(exam_id: int, current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以查看考试详情")
     db = next(get_db())
     exam = db.query(Exam).filter(Exam.id == exam_id, Exam.teacher_id == current_user.id).first()
     if not exam:

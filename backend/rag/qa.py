@@ -1,10 +1,13 @@
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
 import jieba
+import os
 
 from .resources import get_vector_db
 
-API_KEY = "sk-9fabf0d9e8e84d0994756d5846207c04"
+API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+if not API_KEY:
+    raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
 vector_db = get_vector_db()
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")

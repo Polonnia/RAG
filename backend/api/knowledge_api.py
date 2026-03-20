@@ -1,106 +1,25 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, FileResponse
-from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, KnowledgeFilePermission
-from rag.ingest import ingest_file
+from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory
 from rag.qa import qa_query
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
-from rag.knowledge_manager import delete_knowledge_file
+from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
 from sqlalchemy.orm import Session
-import os, shutil, re
-from datetime import datetime
+import os
 from auth import get_current_user
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-import json
-from pathlib import Path
-
-# 文件信息存储
-FILES_INFO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files_info.json')
-
-
-def sanitize_filename(filename):
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    if len(filename) > 100:
-        name, ext = os.path.splitext(filename)
-        filename = name[:100-len(ext)] + ext
-    return filename
-
-def load_files_info():
-    """加载文件信息"""
-    if os.path.exists(FILES_INFO_PATH):
-        try:
-            with open(FILES_INFO_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_files_info(files_info):
-    """保存文件信息"""
-    with open(FILES_INFO_PATH, 'w', encoding='utf-8') as f:
-        json.dump(files_info, f, ensure_ascii=False, indent=2)
-        
-def format_file_size(size_bytes):
-    """将字节转换为人类可读格式"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f} TB"
 
 @router.post("/upload")
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
-    results = []
     db = next(get_db())
-    
-    # 加载现有文件信息
-    files_info = load_files_info()
-    
-    for file in files:
-        try:
-            safe_filename = sanitize_filename(file.filename)
-            file_path = os.path.join(UPLOAD_DIR, safe_filename)
-            os.makedirs(UPLOAD_DIR, exist_ok=True)
-            
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"文件保存失败: {file_path}")
-            
-            stat = os.stat(file_path)
-            file_info = {
-                'filename': safe_filename,
-                'original_filename': file.filename,
-                'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'file_size': stat.st_size,
-                'file_size_display': format_file_size(stat.st_size),
-                'file_type': os.path.splitext(safe_filename)[1].lower(),
-                'uploaded_by': current_user.username,
-                'student_can_download': False,
-                'status': 'uploaded'  # uploaded, processing, completed, failed
-            }
-            
-            # 保存到文件信息存储
-            files_info[safe_filename] = file_info
-            save_files_info(files_info)
-            
-            ingest_file(file_path)
-            files_info[safe_filename]['status'] = 'completed'
-            
-            # 插入权限表
-            perm = db.query(KnowledgeFilePermission).filter_by(filename=safe_filename).first()
-            if not perm:
-                db.add(KnowledgeFilePermission(filename=safe_filename, student_can_download=False))
-                db.commit()
-            results.append({"filename": file.filename, "status": "success", "msg": "文件上传并入库成功"})
-        except Exception as e:
-            results.append({"filename": file.filename, "status": "error", "msg": f"上传失败: {str(e)}"})
-    success_count = len([r for r in results if r["status"] == "success"])
-    error_count = len([r for r in results if r["status"] == "error"])
+    upload_result = upload_knowledge_files(files=files, current_user=current_user, db=db)
+    results = upload_result["results"]
+    success_count = upload_result["success_count"]
+    error_count = upload_result["error_count"]
+
     if error_count == 0:
         return {"msg": f"所有文件上传成功 ({success_count} 个文件)", "results": results}
     elif success_count == 0:
@@ -111,26 +30,8 @@ async def upload_files(files: list[UploadFile] = File(...), current_user: User =
 @router.get("/knowledge-files")
 async def get_knowledge_files_api(current_user: User = Depends(get_current_user)):
     try:
-        # 从文件信息存储中获取文件列表
-        files_info = load_files_info()
-        
-        # 转换为列表格式
-        files_list = list(files_info.values())
-        
-        # 合并权限信息
         db = next(get_db())
-        perms = {p.filename: p.student_can_download for p in db.query(KnowledgeFilePermission).all()}
-        
-        for f in files_list:
-            f['student_can_download'] = perms.get(f['filename'], False)
-            
-            # 检查物理文件是否存在
-            file_path = os.path.join(UPLOAD_DIR, f['filename'])
-            f['file_exists'] = os.path.exists(file_path)
-        
-        # 按上传时间排序
-        files_list.sort(key=lambda x: x['upload_time'], reverse=True)
-        
+        files_list = get_knowledge_files(db)
         return {"files": files_list}
         
     except Exception as e:
@@ -139,13 +40,8 @@ async def get_knowledge_files_api(current_user: User = Depends(get_current_user)
 @router.delete("/delete-file/{filename}")
 async def delete_knowledge_file_api(filename: str, current_user: User = Depends(get_current_user)):
     try:
-        delete_knowledge_file(filename)
-        
-        # 从文件信息存储中删除记录
-        files_info = load_files_info()
-        if filename in files_info:
-            del files_info[filename]
-            save_files_info(files_info)
+        db = next(get_db())
+        delete_knowledge_file(filename, db=db)
             
         return {"msg": f"文件 {filename} 已删除"}
     except Exception as e:
@@ -193,8 +89,6 @@ async def delete_qa_history(history_id: int, current_user: User = Depends(get_cu
 
 @router.post("/design-teaching-plan")
 async def design_teaching_plan(course_outline: str = Form(...), current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以设计教学内容")
     try:
         outline = generate_teaching_outline(course_outline)
         lesson_schedule = generate_lesson_schedule(outline)
@@ -205,8 +99,6 @@ async def design_teaching_plan(course_outline: str = Form(...), current_user: Us
 # 新增接口：生成详细内容
 @router.post("/generate-teaching-detail")
 async def generate_teaching_detail(outline: str = Form(...), current_user: User = Depends(get_current_user)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以生成详细内容")
     try:
         detail = generate_detailed_content_for_outline(outline)
         return {"detail": detail}
@@ -251,25 +143,15 @@ async def delete_exam_history(history_id: int, current_user: User = Depends(get_
 
 @router.post("/set-student-download")
 async def set_student_download(filename: str = Form(...), can_download: bool = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=403, detail="只有教师可以设置")
-    perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
-    if not perm:
-        perm = KnowledgeFilePermission(filename=filename, student_can_download=can_download)
-        db.add(perm)
-    else:
-        perm.student_can_download = can_download
-    db.commit()
+    set_student_download_permission(filename=filename, can_download=can_download, db=db)
     return {"msg": "设置成功"}
 
 @router.get("/download/{filename}")
 async def download_file(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
-    if not perm:
-        raise HTTPException(status_code=404, detail="文件不存在")
-    if current_user.role == "student" and not perm.student_can_download:
-        raise HTTPException(status_code=403, detail="该文件不允许学生下载")
-    file_path = os.path.join("uploads", filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="文件不存在")
-    return FileResponse(file_path, filename=filename) 
+    try:
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        return FileResponse(file_path, filename=filename)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
