@@ -36,6 +36,13 @@ def normalize_question_config(raw_config: dict) -> dict:
             points = int(value.get("points", default_points[key]) or default_points[key])
             enabled = bool(value.get("enabled", count > 0))
             normalized[key] = {"enabled": enabled, "count": max(0, count), "points": max(1, points)}
+        else:
+            count = int(value or 0)
+            normalized[key] = {
+                "enabled": count > 0,
+                "count": max(0, count),
+                "points": default_points[key]
+            }
 
     return normalized
 

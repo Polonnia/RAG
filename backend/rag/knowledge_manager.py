@@ -127,7 +127,6 @@ def set_student_download_permission(filename, can_download, db):
     db.commit()
     return True
 
-
 def get_download_file_path(filename, current_user, db):
     perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
     if not perm:
