@@ -25,16 +25,49 @@ export default function StudentWrongbook() {
   const [practiceHistory, setPracticeHistory] = useState([]);
 
   useEffect(() => {
-    http.get('/student/wrongbook/keywords').then(res => {
-      setKeywords(res.data || []);
-    });
+    // 自动修复错题本数据（为多知识点的错题补充缺失记录）
+    http.post('/student/fix-wrongbook')
+      .catch(err => console.log('修复错题本:', err.message));
+    
     http.get('/student/keyword-accuracy').then(res => {
+      // 使用 keyword-accuracy 作为知识点列表，确保与学情分析保持一致
+      const keywords = (res.data.keyword_accuracy || []).map(item => ({
+        keyword: item.keyword,
+        count: item.total_count
+      }));
+      setKeywords(keywords);
       const map = {};
       (res.data.keyword_accuracy || []).forEach(item => {
         map[item.keyword] = item.accuracy;
       });
       setAccuracyMap(map);
     });
+
+    // 监听来自学情分析页面的知识点选择事件
+    const handleSelectKeyword = (event) => {
+      const keyword = event.detail;
+      if (keyword) {
+        // 查找匹配的知识点，支持两种格式（带特殊字符或清理后）
+        const matchedKeyword = keywords.find(kw => {
+          const cleanedKw = kw.keyword.replace(/[\[\]"']/g, '').trim();
+          return cleanedKw === keyword || kw.keyword === keyword;
+        })?.keyword;
+        
+        if (matchedKeyword) {
+          setSelectedKeyword(matchedKeyword);
+        } else {
+          // 如果没有精确匹配，尝试直接使用清理后的关键字
+          setSelectedKeyword(keyword);
+        }
+        setResult(null);
+        setActiveQuestion(null);
+      }
+    };
+
+    window.addEventListener('selectKeyword', handleSelectKeyword);
+    return () => {
+      window.removeEventListener('selectKeyword', handleSelectKeyword);
+    };
   }, []);
 
   useEffect(() => {

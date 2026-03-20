@@ -18,7 +18,7 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     exams = db.query(StudentExam).filter(
         StudentExam.student_id == current_user.id,
         StudentExam.end_time.isnot(None)
-    ).order_by(StudentExam.start_time.desc()).all()
+    ).order_by(StudentExam.start_time.asc()).all()  # 按时间升序，便于绘制曲线
     accuracy_curve = []
     for se in exams:
         # 只统计已判分（is_correct为True或False）的题目
@@ -28,11 +28,39 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
         accuracy = round(correct / total * 100, 2) if total > 0 else None
         # 安全处理start_time可能为None的情况
         date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
+        
+        # 统计该次考试每个知识点的正确率
+        keyword_stats = {}
+        for ans in valid_answers:
+            question = ans.question
+            if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
+                keywords = question.knowledge_points.split(',')
+                for kw in keywords:
+                    kw = kw.strip()
+                    if kw:
+                        if kw not in keyword_stats:
+                            keyword_stats[kw] = {'total': 0, 'correct': 0}
+                        keyword_stats[kw]['total'] += 1
+                        if ans.is_correct:
+                            keyword_stats[kw]['correct'] += 1
+        
+        # 计算每个知识点的正确率
+        keyword_accuracy_list = []
+        for kw, stats in keyword_stats.items():
+            kw_accuracy = round(stats['correct'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
+            keyword_accuracy_list.append({
+                "keyword": kw,
+                "accuracy": kw_accuracy,
+                "total": stats['total'],
+                "correct": stats['correct']
+            })
+        
         accuracy_curve.append({
             "exam_id": se.exam_id,
             "exam_title": se.exam.title if se.exam else "",
             "date": date_str,
-            "accuracy": accuracy
+            "accuracy": accuracy,
+            "keyword_accuracy": keyword_accuracy_list
         })
     # 2. 薄弱知识点云（统计weak_keywords字段）
     histories = db.query(ExamHistory).filter(ExamHistory.user_id == current_user.id).all()
@@ -270,3 +298,78 @@ async def get_exam_keyword_accuracy(exam_id: int, current_user: User = Depends(g
         acc = round(stat["correct"] / stat["total"] * 100, 2) if stat["total"] > 0 else None
         result.append({"keyword": kw, "total": stat["total"], "correct": stat["correct"], "accuracy": acc})
     return result 
+
+@router.post("/student/fix-wrongbook")
+async def fix_wrongbook(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """修复该学生的错题本数据 - 为多知识点的错题补充缺失的知识点记录"""
+    if current_user.role not in ["student", "teacher", "admin"]:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    try:
+        added_count = 0
+        
+        # 获取该学生的所有错题记录
+        all_wrong_questions = db.query(StudentWrongQuestion).filter(
+            StudentWrongQuestion.student_id == current_user.id
+        ).all()
+        
+        for wrong_q in all_wrong_questions:
+            # 获取原始题目信息
+            question = db.query(Question).filter(Question.id == wrong_q.question_id).first()
+            if not question or not question.knowledge_points:
+                continue
+            
+            # 解析所有知识点
+            try:
+                if isinstance(question.knowledge_points, str):
+                    all_keywords = json.loads(question.knowledge_points)
+                else:
+                    all_keywords = question.knowledge_points if isinstance(question.knowledge_points, list) else [question.knowledge_points]
+            except:
+                continue
+            
+            # 遍历所有知识点
+            for keyword in all_keywords:
+                if not keyword or not str(keyword).strip():
+                    continue
+                    
+                # 检查该学生该题目该知识点是否已有记录
+                exists = db.query(StudentWrongQuestion).filter(
+                    StudentWrongQuestion.student_id == current_user.id,
+                    StudentWrongQuestion.question_id == wrong_q.question_id,
+                    StudentWrongQuestion.keyword == keyword
+                ).first()
+                
+                if not exists:
+                    # 创建新的错题记录
+                    try:
+                        qdata = json.loads(wrong_q.question_data) if wrong_q.question_data else {}
+                    except:
+                        qdata = {
+                            "question": question.question_text,
+                            "options": json.loads(question.options) if question.options else {},
+                            "type": question.question_type,
+                            "knowledge_points": question.knowledge_points,
+                            "explanation": question.explanation
+                        }
+                    
+                    new_wrong = StudentWrongQuestion(
+                        student_id=current_user.id,
+                        question_id=wrong_q.question_id,
+                        exam_id=wrong_q.exam_id,
+                        keyword=keyword,
+                        question_data=json.dumps(qdata, ensure_ascii=False),
+                        answer=wrong_q.answer,
+                        correct_answer=wrong_q.correct_answer,
+                        explanation=wrong_q.explanation,
+                        time=wrong_q.time
+                    )
+                    db.add(new_wrong)
+                    added_count += 1
+        
+        db.commit()
+        return {"message": "修复完成", "added_count": added_count}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"修复失败: {str(e)}")
