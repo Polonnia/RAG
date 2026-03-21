@@ -13,7 +13,7 @@ from .resources import get_vector_db
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
-FILES_INFO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'files_info.json')
+FILES_INFO_PATH = os.path.join(os.path.dirname(__file__), 'db', 'files_info.json')
 vector_db = get_vector_db()
 
 
