@@ -3,3 +3,6 @@ frontend/node_modules/
 # Python cache
 **/__pycache__/
 *.py[cod]
+
+# RAG processing logs
+backend/rag/logs/

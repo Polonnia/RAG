@@ -1,10 +1,10 @@
 import tiktoken
-import openai
 import logging
 import os
 from datetime import datetime
 import time
 import json
+import re
 import PyPDF2
 import copy
 import asyncio
@@ -16,98 +16,76 @@ import logging
 import yaml
 from pathlib import Path
 from types import SimpleNamespace as config
+from dotenv import load_dotenv
+try:
+    from ..llm_client import completion_text, completion_text_async, completion_with_finish_reason, get_default_model
+except ImportError:
+    from llm_client import completion_text, completion_text_async, completion_with_finish_reason, get_default_model
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+load_dotenv()
+API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
-def count_tokens(text, model=None):
+
+def _get_encoding(model_name):
+    try:
+        return tiktoken.encoding_for_model(model_name)
+    except Exception:
+        return tiktoken.get_encoding("cl100k_base")
+
+def count_tokens(text, model="deepseek-chat"):
     if not text:
         return 0
-    enc = tiktoken.encoding_for_model(model)
+    enc = _get_encoding(model)
     tokens = enc.encode(text)
     return len(tokens)
 
-def ChatGPT_API_with_finish_reason(model, prompt, api_key=DEEPSEEK_API_KEY, chat_history=None):
-    max_retries = 10
-    client = openai.OpenAI(api_key=api_key)
-    for i in range(max_retries):
-        try:
-            if chat_history:
-                messages = chat_history
-                messages.append({"role": "user", "content": prompt})
-            else:
-                messages = [{"role": "user", "content": prompt}]
-            
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0,
-            )
-            if response.choices[0].finish_reason == "length":
-                return response.choices[0].message.content, "max_output_reached"
-            else:
-                return response.choices[0].message.content, "finished"
-
-        except Exception as e:
-            print('************* Retrying *************')
-            logging.error(f"Error: {e}")
-            if i < max_retries - 1:
-                time.sleep(1)  # Wait for 1秒 before retrying
-            else:
-                logging.error('Max retries reached for prompt: ' + prompt)
-                return "", "error"
+def ChatGPT_API_with_finish_reason(model, prompt, api_key=API_KEY, chat_history=None):
+    try:
+        response, finish_reason = completion_with_finish_reason(
+            prompt=prompt,
+            model=model or get_default_model(),
+            chat_history=chat_history,
+            temperature=0,
+            max_retries=10,
+        )
+        return response, finish_reason
+    except Exception as e:
+        print('************* Retrying *************')
+        logging.error(f"Error: {e}")
+        logging.error('Max retries reached for prompt: ' + prompt)
+        return "", "error"
 
 
 
-def ChatGPT_API(model, prompt, api_key=DEEPSEEK_API_KEY, chat_history=None):
-    max_retries = 10
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.deepseek.com")
-    for i in range(max_retries):
-        try:
-            if chat_history:
-                messages = chat_history
-                messages.append({"role": "user", "content": prompt})
-            else:
-                messages = [{"role": "user", "content": prompt}]
-            
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0,
-            )
-   
-            return response.choices[0].message.content
-        except Exception as e:
-            print('************* Retrying *************')
-            logging.error(f"Error: {e}")
-            if i < max_retries - 1:
-                time.sleep(1)  # Wait for 1秒 before retrying
-            else:
-                logging.error('Max retries reached for prompt: ' + prompt)
-                return "Error"
+def ChatGPT_API(model, prompt, api_key=API_KEY, chat_history=None):
+    try:
+        return completion_text(
+            prompt=prompt,
+            model=model or get_default_model(),
+            chat_history=chat_history,
+            temperature=0,
+            max_retries=10,
+        )
+    except Exception as e:
+        print('************* Retrying *************')
+        logging.error(f"Error: {e}")
+        logging.error('Max retries reached for prompt: ' + prompt)
+        return "Error"
             
 
-async def ChatGPT_API_async(model, prompt, api_key=DEEPSEEK_API_KEY):
-    max_retries = 10
-    messages = [{"role": "user", "content": prompt}]
-    for i in range(max_retries):
-        try:
-            async with openai.AsyncOpenAI(api_key=api_key) as client:
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=0,
-                )
-                return response.choices[0].message.content
-        except Exception as e:
-            print('************* Retrying *************')
-            logging.error(f"Error: {e}")
-            if i < max_retries - 1:
-                await asyncio.sleep(1)  # Wait for 1s before retrying
-            else:
-                logging.error('Max retries reached for prompt: ' + prompt)
-                return "Error"  
+async def ChatGPT_API_async(model, prompt, api_key=API_KEY):
+    try:
+        return await completion_text_async(
+            prompt=prompt,
+            model=model or get_default_model(),
+            temperature=0,
+            max_retries=10,
+        )
+    except Exception as e:
+        print('************* Retrying *************')
+        logging.error(f"Error: {e}")
+        logging.error('Max retries reached for prompt: ' + prompt)
+        return "Error"
             
             
 def get_json_content(response):
@@ -412,8 +390,8 @@ def add_preface_if_needed(data):
 
 
 
-def get_page_tokens(pdf_path, model="gpt-4o-2024-11-20", pdf_parser="PyPDF2"):
-    enc = tiktoken.encoding_for_model(model)
+def get_page_tokens(pdf_path, model=None, pdf_parser="PyPDF2"):
+    enc = _get_encoding(model or get_default_model())
     if pdf_parser == "PyPDF2":
         pdf_reader = PyPDF2.PdfReader(pdf_path)
         page_list = []
@@ -535,7 +513,7 @@ def remove_structure_text(data):
 def check_token_limit(structure, limit=110000):
     list = structure_to_list(structure)
     for node in list:
-        num_tokens = count_tokens(node['text'], model='gpt-4o')
+        num_tokens = count_tokens(node['text'], model=get_default_model())
         if num_tokens > limit:
             print(f"Node ID: {node['node_id']} has {num_tokens} tokens")
             print("Start Index:", node['start_index'])

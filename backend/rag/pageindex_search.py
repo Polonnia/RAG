@@ -1,15 +1,16 @@
 import os  
 import json  
 import asyncio  
-from typing import List, Dict, Any  
+from typing import List, Dict, Any, Optional
 import pageindex.utils as utils  
+from .llm_client import get_default_model
   
 class MultiDocumentSearcher:  
     """多文档搜索器，加载预生成的JSON结构文件"""  
       
-    def __init__(self, json_dir: str, model: str = "gpt-4o-2024-11-20"):  
+    def __init__(self, json_dir: str, model: Optional[str] = None):
         self.json_dir = json_dir  
-        self.model = model  
+        self.model = model or get_default_model()
         self.documents = {}  # {doc_id: {"tree": tree, "metadata": metadata}}  
           
     def load_documents(self):  
@@ -170,7 +171,7 @@ Directly return the final JSON structure. Do not output anything else.
 async def main():  
     # 初始化搜索器，指定JSON文件目录  
     json_dir = "./results"  # 存放structure JSON文件的目录  
-    searcher = MultiDocumentSearcher(json_dir=json_dir, model="gpt-4o-2024-11-20")  
+    searcher = MultiDocumentSearcher(json_dir=json_dir, model=get_default_model())
       
     # 加载所有文档  
     searcher.load_documents()  

@@ -1,27 +1,16 @@
-from openai import OpenAI
 from rank_bm25 import BM25Okapi
 import jieba
-import os
-
 from .resources import get_vector_db
-
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-if not API_KEY:
-    raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
+from .llm_client import completion_text, get_default_model
 vector_db = get_vector_db()
 
-client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
-
-def get_completion(prompt, model="deepseek-chat"):
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": prompt},
-        ],
-        stream=False
+def get_completion(prompt, model=None):
+    return completion_text(
+        prompt=prompt,
+        model=model or get_default_model(),
+        system_prompt="You are a helpful assistant",
+        temperature=0,
     )
-    return response.choices[0].message.content
 
 def process_text_fragments(text_fragments: list, question: str) -> list:
     """

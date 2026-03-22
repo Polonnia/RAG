@@ -1,24 +1,18 @@
 import os
-from openai import OpenAI
+import re
 
 from .resources import get_vector_db
+from .llm_client import completion_text, get_default_model
 
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-if not API_KEY:
-    raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
 vector_db = get_vector_db()
-client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 
-def get_completion(prompt, model="deepseek-chat"):
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "你是一位经验丰富的教育专家，擅长设计教学内容和课程计划。"},
-            {"role": "user", "content": prompt},
-        ],
-        stream=False
+def get_completion(prompt, model=None):
+    return completion_text(
+        prompt=prompt,
+        model=model or get_default_model(),
+        system_prompt="你是一位经验丰富的教育专家，擅长设计教学内容和课程计划。",
+        temperature=0,
     )
-    return response.choices[0].message.content
 
 def search_teaching_materials(query: str, top_k: int = 10) -> list:
     """
