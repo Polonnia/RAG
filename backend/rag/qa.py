@@ -161,7 +161,11 @@ def qa_query(question: str, top_k: int = 5, score_threshold: float = 0.6) -> dic
             }
         # 调试输出
         for i, fragment in enumerate(retrieved_chunks):
-            print(f"[混合检索] 片段{i+1}: 来源={fragment['metadata'].get('source', '未知')}, 页码={fragment['metadata'].get('page', '?')}, 内容长度={len(fragment['content'])}")
+            meta = fragment.get('metadata', {})
+            start_time = meta.get('start_time')
+            end_time = meta.get('end_time')
+            time_info = f", 时间戳={start_time}~{end_time}秒" if start_time is not None or end_time is not None else ""
+            print(f"[混合检索] 片段{i+1}: 来源={meta.get('source', '未知')}, 页码={meta.get('page', '?')}, 内容长度={len(fragment['content'])}{time_info}")
         # LLM处理片段
         processed_fragments = process_text_fragments(retrieved_chunks, question)
         context = "\n\n".join(
@@ -170,15 +174,25 @@ def qa_query(question: str, top_k: int = 5, score_threshold: float = 0.6) -> dic
             for i, fragment in enumerate(processed_fragments)
         )
         prompt = f"""基于以下课程资料：\n{context}\n\n请严格根据资料回答：{question}\n注意：\n1.如果涉及数学公式用$...$或$$...$$表示\n2.每个结论需标注来源编号如【1】"""
+        
+        # 准备sources，确保包含所有metadata包括start_time和end_time
+        sources_data = []
+        for fragment in processed_fragments:
+            meta = fragment.get('metadata', {})
+            sources_data.append({
+                "content": fragment['content'],
+                "metadata": {
+                    "source": meta.get('source'),
+                    "page": meta.get('page'),
+                    "file_path": meta.get('file_path'),
+                    "start_time": meta.get('start_time'),  # 确保包含时间戳
+                    "end_time": meta.get('end_time')        # 确保包含时间戳
+                }
+            })
+        
         return {
             "answer": get_completion(prompt),
-            "sources": [
-                {
-                    "content": fragment['content'],
-                    "metadata": fragment['metadata']
-                }
-                for fragment in processed_fragments
-            ]
+            "sources": sources_data
         }
     except Exception as e:
         print(f"混合检索失败: {str(e)}")

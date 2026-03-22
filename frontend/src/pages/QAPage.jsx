@@ -37,9 +37,24 @@ export default function QAPage() {
 
   useEffect(() => { fetchQaHistory(); }, []);
 
+  // 时间戳格式转换函数
+  const formatTime = (seconds) => {
+    if (seconds === null || seconds === undefined) return null;
+    const sec = Math.round(seconds);
+    const hours = Math.floor(sec / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    const secs = sec % 60;
+    
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    } else {
+      return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+  };
+
   const formatSource = (source, index) => {
     if (typeof source === 'string') {
-      return { title: source, preview: '' };
+      return { title: source, preview: '', timeInfo: null };
     }
 
     if (source && typeof source === 'object') {
@@ -47,13 +62,34 @@ export default function QAPage() {
       const sourceName = metadata.source || '未知来源';
       const page = metadata.page ?? '?';
       const preview = source.content ? String(source.content).slice(0, 120) : '';
+      
+      // 检测是否为音视频文件
+      const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg'];
+      const isMedia = mediaExtensions.some(ext => sourceName.toLowerCase().endsWith(ext));
+      
+      // 获取时间戳数据
+      const startTime = metadata.start_time;
+      const endTime = metadata.end_time;
+      
+      // 调试信息
+      console.log(`[QA来源${index+1}] 源=${sourceName}, 是否音视频=${isMedia}, startTime=${startTime}, endTime=${endTime}`);
+      
+      // 生成时间信息
+      let timeInfo = null;
+      if (startTime !== null || endTime !== null) {
+        const start = startTime !== null ? formatTime(startTime) : '?';
+        const end = endTime !== null ? formatTime(endTime) : '?';
+        timeInfo = { start, end, isMedia: true };
+      }
+      
       return {
-        title: `${sourceName} 第${page}页`,
+        title: isMedia ? sourceName : `${sourceName} 第${page}页`,
         preview,
+        timeInfo,
       };
     }
 
-    return { title: `参考片段 ${index + 1}`, preview: '' };
+    return { title: `参考片段 ${index + 1}`, preview: '', timeInfo: null };
   };
 
   const handleAsk = async () => {
@@ -146,6 +182,20 @@ export default function QAPage() {
                     {formatted.preview ? (
                       <div style={{ color: '#666', fontSize: 12 }}>{formatted.preview}...</div>
                     ) : null}
+                    {formatted.timeInfo && (
+                      <div style={{ 
+                        color: '#ff7a45', 
+                        fontSize: 12, 
+                        fontWeight: 500,
+                        padding: '4px 8px',
+                        backgroundColor: '#fff7e6',
+                        borderRadius: 4,
+                        marginTop: 4,
+                        display: 'inline-block'
+                      }}>
+                        🎬 时间戳: {formatted.timeInfo.start} ~ {formatted.timeInfo.end}
+                      </div>
+                    )}
                   </Space>
                 </List.Item>
               );

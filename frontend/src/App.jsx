@@ -982,15 +982,42 @@ function App() {
                     if (src.metadata && (src.metadata.page || src.metadata.page_number)) {
                       page = src.metadata.page || src.metadata.page_number;
                     }
+                    
+                    // 添加时间戳支持
+                    const formatTime = (seconds) => {
+                      if (seconds === null || seconds === undefined) return null;
+                      const sec = Math.round(seconds);
+                      const hours = Math.floor(sec / 3600);
+                      const minutes = Math.floor((sec % 3600) / 60);
+                      const secs = sec % 60;
+                      if (hours > 0) {
+                        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                      } else {
+                        return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                      }
+                    };
+                    const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg'];
+                    const isMedia = mediaExtensions.some(ext => (src.metadata?.source || '').toLowerCase().endsWith(ext));
+                    const startTime = src.metadata?.start_time;
+                    const endTime = src.metadata?.end_time;
+                    
+                    // 调试信息
+                    console.log(`[原文片段] 源=${src.metadata?.source}, startTime=${startTime}, endTime=${endTime}`);
+                    
                     return (
                       <List.Item style={{ background: '#fff', borderRadius: 12, marginBottom: 16, boxShadow: '0 2px 8px #e6eaf1', padding: 14, display: 'block' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, minHeight: 28 }}>
-                          <span style={{ display: 'inline-block', background: '#e6f4ff', color: '#1677ff', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px', marginRight: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, minHeight: 28, flexWrap: 'wrap', gap: 8 }}>
+                          <span style={{ display: 'inline-block', background: '#e6f4ff', color: '#1677ff', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px' }}>
                             {src.metadata?.source || src.filename || src.source || '未知'}
                           </span>
                           {page !== '' && (
-                            <span style={{ display: 'inline-block', background: '#f6ffed', color: '#52c41a', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px', marginLeft: 0 }}>
+                            <span style={{ display: 'inline-block', background: '#f6ffed', color: '#52c41a', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px' }}>
                               第{page}页
+                            </span>
+                          )}
+                          {(startTime !== null || endTime !== null) && (
+                            <span style={{ display: 'inline-block', background: '#fff7e6', color: '#ff7a45', borderRadius: 8, padding: '2px 12px', fontWeight: 600, fontSize: 13, height: 24, lineHeight: '20px' }}>
+                              🎬 {formatTime(startTime)} ~ {formatTime(endTime)}
                             </span>
                           )}
                         </div>
