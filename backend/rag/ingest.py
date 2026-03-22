@@ -343,18 +343,29 @@ def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
         import jieba
         words = list(jieba.cut(text))
         
+        # 检查词数和时间戳数是否匹配
+        if len(words) != len(timestamps):
+            print(f"警告：词数({len(words)}) 与时间戳数({len(timestamps)}) 不匹配，将进行校正处理")
+            # 如果时间戳不足，为多余的词添加假时间戳
+            while len(timestamps) < len(words):
+                if timestamps:
+                    last_end = timestamps[-1][1]
+                    timestamps.append([last_end, last_end + 100])
+                else:
+                    timestamps.append([0, 100])
+        
         # 按标点分组
         current_words = []
         current_timestamps = []
         
-        
-        for i, (word, ts) in enumerate(zip(words, timestamps)):
+        for i, word in enumerate(words):
             current_words.append(word)
-            current_timestamps.append(ts)
+            if i < len(timestamps):
+                current_timestamps.append(timestamps[i])
             
             # 如果词以标点结尾，或这是最后一个词
             if word[-1] in "。！？；.!?;" or i == len(words) - 1:
-                if current_words:
+                if current_words and current_timestamps:
                     sentence = "".join(current_words)
                     start_time = current_timestamps[0][0] / 1000.0
                     end_time = current_timestamps[-1][1] / 1000.0
@@ -377,7 +388,15 @@ def ingest_file(file_path):
         if media_type:
             print(f"检测到媒体文件，类型: {media_type}")
             asr_result = process_media_file(file_path)
+            
+            if not asr_result:
+                raise ValueError(f"媒体文件ASR处理返回空结果")
+            
+            print(f"ASR处理完成，获得 {len(asr_result)} 个结果")
             docs = process_asr_result(asr_result)
+            
+            if not docs:
+                raise ValueError("ASR结果处理完成，但未生成任何Document")
             
             filename = os.path.basename(file_path)
             file_path_str = str(file_path)  # 确保是字符串

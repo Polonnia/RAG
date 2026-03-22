@@ -78,6 +78,7 @@ def upload_knowledge_files(files, current_user, db):
             }
             save_files_info(files_info)
 
+            print(f"开始处理文件: {safe_filename}")
             ingest_file(file_path)
             files_info[safe_filename]['status'] = 'completed'
             save_files_info(files_info)
@@ -88,7 +89,12 @@ def upload_knowledge_files(files, current_user, db):
                 db.commit()
 
             results.append({"filename": file.filename, "status": "success", "msg": "文件上传并入库成功"})
+            print(f"文件处理成功: {safe_filename}")
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"文件处理异常 ({getattr(file, 'filename', 'unknown')}): {error_trace}")
+            
             if 'safe_filename' in locals() and safe_filename in files_info:
                 files_info[safe_filename]['status'] = 'failed'
                 save_files_info(files_info)
@@ -96,6 +102,7 @@ def upload_knowledge_files(files, current_user, db):
 
     success_count = len([r for r in results if r["status"] == "success"])
     error_count = len([r for r in results if r["status"] == "error"])
+    print(f"文件上传统计: 成功 {success_count}, 失败 {error_count}")
     return {
         "results": results,
         "success_count": success_count,

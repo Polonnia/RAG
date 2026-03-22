@@ -14,18 +14,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload")
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
-    db = next(get_db())
-    upload_result = upload_knowledge_files(files=files, current_user=current_user, db=db)
-    results = upload_result["results"]
-    success_count = upload_result["success_count"]
-    error_count = upload_result["error_count"]
+    try:
+        db = next(get_db())
+        upload_result = upload_knowledge_files(files=files, current_user=current_user, db=db)
+        results = upload_result["results"]
+        success_count = upload_result["success_count"]
+        error_count = upload_result["error_count"]
 
-    if error_count == 0:
-        return {"msg": f"所有文件上传成功 ({success_count} 个文件)", "results": results}
-    elif success_count == 0:
-        return JSONResponse(status_code=500, content={"error": f"所有文件上传失败", "results": results})
-    else:
-        return {"msg": f"部分文件上传成功 ({success_count} 成功, {error_count} 失败)", "results": results}
+        if error_count == 0:
+            return {"msg": f"所有文件上传成功 ({success_count} 个文件)", "results": results}
+        elif success_count == 0:
+            return JSONResponse(status_code=500, content={"error": f"所有文件上传失败", "results": results})
+        else:
+            return {"msg": f"部分文件上传成功 ({success_count} 成功, {error_count} 失败)", "results": results}
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"文件上传API异常: {error_detail}")
+        return JSONResponse(status_code=500, content={"error": f"上传异常: {str(e)}", "details": error_detail})
 
 @router.get("/knowledge-files")
 async def get_knowledge_files_api(current_user: User = Depends(get_current_user)):

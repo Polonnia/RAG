@@ -52,6 +52,37 @@ export default function QAPage() {
     }
   };
 
+  // 将source按文件名分组
+  const groupSourcesByFile = (sources) => {
+    const grouped = {};
+    sources.forEach(source => {
+      if (typeof source === 'string') {
+        if (!grouped[source]) {
+          grouped[source] = { fileName: source, details: [] };
+        }
+      } else if (source && typeof source === 'object') {
+        const metadata = source.metadata || {};
+        const fileName = metadata.source || '未知来源';
+        if (!grouped[fileName]) {
+          grouped[fileName] = { fileName, details: [], fileType: 'document' };
+        }
+        
+        // 检测是否为音视频文件
+        const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg', '.flv', '.wmv', '.aac', '.ogg'];
+        const isMedia = mediaExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+        
+        grouped[fileName].fileType = isMedia ? 'media' : 'document';
+        grouped[fileName].details.push({
+          content: source.content ? String(source.content).slice(0, 120) : '',
+          page: metadata.page ?? '?',
+          startTime: metadata.start_time,
+          endTime: metadata.end_time,
+        });
+      }
+    });
+    return Object.values(grouped);
+  };
+
   const formatSource = (source, index) => {
     if (typeof source === 'string') {
       return { title: source, preview: '', timeInfo: null };
@@ -64,7 +95,7 @@ export default function QAPage() {
       const preview = source.content ? String(source.content).slice(0, 120) : '';
       
       // 检测是否为音视频文件
-      const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg'];
+      const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg', '.flv', '.wmv', '.aac', '.ogg'];
       const isMedia = mediaExtensions.some(ext => sourceName.toLowerCase().endsWith(ext));
       
       // 获取时间戳数据
@@ -130,15 +161,21 @@ export default function QAPage() {
           <h4>参考出处：</h4>
           <List
             size="small"
-            dataSource={qaSources}
-            renderItem={(s, i) => {
-              const formatted = formatSource(s, i);
+            dataSource={groupSourcesByFile(qaSources)}
+            renderItem={(group, groupIndex) => {
+              // 对详情按照时间排序
+              const sortedDetails = group.details.sort((a, b) => {
+                const aStart = a.startTime || 0;
+                const bStart = b.startTime || 0;
+                return aStart - bStart;
+              });
+
               return (
                 <List.Item>
                   <Space direction="vertical" size={2} style={{ width: '100%' }}>
                     <div>
-                      <Tag color="blue">{i + 1}</Tag>
-                      <span>{formatted.title}</span>
+                      <Tag color="blue">{groupIndex + 1}</Tag>
+                      <span>{group.fileType === 'media' ? group.fileName : `${group.fileName}`}</span>
                       <Button
                         type="text"
                         icon={<DownloadOutlined />}
@@ -147,10 +184,8 @@ export default function QAPage() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
-                            // 从标题中提取文件名（移除"第x页"部分）
-                            const fileName = formatted.title.split(' 第')[0];
                             const token = localStorage.getItem('token');
-                            const response = await fetch(`/download/${encodeURIComponent(fileName)}?from_qa=true`, {
+                            const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
                               headers: {
                                 'Authorization': `Bearer ${token}`
                               }
@@ -161,7 +196,7 @@ export default function QAPage() {
                               const url = window.URL.createObjectURL(blob);
                               const link = document.createElement('a');
                               link.href = url;
-                              link.download = fileName;
+                              link.download = group.fileName;
                               document.body.appendChild(link);
                               link.click();
                               document.body.removeChild(link);
@@ -179,23 +214,64 @@ export default function QAPage() {
                         下载
                       </Button>
                     </div>
-                    {formatted.preview ? (
-                      <div style={{ color: '#666', fontSize: 12 }}>{formatted.preview}...</div>
-                    ) : null}
-                    {formatted.timeInfo && (
-                      <div style={{ 
-                        color: '#ff7a45', 
-                        fontSize: 12, 
-                        fontWeight: 500,
-                        padding: '4px 8px',
-                        backgroundColor: '#fff7e6',
-                        borderRadius: 4,
-                        marginTop: 4,
-                        display: 'inline-block'
-                      }}>
-                        🎬 时间戳: {formatted.timeInfo.start} ~ {formatted.timeInfo.end}
+                    
+                    {/* 音视频：显示时间戳段落 */}
+                    {group.fileType === 'media' && (
+                      <div>
+                        {sortedDetails.map((detail, detailIndex) => (
+                          <div key={detailIndex} style={{ 
+                            marginBottom: 8,
+                            paddingBottom: 8,
+                            borderBottom: detailIndex < sortedDetails.length - 1 ? '1px solid #f0f0f0' : 'none'
+                          }}>
+                            <div style={{ 
+                              color: '#ff7a45', 
+                              fontSize: 12, 
+                              fontWeight: 500,
+                              padding: '4px 8px',
+                              backgroundColor: '#fff7e6',
+                              borderRadius: 4,
+                              marginBottom: 4,
+                              display: 'inline-block'
+                            }}>
+                              🎬 {detailIndex + 1}. 时间戳: {detail.startTime !== null ? formatTime(detail.startTime) : '?'} ~ {detail.endTime !== null ? formatTime(detail.endTime) : '?'}
+                            </div>
+                            {detail.content && (
+                              <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                "{detail.content}..."
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
+                    
+                    {/* 文档：显示页码信息 */}
+                    {group.fileType === 'document' && sortedDetails.map((detail, detailIndex) => (
+                      <div key={detailIndex} style={{ 
+                        marginBottom: 4,
+                        paddingBottom: 4,
+                        borderBottom: detailIndex < sortedDetails.length - 1 ? '1px solid #f0f0f0' : 'none'
+                      }}>
+                        <div style={{ 
+                          color: '#1677ff', 
+                          fontSize: 12, 
+                          fontWeight: 500,
+                          padding: '2px 6px',
+                          backgroundColor: '#e6f7ff',
+                          borderRadius: 4,
+                          marginBottom: 2,
+                          display: 'inline-block'
+                        }}>
+                          📄 {detailIndex + 1}. 第 {detail.page} 页
+                        </div>
+                        {detail.content && (
+                          <div style={{ color: '#666', fontSize: 12, marginTop: 2 }}>
+                            "{detail.content}..."
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </Space>
                 </List.Item>
               );

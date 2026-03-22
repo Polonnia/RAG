@@ -109,7 +109,18 @@ export default function KnowledgeManagement() {
     const typeMap = {
       'pdf': { color: 'red', text: 'PDF' },
       'doc': { color: 'blue', text: 'Word' },
-      'docx': { color: 'blue', text: 'Word' }
+      'docx': { color: 'blue', text: 'Word' },
+      'mp3': { color: 'green', text: '音频' },
+      'wav': { color: 'green', text: '音频' },
+      'm4a': { color: 'green', text: '音频' },
+      'aac': { color: 'green', text: '音频' },
+      'ogg': { color: 'green', text: '音频' },
+      'mp4': { color: 'purple', text: '视频' },
+      'avi': { color: 'purple', text: '视频' },
+      'mov': { color: 'purple', text: '视频' },
+      'mkv': { color: 'purple', text: '视频' },
+      'flv': { color: 'purple', text: '视频' },
+      'wmv': { color: 'purple', text: '视频' }
     };
     return typeMap[ext] || { color: 'default', text: '文件' };
   };
@@ -125,7 +136,7 @@ export default function KnowledgeManagement() {
             style={{ marginBottom: 24, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
         <div style={{ marginBottom: 16 }}>
           <Text type="secondary">
-            支持格式：PDF、Word文档(.doc/.docx)
+            支持格式：PDF、Word文档(.doc/.docx)、音频(MP3/WAV/M4A/AAC/OGG)、视频(MP4/AVI/MOV/MKV/FLV/WMV)
           </Text>
         </div>
         <Upload
@@ -137,7 +148,7 @@ export default function KnowledgeManagement() {
           }))}
           onChange={handleFileChange}
           multiple={true}
-          accept=".pdf,.doc,.docx"
+          accept=".pdf,.doc,.docx,.mp3,.wav,.m4a,.aac,.ogg,.mp4,.avi,.mov,.mkv,.flv,.wmv"
         >
           <Button icon={<UploadOutlined />}>选择文件</Button>
         </Upload>
