@@ -15,15 +15,10 @@ import StudentAssistant from './pages/StudentAssistant';
 import KnowledgeManagement from './pages/KnowledgeManagement';
 import Login from './pages/Login';
 import RequireAuth from './auth/RequireAuth';
-import { getUser, getToken } from './auth/authUtils';
 
 // 根据登录状态和角色选择首页
 function HomeRoute() {
-  const token = getToken();
-  const user = getUser();
-  if (!token) return <Navigate to="/login" replace />;
-  if (user?.role === 'student') return <Navigate to="/student" replace />;
-  return <Navigate to="/knowledge" replace />;
+  return <Navigate to="/login" replace />;
 }
 
 export default function AppRoutes() {

@@ -14,6 +14,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--toc-check-pages', type=int, default=20, 
                       help='Number of pages to check for table of contents (PDF only)')
+    parser.add_argument('--toc-page-range', type=str, default=None,
+                      help='TOC page range in PDF, e.g. 3-8. If provided, TOC is extracted directly from this range.')
     parser.add_argument('--max-pages-per-node', type=int, default=10,
                       help='Maximum number of pages per node (PDF only)')
     parser.add_argument('--max-tokens-per-node', type=int, default=20000,
@@ -25,7 +27,7 @@ if __name__ == "__main__":
                       help='Whether to add summary to the node')
     parser.add_argument('--if-add-doc-description', type=str, default='no',
                       help='Whether to add doc description to the doc')
-    parser.add_argument('--if-add-node-text', type=str, default='no',
+    parser.add_argument('--if-add-node-text', type=str, default='yes',
                       help='Whether to add text to the node')
                       
     # Markdown specific arguments
@@ -47,6 +49,12 @@ if __name__ == "__main__":
         # Validate PDF file
         if not args.pdf_path.lower().endswith('.pdf'):
             raise ValueError("PDF file must have .pdf extension")
+        
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        uploads_dir = os.path.join(project_root, 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        args.pdf_path = os.path.abspath(os.path.join(uploads_dir, args.pdf_path))
+        
         if not os.path.isfile(args.pdf_path):
             raise ValueError(f"PDF file not found: {args.pdf_path}")
             
@@ -55,6 +63,7 @@ if __name__ == "__main__":
         opt = config(
             model=args.model,
             toc_check_page_num=args.toc_check_pages,
+            toc_page_range=args.toc_page_range,
             max_page_num_each_node=args.max_pages_per_node,
             max_token_num_each_node=args.max_tokens_per_node,
             if_add_node_id=args.if_add_node_id,

@@ -21,18 +21,6 @@ def init_database():
     if _initialization_done:
         return
     
-    try:
-        from migrate_add_sources import migrate as migrate_sources
-        migrate_sources()
-    except ImportError:
-        pass
-
-    try:
-        from migrate_auth_fix import migrate as migrate_auth
-        migrate_auth()
-    except ImportError:
-        pass
-    
     _initialization_done = True
 
 # 使用 lifespan 事件在应用启动时执行初始化

@@ -389,6 +389,81 @@ def add_preface_if_needed(data):
     return data
 
 
+def extract_toc_from_pdf_outline(pdf_path):
+    try:
+        pdf_reader = PyPDF2.PdfReader(pdf_path)
+        outlines = getattr(pdf_reader, 'outline', None)
+    except Exception:
+        return []
+
+    if not outlines:
+        return []
+
+    toc_items = []
+    level_counters = []
+
+    def get_title(item):
+        title = getattr(item, 'title', None)
+        if title:
+            return str(title).strip()
+
+        if isinstance(item, dict):
+            title = item.get('/Title') or item.get('Title')
+            if title:
+                return str(title).strip()
+        return None
+
+    def get_page_number(item):
+        try:
+            return int(pdf_reader.get_destination_page_number(item)) + 1
+        except Exception:
+            page_ref = None
+            if isinstance(item, dict):
+                page_ref = item.get('/Page') or item.get('Page')
+
+            if page_ref is None:
+                return None
+
+            for idx, page_obj in enumerate(pdf_reader.pages):
+                try:
+                    if page_obj == page_ref:
+                        return idx + 1
+                    if getattr(page_obj, 'indirect_reference', None) == page_ref:
+                        return idx + 1
+                except Exception:
+                    continue
+            return None
+
+    def walk(entries, level=1):
+        for entry in entries:
+            if isinstance(entry, list):
+                walk(entry, level + 1)
+                continue
+
+            title = get_title(entry)
+            if not title:
+                continue
+
+            while len(level_counters) < level:
+                level_counters.append(0)
+            level_counters[level - 1] += 1
+            del level_counters[level:]
+
+            physical_index = get_page_number(entry)
+            if physical_index is None:
+                continue
+
+            structure = '.'.join(str(num) for num in level_counters)
+            toc_items.append({
+                'structure': structure,
+                'title': title,
+                'physical_index': physical_index,
+            })
+
+    walk(outlines, level=1)
+    return toc_items
+
+
 
 def get_page_tokens(pdf_path, model=None, pdf_parser="PyPDF2"):
     enc = _get_encoding(model or get_default_model())

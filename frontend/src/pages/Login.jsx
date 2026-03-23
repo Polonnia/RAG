@@ -24,7 +24,6 @@ export default function Login() {
         const role = data?.user?.role;
         if (role === 'teacher') navigate('/manage');
         else if (role === 'student') navigate('/student');
-        else navigate('/');
       }
     } catch (e) {
       message.error('登录失败');

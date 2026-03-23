@@ -688,18 +688,44 @@ def process_none_page_numbers(toc_items, page_list, start_index=1, model=None):
 
 
 
-def check_toc(page_list, opt=None):
+def check_toc(page_list, opt=None, doc=None, logger=None):
+    outline_toc = extract_toc_from_pdf_outline(doc) if doc is not None else []
+    if outline_toc:
+        print('outline found, use outline toc directly')
+        if logger:
+            logger.info({'toc_source': 'outline', 'toc_item_count': len(outline_toc)})
+        return {
+            'toc_with_page_number': outline_toc,
+            'toc_source': 'outline',
+            'page_index_given_in_toc': 'yes'
+        }
+
+    toc_page_list_by_range = parse_toc_page_range(getattr(opt, 'toc_page_range', None), len(page_list))
+    if toc_page_list_by_range is not None:
+        if len(toc_page_list_by_range) == 0:
+            print('toc page range provided, but no valid pages in document')
+            return {'toc_content': None, 'toc_page_list': [], 'page_index_given_in_toc': 'no', 'toc_source': 'range'}
+
+        print(f"toc page range provided, direct TOC extraction from pages {toc_page_list_by_range[0] + 1}-{toc_page_list_by_range[-1] + 1}")
+        toc_json = toc_extractor(page_list, toc_page_list_by_range, opt.model)
+        return {
+            'toc_content': toc_json['toc_content'],
+            'toc_page_list': toc_page_list_by_range,
+            'page_index_given_in_toc': toc_json['page_index_given_in_toc'],
+            'toc_source': 'range'
+        }
+
     toc_page_list = find_toc_pages(start_page_index=0, page_list=page_list, opt=opt)
     if len(toc_page_list) == 0:
         print('no toc found')
-        return {'toc_content': None, 'toc_page_list': [], 'page_index_given_in_toc': 'no'}
+        return {'toc_content': None, 'toc_page_list': [], 'page_index_given_in_toc': 'no', 'toc_source': 'auto'}
     else:
         print('toc found')
         toc_json = toc_extractor(page_list, toc_page_list, opt.model)
 
         if toc_json['page_index_given_in_toc'] == 'yes':
             print('index found')
-            return {'toc_content': toc_json['toc_content'], 'toc_page_list': toc_page_list, 'page_index_given_in_toc': 'yes'}
+            return {'toc_content': toc_json['toc_content'], 'toc_page_list': toc_page_list, 'page_index_given_in_toc': 'yes', 'toc_source': 'auto'}
         else:
             current_start_index = toc_page_list[-1] + 1
             
@@ -719,12 +745,12 @@ def check_toc(page_list, opt=None):
                 additional_toc_json = toc_extractor(page_list, additional_toc_pages, opt.model)
                 if additional_toc_json['page_index_given_in_toc'] == 'yes':
                     print('index found')
-                    return {'toc_content': additional_toc_json['toc_content'], 'toc_page_list': additional_toc_pages, 'page_index_given_in_toc': 'yes'}
+                    return {'toc_content': additional_toc_json['toc_content'], 'toc_page_list': additional_toc_pages, 'page_index_given_in_toc': 'yes', 'toc_source': 'auto'}
 
                 else:
                     current_start_index = additional_toc_pages[-1] + 1
             print('index not found')
-            return {'toc_content': toc_json['toc_content'], 'toc_page_list': toc_page_list, 'page_index_given_in_toc': 'no'}
+            return {'toc_content': toc_json['toc_content'], 'toc_page_list': toc_page_list, 'page_index_given_in_toc': 'no', 'toc_source': 'auto'}
 
 
 
@@ -1021,11 +1047,49 @@ async def process_large_node_recursively(node, page_list, opt=None, logger=None)
     
     return node
 
+def parse_toc_page_range(toc_page_range, total_pages):
+    if toc_page_range is None:
+        return None
+
+    range_text = str(toc_page_range).strip()
+    if not range_text:
+        return None
+
+    match = re.match(r'^(\d+)\s*[-:]\s*(\d+)$', range_text)
+    if not match:
+        raise ValueError(f"Invalid toc_page_range format: '{toc_page_range}'. Use format like '3-8'.")
+
+    start_page = int(match.group(1))
+    end_page = int(match.group(2))
+
+    if start_page <= 0 or end_page <= 0:
+        raise ValueError(f"Invalid toc_page_range: '{toc_page_range}'. Page numbers must be >= 1.")
+    if start_page > end_page:
+        raise ValueError(f"Invalid toc_page_range: '{toc_page_range}'. Start page must be <= end page.")
+
+    start_page = max(1, start_page)
+    end_page = min(total_pages, end_page)
+
+    if start_page > end_page:
+        return []
+
+    return list(range(start_page - 1, end_page))
+
+
 async def tree_parser(page_list, opt, doc=None, logger=None):
-    check_toc_result = check_toc(page_list, opt)
+    check_toc_result = check_toc(page_list, opt, doc=doc, logger=logger)
     logger.info(check_toc_result)
 
-    if check_toc_result.get("toc_content") and check_toc_result["toc_content"].strip() and check_toc_result["page_index_given_in_toc"] == "yes":
+    if check_toc_result.get('toc_source') == 'outline':
+        toc_with_page_number = check_toc_result.get('toc_with_page_number', [])
+        toc_with_page_number = validate_and_truncate_physical_indices(
+            toc_with_page_number,
+            len(page_list),
+            start_index=1,
+            logger=logger
+        )
+
+    elif check_toc_result.get("toc_content") and check_toc_result["toc_content"].strip() and check_toc_result["page_index_given_in_toc"] == "yes":
         toc_with_page_number = await meta_processor(
             page_list, 
             mode='process_toc_with_page_numbers', 
@@ -1041,6 +1105,9 @@ async def tree_parser(page_list, opt, doc=None, logger=None):
             start_index=1, 
             opt=opt,
             logger=logger)
+
+    print('Debug - TOC with physical_index:')
+    print(json.dumps(toc_with_page_number, ensure_ascii=False, indent=2))
 
     toc_with_page_number = add_preface_if_needed(toc_with_page_number)
     toc_with_page_number = await check_title_appearance_in_start_concurrent(toc_with_page_number, page_list, model=opt.model, logger=logger)
@@ -1104,7 +1171,8 @@ def page_index_main(doc, opt=None):
 
 
 def page_index(doc, model=None, toc_check_page_num=None, max_page_num_each_node=None, max_token_num_each_node=None,
-               if_add_node_id=None, if_add_node_summary=None, if_add_doc_description=None, if_add_node_text=None):
+               if_add_node_id=None, if_add_node_summary=None, if_add_doc_description=None, if_add_node_text=None,
+               toc_page_range=None):
     
     user_opt = {
         arg: value for arg, value in locals().items()
