@@ -123,6 +123,58 @@ export default function QAPage() {
     return { title: `参考片段 ${index + 1}`, preview: '', timeInfo: null };
   };
 
+  const handleViewPdf = async (fileName, pageNumber) => {
+    try {
+      if (!fileName.toLowerCase().endsWith('.pdf')) {
+        message.error('仅支持PDF文件在浏览器中预览');
+        return;
+      }
+
+      message.loading({ content: '正在加载PDF...', duration: 0 });
+      
+      // 使用axios获取PDF，这样会自动携带Authorization header
+      try {
+        const response = await http.get(`/view-pdf/${encodeURIComponent(fileName)}`, {
+          responseType: 'blob'
+        });
+        
+        message.destroy();
+        
+        // 创建临时blob URL
+        const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+        const blobUrl = window.URL.createObjectURL(pdfBlob);
+        
+        // 在新标签页打开PDF，使用#page参数定位到指定页码
+        const urlWithPage = `${blobUrl}#page=${pageNumber}`;
+        const newWindow = window.open(urlWithPage, '_blank');
+        
+        // 在新窗口加载完成后，保留blob URL（浏览器需要持续访问它）
+        // 不要立即撤销，而是在一段时间后撤销
+        if (newWindow) {
+          setTimeout(() => {
+            window.URL.revokeObjectURL(blobUrl);
+          }, 30000); // 30秒后释放
+        }
+      } catch (error) {
+        message.destroy();
+        console.error('[PDF预览] 获取文件错误:', error);
+        
+        if (error.response?.status === 403) {
+          message.error('您没有权限查看此文件');
+        } else if (error.response?.status === 404) {
+          message.error('文件不存在或已被删除');
+        } else if (error.response?.status === 401) {
+          message.error('认证已过期，请重新登录');
+        } else {
+          message.error('加载PDF文件失败');
+        }
+      }
+    } catch (error) {
+      console.error('[PDF预览] 处理错误:', error);
+      message.error('打开PDF文件失败');
+    }
+  };
+
   const handleAsk = async () => {
     if (!question) { message.warning('请输入问题'); return; }
     setQaLoading(true);
@@ -253,16 +305,39 @@ export default function QAPage() {
                         paddingBottom: 4,
                         borderBottom: detailIndex < sortedDetails.length - 1 ? '1px solid #f0f0f0' : 'none'
                       }}>
-                        <div style={{ 
-                          color: '#1677ff', 
-                          fontSize: 12, 
-                          fontWeight: 500,
-                          padding: '2px 6px',
-                          backgroundColor: '#e6f7ff',
-                          borderRadius: 4,
-                          marginBottom: 2,
-                          display: 'inline-block'
-                        }}>
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?') {
+                              handleViewPdf(group.fileName, detail.page);
+                            }
+                          }}
+                          style={{ 
+                            color: group.fileName.toLowerCase().endsWith('.pdf') ? '#1677ff' : '#888', 
+                            fontSize: 12, 
+                            fontWeight: 500,
+                            padding: '2px 6px',
+                            backgroundColor: group.fileName.toLowerCase().endsWith('.pdf') ? '#e6f7ff' : '#f0f0f0',
+                            borderRadius: 4,
+                            marginBottom: 2,
+                            display: 'inline-block',
+                            cursor: group.fileName.toLowerCase().endsWith('.pdf') ? 'pointer' : 'default',
+                            transition: 'all 0.3s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?') {
+                              e.target.style.backgroundColor = '#bae7ff';
+                              e.target.style.textDecoration = 'underline';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (group.fileName.toLowerCase().endsWith('.pdf')) {
+                              e.target.style.backgroundColor = '#e6f7ff';
+                              e.target.style.textDecoration = 'none';
+                            }
+                          }}
+                          title={group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?' ? '点击在浏览器中查看PDF' : ''}
+                        >
                           📄 {detailIndex + 1}. 第 {detail.page} 页
                         </div>
                         {detail.content && (

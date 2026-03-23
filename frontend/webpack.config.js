@@ -39,5 +39,13 @@ module.exports = {
     open: true,
     hot: true,
     historyApiFallback: true,
+    proxy: [
+      {
+        context: ['/view-pdf', '/download', '/upload', '/qa', '/knowledge', '/exam', '/admin', '/teacher'],
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        logLevel: 'info',
+      },
+    ],
   },
 }; 

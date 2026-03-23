@@ -163,3 +163,19 @@ async def download_file(filename: str, current_user: User = Depends(get_current_
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/view-pdf/{filename}")
+async def view_pdf_file(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """在浏览器中预览PDF文件"""
+    try:
+        # 检查文件权限和存在性
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        # 检查是否为PDF文件
+        if not filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="仅支持PDF文件预览")
+        # 以内联方式返回PDF，使浏览器显示而不是下载
+        return FileResponse(file_path, media_type='application/pdf', headers={"Content-Disposition": "inline"})
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
