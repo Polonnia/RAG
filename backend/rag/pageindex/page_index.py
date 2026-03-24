@@ -118,7 +118,19 @@ def toc_detector_single_page(content, model=None):
 
     response = ChatGPT_API(model=model, prompt=prompt)
     # print('response', response)
-    json_content = extract_json(response)    
+    
+    # Handle error responses
+    if response == "Error" or not response or response.startswith("Error"):
+        print(f"API error response, defaulting to 'no'")
+        return "no"
+    
+    json_content = extract_json(response)
+    
+    # Ensure we have the required key
+    if not json_content or 'toc_detected' not in json_content:
+        print(f"Invalid JSON response, defaulting to 'no'")
+        return "no"
+    
     return json_content['toc_detected']
 
 
@@ -136,7 +148,17 @@ def check_if_toc_extraction_is_complete(content, toc, model=None):
 
     prompt = prompt + '\n Document:\n' + content + '\n Table of contents:\n' + toc
     response = ChatGPT_API(model=model, prompt=prompt)
+    
+    # Handle error responses
+    if response == "Error" or not response or response.startswith("Error"):
+        return "yes"  # Assume complete on error
+    
     json_content = extract_json(response)
+    
+    # Ensure we have the required key
+    if not json_content or 'completed' not in json_content:
+        return "yes"  # Assume complete on error
+    
     return json_content['completed']
 
 
@@ -154,7 +176,17 @@ def check_if_toc_transformation_is_complete(content, toc, model=None):
 
     prompt = prompt + '\n Raw Table of contents:\n' + content + '\n Cleaned Table of contents:\n' + toc
     response = ChatGPT_API(model=model, prompt=prompt)
+    
+    # Handle error responses
+    if response == "Error" or not response or response.startswith("Error"):
+        return "yes"  # Assume complete on error
+    
     json_content = extract_json(response)
+    
+    # Ensure we have the required key
+    if not json_content or 'completed' not in json_content:
+        return "yes"  # Assume complete on error
+    
     return json_content['completed']
 
 def extract_toc_content(content, model=None):
@@ -216,7 +248,17 @@ def detect_page_index(toc_content, model=None):
     Directly return the final JSON structure. Do not output anything else."""
 
     response = ChatGPT_API(model=model, prompt=prompt)
+    
+    # Handle error responses
+    if response == "Error" or not response or response.startswith("Error"):
+        return "no"  # Default to no if API error
+    
     json_content = extract_json(response)
+    
+    # Ensure we have the required key
+    if not json_content or 'page_index_given_in_toc' not in json_content:
+        return "no"  # Default to no if parsing fails
+    
     return json_content['page_index_given_in_toc']
 
 def toc_extractor(page_list, toc_page_list, model):
@@ -679,7 +721,9 @@ def process_none_page_numbers(toc_items, page_list, start_index=1, model=None):
             item_copy = copy.deepcopy(item)
             del item_copy['page']
             result = add_page_number_to_toc(page_contents, item_copy, model)
-            if isinstance(result[0]['physical_index'], str) and result[0]['physical_index'].startswith('<physical_index'):
+            
+            # Check if result is not empty and has valid structure before accessing
+            if result and len(result) > 0 and isinstance(result[0].get('physical_index'), str) and result[0]['physical_index'].startswith('<physical_index'):
                 item['physical_index'] = int(result[0]['physical_index'].split('_')[-1].rstrip('>').strip())
                 del item['page']
     
@@ -1167,7 +1211,15 @@ def page_index_main(doc, opt=None):
             'structure': structure,
         }
 
-    return asyncio.run(page_index_builder())
+    # Try to get existing event loop, if not create a new one
+    try:
+        loop = asyncio.get_running_loop()
+        # If we're here, we're in an async context - need to handle differently
+        # Return the coroutine instead of running it
+        return page_index_builder()
+    except RuntimeError:
+        # No running loop, safe to use asyncio.run()
+        return asyncio.run(page_index_builder())
 
 
 def page_index(doc, model=None, toc_check_page_num=None, max_page_num_each_node=None, max_token_num_each_node=None,

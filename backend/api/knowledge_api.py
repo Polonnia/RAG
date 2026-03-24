@@ -4,6 +4,7 @@ from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory
 from rag.qa import qa_query
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
+from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
 import os
 from auth import get_current_user
@@ -179,3 +180,134 @@ async def view_pdf_file(filename: str, current_user: User = Depends(get_current_
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+# ==================== 思维导图相关API ====================
+
+@router.post("/mindmap/generate")
+async def generate_mindmap(filename: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    生成或获取文件的思维导图数据
+    - 如果已有结构文件，直接加载并返回思维导图
+    - 如果没有，自动生成结构文件，然后返回思维导图
+    """
+    try:
+        # 检查文件是否存在和权限
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        
+        # 仅支持PDF文件
+        if not filename.lower().endswith('.pdf'):
+            return JSONResponse(
+                status_code=400, 
+                content={"error": f"暂不支持{os.path.splitext(filename)[1]}格式的思维导图生成，仅支持PDF"}
+            )
+        
+        # 获取思维导图数据（使用异步版本）
+        mindmap_data = await get_mindmap_data_async(filename, file_path)
+        
+        if mindmap_data is None:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "思维导图生成失败"}
+            )
+        
+        return {
+            "status": "success",
+            "filename": filename,
+            "mindmap": mindmap_data
+        }
+        
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"思维导图生成异常: {str(e)}"}
+        )
+
+@router.post("/mindmap/regenerate")
+async def regenerate_mindmap(filename: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    强制重新生成思维导图（会覆盖已有的结构文件）
+    """
+    try:
+        # 检查文件是否存在和权限
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        
+        # 仅支持PDF文件
+        if not filename.lower().endswith('.pdf'):
+            return JSONResponse(
+                status_code=400, 
+                content={"error": f"暂不支持{os.path.splitext(filename)[1]}格式的思维导图生成，仅支持PDF"}
+            )
+        
+        # 获取思维导图数据（强制重新生成，使用异步版本）
+        mindmap_data = await get_mindmap_data_async(filename, file_path, force_regenerate=True)
+        
+        if mindmap_data is None:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "思维导图生成失败"}
+            )
+        
+        return {
+            "status": "success",
+            "filename": filename,
+            "message": "思维导图已重新生成",
+            "mindmap": mindmap_data
+        }
+        
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"思维导图重新生成异常: {str(e)}"}
+        )
+
+@router.post("/mindmap/search")
+async def search_mindmap(filename: str = Form(...), keyword: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    在思维导图中搜索关键词
+    """
+    try:
+        # 检查文件是否存在和权限
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        
+        # 获取思维导图数据（使用异步版本）
+        mindmap_data = await get_mindmap_data_async(filename, file_path)
+        
+        if mindmap_data is None:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "无法加载思维导图数据"}
+            )
+        
+        # 执行搜索
+        results = search_in_mindmap(mindmap_data, keyword)
+        
+        return {
+            "status": "success",
+            "keyword": keyword,
+            "results": results,
+            "count": len(results)
+        }
+        
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"搜索异常: {str(e)}"}
+        )

@@ -764,6 +764,12 @@ class ConfigLoader:
 
         self._validate_keys(user_dict)
         merged = {**self._default_dict, **user_dict}
+        
+        # Override model with environment variable if set
+        env_model = os.getenv("DEEPSEEK_MODEL")
+        if env_model:
+            merged["model"] = env_model
+        
         return config(**merged)
 
 def create_node_mapping(tree, include_page_ranges=False, max_page=None):  
