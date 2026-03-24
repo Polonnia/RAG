@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from datetime import datetime
 from typing import List
 from pathlib import Path
@@ -48,7 +49,6 @@ except ImportError:
 try:
     import docx
     from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-    from docx.oxml.ns import nsdecls
     from docx.oxml import parse_xml
     HAS_PYTHON_DOCX = True
 except ImportError:
@@ -59,6 +59,8 @@ from funasr import AutoModel
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
+AUDIO_TEXT_DIR = os.path.join(DB_DIR, 'audio_text')
+os.makedirs(AUDIO_TEXT_DIR, exist_ok=True)
 vector_db = get_vector_db()
 
 # 全局ASR模型（单例）
@@ -78,7 +80,8 @@ def get_asr_model():
             punc_model="ct-punc",
             # 长音频处理参数
             vad_kwargs={"max_single_segment_time": 30000},  # 30秒切片
-            device="cpu"  # 或"cuda:0，注意pytorch要安装cuda版本"
+            device="cpu",  # 或"cuda:0，注意pytorch要安装cuda版本"
+            disable_update=True
         )
     return _asr_model
 
@@ -89,7 +92,7 @@ def is_media_file(file_path: str) -> str:
         return 'video'
     if ext in SUPPORTED_AUDIO:
         return 'audio'
-    return None
+    return 'unknown'
 
 def process_media_file(file_path: str) -> List[Dict[str, Any]]:
     """
@@ -99,6 +102,9 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
     if not media_type:
         return []
     
+    audio_path = None
+    cleanup_temp_audio = False
+
     try:
         print(f"处理{media_type}文件: {os.path.basename(file_path)}")
         
@@ -121,12 +127,18 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
                 audio.export(temp_path, format='wav')
                 
                 audio_path = temp_path
+                cleanup_temp_audio = True
                 print(f"转换完成: {temp_path}")
         
         # 视频文件处理
         elif media_type == 'video':
             print("提取音频...")
-            audio_path = str(AudioConverter.extract_audio_from_video(Path(file_path)))
+            import tempfile
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            temp_path = temp_file.name
+            temp_file.close()
+            audio_path = str(AudioConverter.extract_audio_from_video(Path(file_path), output_path=Path(temp_path)))
+            cleanup_temp_audio = True
         
         # 语音识别
         print("语音识别中...")
@@ -138,15 +150,6 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
         print(f"识别完成，获得 {len(results)} 个结果")
         print(results)
         
-        
-        # 清理临时文件
-        if audio_path != file_path:
-            try:
-                os.remove(audio_path)
-                print("临时文件已清理")
-            except:
-                pass
-        
         return results
         
     except Exception as e:
@@ -154,6 +157,26 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
         import traceback
         traceback.print_exc()
         return []
+    finally:
+        if cleanup_temp_audio and audio_path and os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+                print("临时音频文件已清理")
+            except Exception as cleanup_error:
+                print(f"清理临时音频文件失败: {cleanup_error}")
+
+
+def save_asr_sentences_to_json(records: List[Dict[str, Any]], source_file: str) -> str:
+
+    source_stem = Path(source_file).stem
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_path = os.path.join(AUDIO_TEXT_DIR, f'{source_stem}_{timestamp}.json')
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
+
+    print(f"音频识别结果已保存: {output_path}")
+    return output_path
 
 # def is_scanned_pdf(file_path: str) -> bool:
 #     """检测是否为扫描版PDF"""
@@ -201,40 +224,6 @@ def parse_doc_file(file_path):
     except Exception as e:
         print(f"解析.doc文件时出错: {str(e)}")
         return None
-
-# def process_scanned_pdf(file_path: str) -> List[Document]:
-#     """处理扫描版PDF"""
-#     try:
-#         print("检测到扫描版PDF，开始OCR处理...")
-        
-#         # 使用OCR处理PDF
-#         ocr_results = get_ocr_processor().ocr_pdf(file_path)
-        
-#         if not ocr_results:
-#             print("OCR处理失败，无法提取文本")
-#             return []
-        
-#         # 转换为Document对象
-#         docs = []
-#         for result in ocr_results:
-#             if result['text'].strip():
-#                 doc = Document(
-#                     page_content=result['text'],
-#                     metadata={
-#                         'source': os.path.basename(file_path),
-#                         'page': result['page'],
-#                         'processing_method': 'OCR',
-#                         'file_path': file_path
-#                     }
-#                 )
-#                 docs.append(doc)
-       
-#         print(f"OCR处理完成，生成了 {len(docs)} 个文档片段")
-#         return docs
-        
-#     except Exception as e:
-#         print(f"处理扫描版PDF失败: {str(e)}")
-#         return []
 
 def add_page_numbers_to_word(file_path: str) -> str:
     """为Word文档添加页码，返回带页码的临时文件路径"""
@@ -330,9 +319,9 @@ def process_word_with_pages(file_path: str) -> List[Document]:
         print(f"处理Word文档失败: {str(e)}")
         return []
 
-def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
-    """时间戳直接对应分词结果"""
-    docs = []
+def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """时间戳直接对应分词结果，直接返回JSON记录"""
+    records = []
     
     for item in asr_data:
         text = item.get('text', '')
@@ -370,16 +359,27 @@ def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Document]:
                     start_time = current_timestamps[0][0] / 1000.0
                     end_time = current_timestamps[-1][1] / 1000.0
                     
-                    docs.append(Document(
-                        page_content=sentence,
-                        metadata={
-                            'start_time': start_time,
-                            'end_time': end_time
-                        }
-                    ))
+                    records.append({
+                        'sentence': sentence,
+                        'start_time': start_time,
+                        'end_time': end_time
+                    })
                     
                     current_words = []
                     current_timestamps = []
+    return records
+
+
+def asr_records_to_documents(records: List[Dict[str, Any]]) -> List[Document]:
+    docs = []
+    for item in records:
+        docs.append(Document(
+            page_content=item.get('sentence', ''),
+            metadata={
+                'start_time': item.get('start_time'),
+                'end_time': item.get('end_time')
+            }
+        ))
     return docs
 
 def ingest_file(file_path):
@@ -393,25 +393,29 @@ def ingest_file(file_path):
                 raise ValueError(f"媒体文件ASR处理返回空结果")
             
             print(f"ASR处理完成，获得 {len(asr_result)} 个结果")
-            docs = process_asr_result(asr_result)
+            asr_records = process_asr_result(asr_result)
             
-            if not docs:
+            if not asr_records:
                 raise ValueError("ASR结果处理完成，但未生成任何Document")
+
+            # docs = asr_records_to_documents(asr_records)
             
             filename = os.path.basename(file_path)
             file_path_str = str(file_path)  # 确保是字符串
+
+            json_path = save_asr_sentences_to_json(asr_records, file_path_str)
     
             # 为每个文档添加元数据
-            for doc in docs:
-                doc.metadata['source'] = filename
-                doc.metadata['file_path'] = file_path_str
+            # for doc in docs:
+            #     doc.metadata['source'] = filename
+            #     doc.metadata['file_path'] = file_path_str
             
-            if docs:
-                vector_db.add_documents(docs)
-                print(f"已处理并入库 {len(docs)} 个文档片段")
-            else:
-                print("媒体文件处理失败，未生成文档")
-            return
+            # if docs:
+            #     vector_db.add_documents(docs)
+            #     print(f"已处理并入库 {len(docs)} 个文档片段")
+            # else:
+            #     print("媒体文件处理失败，未生成文档")
+            return json_path
         
         ext = os.path.splitext(file_path)[1].lower()
         # 尝试多种PDF解析器

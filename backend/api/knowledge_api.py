@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, FileResponse
 from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory
-from rag.qa import qa_query
+from rag.pageindex_search import MultiDocumentSearcher
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
@@ -12,12 +12,13 @@ from auth import get_current_user
 router = APIRouter()
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+TREE_JSON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'trees')
 
 @router.post("/upload")
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
     try:
         db = next(get_db())
-        upload_result = upload_knowledge_files(files=files, current_user=current_user, db=db)
+        upload_result = await upload_knowledge_files(files=files, current_user=current_user, db=db)
         results = upload_result["results"]
         success_count = upload_result["success_count"]
         error_count = upload_result["error_count"]
@@ -57,8 +58,58 @@ async def delete_knowledge_file_api(filename: str, current_user: User = Depends(
 @router.post("/qa")
 async def qa(question: str = Form(...)):
     try:
-        result = qa_query(question)
-        return result  # 包含answer和sources
+        searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
+        searcher.load_documents()
+
+        if not searcher.documents:
+            return {
+                "answer": "当前没有可检索的结构化文档，请先上传并处理文件。",
+                "sources": []
+            }
+
+        result = await searcher.search(question)
+
+        sources = []
+        for doc_result in result.get('documents', []):
+            doc_name = doc_result.get('doc_name', '未知来源')
+            doc_id = doc_result.get('doc_id')
+            for node in doc_result.get('results', {}).get('nodes', []):
+                page_segments = node.get('page_segments') or []
+                if page_segments:
+                    for seg in page_segments:
+                        sources.append({
+                            "content": seg.get('text', ''),
+                            "metadata": {
+                                "source": doc_name,
+                                "page": seg.get('page', '?'),
+                                "file_path": doc_id,
+                                "start_time": node.get('start_time'),
+                                "end_time": node.get('end_time')
+                            }
+                        })
+                else:
+                    page_value = '?'
+                    page_range = str(node.get('page_range', '')).strip()
+                    if page_range:
+                        first_page = page_range.split('-', 1)[0].strip()
+                        if first_page.isdigit():
+                            page_value = int(first_page)
+
+                    sources.append({
+                        "content": node.get('text', ''),
+                        "metadata": {
+                            "source": doc_name,
+                            "page": page_value,
+                            "file_path": doc_id,
+                            "start_time": node.get('start_time'),
+                            "end_time": node.get('end_time')
+                        }
+                    })
+
+        return {
+            "answer": result.get('answer', ''),
+            "sources": sources
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"问答失败: {str(e)}"})
 

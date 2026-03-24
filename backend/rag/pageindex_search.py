@@ -1,6 +1,7 @@
 import os  
 import json  
 import asyncio  
+import re
 from typing import List, Dict, Any, Optional
 import pageindex.utils as utils  
 from .llm_client import get_default_model
@@ -12,6 +13,59 @@ class MultiDocumentSearcher:
         self.json_dir = json_dir  
         self.model = model or get_default_model()
         self.documents = {}  # {doc_id: {"tree": tree, "metadata": metadata}}  
+
+    @staticmethod
+    def _iter_nodes(tree):
+        if isinstance(tree, dict):
+            yield tree
+            for child in tree.get('nodes', []) or []:
+                yield from MultiDocumentSearcher._iter_nodes(child)
+        elif isinstance(tree, list):
+            for item in tree:
+                yield from MultiDocumentSearcher._iter_nodes(item)
+
+    @staticmethod
+    def _detect_doc_type(tree, doc_name: str) -> str:
+        lower_name = (doc_name or '').lower()
+        if lower_name.endswith(('.mp3', '.wav', '.m4a', '.aac', '.ogg', '.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv')):
+            return 'media'
+        if lower_name.endswith(('.pdf', '.md', '.markdown', '.doc', '.docx', '.ppt', '.pptx')):
+            return 'pdf'
+
+        for node in MultiDocumentSearcher._iter_nodes(tree):
+            if node.get('start_time') is not None or node.get('end_time') is not None:
+                return 'media'
+        return 'pdf'
+
+    @staticmethod
+    def _format_time(seconds):
+        if seconds is None:
+            return "?"
+        sec = int(round(float(seconds)))
+        hours = sec // 3600
+        minutes = (sec % 3600) // 60
+        secs = sec % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def _extract_page_segments(text: str) -> List[Dict[str, Any]]:
+        """从带 <physical_index_x> 标签的文本中提取页级片段"""
+        if not text:
+            return []
+
+        pattern = re.compile(r'<physical_index_(\d+)>\s*(.*?)\s*<physical_index_\1>', re.DOTALL)
+        segments = []
+        for match in pattern.finditer(text):
+            page_num = int(match.group(1))
+            page_text = match.group(2).strip()
+            if page_text:
+                segments.append({
+                    "page": page_num,
+                    "text": page_text
+                })
+        return segments
           
     def load_documents(self):  
         """从目录加载所有JSON结构文件"""  
@@ -35,7 +89,8 @@ class MultiDocumentSearcher:
                 "metadata": {  
                     "name": data.get("doc_name", doc_name),  
                     "description": data.get("doc_description", ""),  
-                    "file_path": file_path  
+                    "file_path": file_path,
+                    "doc_type": self._detect_doc_type(data.get("structure", []), data.get("doc_name", doc_name))
                 }  
             }  
               
@@ -72,6 +127,7 @@ class MultiDocumentSearcher:
     async def _search_single_document(self, doc_id: str, doc_data: Dict, query: str) -> Dict[str, Any]:  
         """在单个文档中搜索"""  
         tree = doc_data["tree"]  
+        doc_type = doc_data.get("metadata", {}).get("doc_type", "pdf")
           
         # 移除文本字段以减少token数量  
         tree_without_text = utils.remove_fields(tree.copy(), fields=['text'])  
@@ -97,26 +153,34 @@ Directly return the final JSON structure. Do not output anything else.
           
         # 调用LLM进行搜索  
         tree_search_result = await utils.ChatGPT_API_async(self.model, search_prompt)  
-        tree_search_json = json.loads(tree_search_result)  
+        tree_search_json = utils.extract_json(tree_search_result)  
           
         # 创建节点映射  
         node_map = utils.create_node_mapping(tree)  
           
         # 提取相关节点内容  
         relevant_nodes = []  
-        for node_id in tree_search_json["node_list"]:  
+        node_list = tree_search_json.get("node_list", []) if isinstance(tree_search_json, dict) else []
+        for node_id in node_list:  
             if node_id in node_map:  
                 node_info = node_map[node_id]  
+                start_time = node_info["node"].get("start_time")
+                end_time = node_info["node"].get("end_time")
                 relevant_nodes.append({  
                     "node_id": node_id,  
                     "title": node_info["node"]["title"],  
                     "page_range": f"{node_info['start_index']}-{node_info['end_index']}" if 'start_index' in node_info else f"line {node_info.get('line_num', 'N/A')}",  
                     "summary": node_info["node"].get("summary", ""),  
-                    "text": node_info["node"].get("text", "")  
+                    "text": node_info["node"].get("text", ""),
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "time_range": f"{self._format_time(start_time)}-{self._format_time(end_time)}" if start_time is not None or end_time is not None else "",
+                    "doc_type": doc_type,
+                    "page_segments": self._extract_page_segments(node_info["node"].get("text", ""))
                 })  
           
         return {  
-            "thinking": tree_search_json["thinking"],  
+            "thinking": tree_search_json.get("thinking", ""),  
             "nodes": relevant_nodes  
         }  
       
@@ -130,12 +194,23 @@ Directly return the final JSON structure. Do not output anything else.
         for doc_result in doc_results:  
             doc_name = doc_result["doc_name"]  
             nodes = doc_result["results"]["nodes"]  
+            doc_type = doc_result.get("results", {}).get("nodes", [{}])[0].get("doc_type", "pdf") if nodes else "pdf"
               
             context_parts = [f"\n=== 文档: {doc_name} ==="]  
             for node in nodes:  
                 context_parts.append(f"章节: {node['title']}")  
-                context_parts.append(f"位置: {node['page_range']}")  
-                context_parts.append(f"内容: {node['text'][:500]}...")  
+                if doc_type == 'media':
+                    context_parts.append(f"时间段: {node.get('time_range', '')}")
+                else:
+                    context_parts.append(f"位置: {node['page_range']}")  
+
+                page_segments = node.get("page_segments", [])
+                if doc_type != 'media' and page_segments:
+                    for seg in page_segments:
+                        snippet = seg["text"][:400].replace("\n", " ")
+                        context_parts.append(f"页码 p{seg['page']}: {snippet}...")
+                else:
+                    context_parts.append(f"内容: {node['text'][:500]}...")  
               
             all_context.append("\n".join(context_parts))  
           
@@ -143,15 +218,19 @@ Directly return the final JSON structure. Do not output anything else.
           
         # 生成最终答案  
         answer_prompt = f"""  
-基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。  
+    基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。  
   
-问题: {query}  
+    问题: {query}  
   
-文档内容:  
-{combined_context}  
+    文档内容:  
+    {combined_context}  
   
-请提供清晰的答案，并引用具体的文档和章节。  
-"""  
+    要求：
+    1) PDF/文档类型优先引用“页码 pX”证据，格式示例：[文档名 p23]。
+    2) 媒体类型必须引用时间段，格式示例：[文档名 00:10-00:35]。
+    3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档名 12-15]。
+    4) 不要把媒体来源写成页码。
+    """  
           
         answer = await utils.ChatGPT_API_async(self.model, answer_prompt)  
         return answer  

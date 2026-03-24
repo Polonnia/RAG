@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+from ingest import ingest_file
 from pageindex import *
 from pageindex.page_index_md import md_to_tree
 
@@ -9,8 +10,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process PDF or Markdown document and generate structure')
     parser.add_argument('--pdf_path', type=str, help='Path to the PDF file')
     parser.add_argument('--md_path', type=str, help='Path to the Markdown file')
+    parser.add_argument('--media_path', type=str, help='Path to the media file')
 
     parser.add_argument('--model', type=str, default='deepseek-chat', help='Model to use')
+    parser.add_argument('--llm-max-concurrency', type=int, default=5,
+                      help='Maximum number of concurrent LLM requests in async TOC pipeline')
 
     parser.add_argument('--toc-check-pages', type=int, default=20, 
                       help='Number of pages to check for table of contents (PDF only)')
@@ -25,10 +29,12 @@ if __name__ == "__main__":
                       help='Whether to add node id to the node')
     parser.add_argument('--if-add-node-summary', type=str, default='yes',
                       help='Whether to add summary to the node')
-    parser.add_argument('--if-add-doc-description', type=str, default='no',
+    parser.add_argument('--if-add-doc-description', type=str, default='yes',
                       help='Whether to add doc description to the doc')
     parser.add_argument('--if-add-node-text', type=str, default='yes',
                       help='Whether to add text to the node')
+    parser.add_argument('--if-add-page-labels', type=str, default='yes',
+                      help='Whether to mark page labels in node text (PDF only)')
                       
     # Markdown specific arguments
     parser.add_argument('--if-thinning', type=str, default='no',
@@ -40,20 +46,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Validate that exactly one file type is specified
-    if not args.pdf_path and not args.md_path:
-        raise ValueError("Either --pdf_path or --md_path must be specified")
-    if args.pdf_path and args.md_path:
-        raise ValueError("Only one of --pdf_path or --md_path can be specified")
+    if not args.pdf_path and not args.md_path and not args.media_path:
+        raise ValueError("Either --pdf_path or --md_path or --media_path must be specified")
+    if args.pdf_path and args.md_path and args.media_path:
+        raise ValueError("Only one of --pdf_path or --md_path or --media_path can be specified")
     
     if args.pdf_path:
         # Validate PDF file
         if not args.pdf_path.lower().endswith('.pdf'):
             raise ValueError("PDF file must have .pdf extension")
-        
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        uploads_dir = os.path.join(project_root, 'uploads')
-        os.makedirs(uploads_dir, exist_ok=True)
-        args.pdf_path = os.path.abspath(os.path.join(uploads_dir, args.pdf_path))
         
         if not os.path.isfile(args.pdf_path):
             raise ValueError(f"PDF file not found: {args.pdf_path}")
@@ -62,6 +63,7 @@ if __name__ == "__main__":
         # Configure options
         opt = config(
             model=args.model,
+            llm_max_concurrency=args.llm_max_concurrency,
             toc_check_page_num=args.toc_check_pages,
             toc_page_range=args.toc_page_range,
             max_page_num_each_node=args.max_pages_per_node,
@@ -69,7 +71,8 @@ if __name__ == "__main__":
             if_add_node_id=args.if_add_node_id,
             if_add_node_summary=args.if_add_node_summary,
             if_add_doc_description=args.if_add_doc_description,
-            if_add_node_text=args.if_add_node_text
+            if_add_node_text=args.if_add_node_text,
+            if_add_page_labels=args.if_add_page_labels
         )
 
         # Process the PDF
@@ -86,6 +89,24 @@ if __name__ == "__main__":
             json.dump(toc_with_page_number, f, indent=2)
         
         print(f'Tree structure saved to: {output_file}')
+        
+    elif args.media_path:
+        args.media_path = os.path.abspath(args.media_path)
+        # Process media file
+        print('Processing media file...')
+        text_path = ingest_file(args.media_path)
+        user_opt = {
+            'audio_json_path': text_path,
+            'model': args.model,
+            'if_add_node_summary': args.if_add_node_summary,
+            'if_add_doc_description': args.if_add_doc_description,
+            'if_add_node_text': args.if_add_node_text,
+            'if_add_node_id': args.if_add_node_id
+        }
+        
+        audio_json_to_tree(**user_opt)
+        
+
             
     elif args.md_path:
         # Validate Markdown file

@@ -45,12 +45,16 @@ class VideoProcessor:
             
 class AudioConverter:
     @staticmethod
-    def extract_audio_from_video(video_path: Path) -> Path:
+    def extract_audio_from_video(video_path: Path, output_path: Path = None) -> Path:
         """
         从视频中提取音频并转换为指定格式
         """
-        audio_filename = video_path.stem + '.wav'
-        audio_path = AUDIO_DIR / audio_filename
+        if output_path is None:
+            audio_filename = video_path.stem + '.wav'
+            audio_path = AUDIO_DIR / audio_filename
+        else:
+            audio_path = Path(output_path)
+            audio_path.parent.mkdir(parents=True, exist_ok=True)
         return AudioConverter._convert(video_path, audio_path)
     
     @staticmethod

@@ -1,4 +1,5 @@
 model: "deepseek-chat"
+llm_max_concurrency: 5
 toc_check_page_num: 20
 toc_page_range: null
 max_page_num_each_node: 10
@@ -7,3 +8,4 @@ if_add_node_id: "yes"
 if_add_node_summary: "yes"
 if_add_doc_description: "yes"
 if_add_node_text: "yes"
+if_add_page_labels: "yes"

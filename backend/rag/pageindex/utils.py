@@ -703,7 +703,7 @@ def create_clean_structure_for_description(structure):
 
 def generate_doc_description(structure, model=None):
     prompt = f"""Your are an expert in generating descriptions for a document.
-    You are given a structure of a document. Your task is to generate a one-sentence description for the document, which makes it easy to distinguish the document from other documents.
+    You are given a structure of a document. Your task is to generate a description for the document, which makes it easy to distinguish the document from other documents. Make sure the description covers ALL the main points of the document based on the structure. Try to make it concise but informative.
         
     Document Structure: {structure}
     
@@ -817,16 +817,386 @@ def create_node_mapping(tree, include_page_ranges=False, max_page=None):
     traverse_tree(tree)  
     return node_map
 
-def print_wrapped(text, width=80):  
-    """  
-    格式化输出文本，自动换行  
-      
-    Args:  
-        text: 要输出的文本  
-        width: 每行最大宽度  
-    """  
-    import textwrap  
-      
-    wrapped_lines = textwrap.wrap(text, width=width)  
-    for line in wrapped_lines:  
-        print(line)
+def _normalize_audio_sentence_records(records):
+    """Normalize sentence-level ASR records into a clean internal list."""
+    normalized = []
+    for idx, item in enumerate(records or [], start=1):
+        sentence = str(item.get('sentence', '')).strip()
+        if not sentence:
+            continue
+        try:
+            start_time = float(item.get('start_time', 0.0))
+            end_time = float(item.get('end_time', start_time))
+        except Exception:
+            start_time = 0.0
+            end_time = 0.0
+        if end_time < start_time:
+            end_time = start_time
+        normalized.append({
+            'sid': f's{idx}',
+            'sentence': sentence,
+            'start_time': round(start_time, 3),
+            'end_time': round(end_time, 3),
+        })
+    return normalized
+
+
+def _fallback_merge_audio_paragraphs(records, max_sent_per_paragraph=5, max_duration=25.0):
+    """Fallback paragraph merger used when LLM output is invalid."""
+    paragraphs = []
+    current = []
+
+    def flush_current():
+        if not current:
+            return
+        paragraph_text = ''.join([x['sentence'] for x in current]).strip()
+        if not paragraph_text:
+            return
+        paragraphs.append({
+            'paragraph': paragraph_text,
+            'start_time': current[0]['start_time'],
+            'end_time': current[-1]['end_time'],
+        })
+
+    for item in records:
+        if not current:
+            current.append(item)
+            continue
+
+        duration = item['end_time'] - current[0]['start_time']
+        if len(current) >= max_sent_per_paragraph or duration >= max_duration:
+            flush_current()
+            current = [item]
+        else:
+            current.append(item)
+
+    flush_current()
+    return paragraphs
+
+
+def _validate_sentence_ranges(ranges, sentence_count):
+    """Validate that LLM paragraph ranges fully and sequentially cover all sentences."""
+    if not isinstance(ranges, list) or not ranges:
+        return False
+
+    expected_start = 1
+    for block in ranges:
+        if not isinstance(block, dict):
+            return False
+        start_idx = block.get('start_sentence_index')
+        end_idx = block.get('end_sentence_index')
+        if not isinstance(start_idx, int) or not isinstance(end_idx, int):
+            return False
+        if start_idx != expected_start:
+            return False
+        if end_idx < start_idx or end_idx > sentence_count:
+            return False
+        expected_start = end_idx + 1
+
+    return expected_start == sentence_count + 1
+
+
+def merge_audio_sentences_with_llm(records, model=None, max_sentences_per_batch=120):
+    """
+    Convert sentence-level ASR records into semantic paragraphs with merged timestamps.
+    Returns: [{paragraph, start_time, end_time, pid}]
+    """
+    normalized = _normalize_audio_sentence_records(records)
+    if not normalized:
+        return []
+
+    if len(normalized) <= max_sentences_per_batch:
+        batches = [normalized]
+    else:
+        batches = [normalized[i:i + max_sentences_per_batch] for i in range(0, len(normalized), max_sentences_per_batch)]
+
+    merged_paragraphs = []
+
+    for batch in batches:
+        sentence_lines = []
+        for i, item in enumerate(batch, start=1):
+            sentence_lines.append(
+                f"[{i}] ({item['start_time']:.3f}-{item['end_time']:.3f}) {item['sentence']}"
+            )
+        transcript = '\n'.join(sentence_lines)
+
+        prompt = f"""
+You are a transcript editing assistant.
+You are given ASR sentences in chronological order. Please:
+1) merge them into semantically coherent paragraphs;
+2) keep the original order;
+3) do not drop or duplicate any sentence;
+4) only apply light typo/punctuation cleanup, without changing facts.
+
+Return JSON only in this format:
+{{
+    "paragraphs": [
+        {{
+            "start_sentence_index": 1,
+            "end_sentence_index": 3,
+            "paragraph": "merged paragraph text"
+        }}
+    ]
+}}
+
+Requirements:
+- Sentence indices must continuously cover all sentences from 1..N.
+- Each paragraph must contain at least one sentence.
+
+Input sentences:
+{transcript}
+"""
+
+        response = ChatGPT_API(model=model, prompt=prompt)
+        json_content = extract_json(response)
+        ranges = json_content.get('paragraphs', []) if isinstance(json_content, dict) else []
+
+        if not _validate_sentence_ranges(ranges, len(batch)):
+            batch_paragraphs = _fallback_merge_audio_paragraphs(batch)
+        else:
+            batch_paragraphs = []
+            for block in ranges:
+                s = block['start_sentence_index'] - 1
+                e = block['end_sentence_index']
+                selected = batch[s:e]
+                paragraph_text = str(block.get('paragraph', '')).strip()
+                if not paragraph_text:
+                    paragraph_text = ''.join([x['sentence'] for x in selected]).strip()
+                batch_paragraphs.append({
+                    'paragraph': paragraph_text,
+                    'start_time': selected[0]['start_time'],
+                    'end_time': selected[-1]['end_time'],
+                })
+
+        merged_paragraphs.extend(batch_paragraphs)
+
+    for idx, p in enumerate(merged_paragraphs, start=1):
+        p['pid'] = f'p{idx}'
+
+    return merged_paragraphs
+
+
+def _flatten_audio_outline_ranges(outline_nodes):
+    """Collect all paragraph-id ranges from an outline tree for quick validation."""
+    ranges = []
+
+    def walk(nodes):
+        if not isinstance(nodes, list):
+            return
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            start_pid = node.get('start_paragraph_id')
+            end_pid = node.get('end_paragraph_id')
+            if isinstance(start_pid, str) and isinstance(end_pid, str):
+                ranges.append((start_pid, end_pid))
+            walk(node.get('children', []))
+
+    walk(outline_nodes)
+    return ranges
+
+
+def _parse_paragraph_id_to_index(paragraph_id):
+    """Parse paragraph id like 'p12' to a 0-based index."""
+    text = str(paragraph_id or '').strip().lower()
+    if not text.startswith('p'):
+        return None
+    value_text = text[1:]
+    if not value_text.isdigit():
+        return None
+    value = int(value_text)
+    if value <= 0:
+        return None
+    return value - 1
+
+def _build_paragraph_leaf_nodes(paragraphs, start_idx, end_idx):
+    """Build leaf nodes from paragraph ranges."""
+    leaves = []
+    for i in range(start_idx, end_idx + 1):
+        paragraph = paragraphs[i]
+        leaves.append({
+            'title': f"Paragraph {i + 1}",
+            'start_time': paragraph['start_time'],
+            'end_time': paragraph['end_time'],
+            'text': paragraph['paragraph'],
+        })
+    return leaves
+
+
+def _build_audio_node_from_outline(node_outline, paragraphs):
+    """Convert one outline node into the final audio tree node format."""
+    title = str(node_outline.get('title', 'Untitled Section')).strip() or 'Untitled Section'
+    start_idx = _parse_paragraph_id_to_index(node_outline.get('start_paragraph_id'))
+    end_idx = _parse_paragraph_id_to_index(node_outline.get('end_paragraph_id'))
+
+    if start_idx is None or end_idx is None:
+        return None
+
+    if start_idx < 0 or end_idx >= len(paragraphs) or end_idx < start_idx:
+        return None
+
+    segment = paragraphs[start_idx:end_idx + 1]
+    node = {
+        'title': title,
+        'start_time': segment[0]['start_time'],
+        'end_time': segment[-1]['end_time'],
+        'text': '\n\n'.join([p['paragraph'] for p in segment]).strip(),
+    }
+
+    children_outline = node_outline.get('children', [])
+    children = []
+    if isinstance(children_outline, list) and children_outline:
+        for child_outline in children_outline:
+            child_node = _build_audio_node_from_outline(child_outline, paragraphs)
+            if child_node is not None:
+                children.append(child_node)
+
+    if children:
+        node['nodes'] = children
+
+    return node
+
+
+def build_audio_structure_with_llm(paragraphs, model=None):
+    """
+    Ask LLM to organize paragraphs into a hierarchical chapter structure,
+    then map it into nodes similar to the PDF tree format.
+    """
+    if not paragraphs:
+        return []
+
+    paragraph_lines = []
+    for p in paragraphs:
+        snippet = p['paragraph']
+        if len(snippet) > 120:
+            snippet = snippet[:120] + '...'
+        paragraph_lines.append(
+            f"{p['pid']} ({p['start_time']:.3f}-{p['end_time']:.3f}): {snippet}"
+        )
+
+        prompt = f"""
+You are a content structuring assistant.
+Given chronologically ordered paragraphs (from one video transcript), create a logical chapter tree.
+The source has no table of contents, so infer topic boundaries and hierarchy depth yourself (1 to 3 levels).
+
+Return JSON only in this format:
+{{
+    "chapters": [
+        {{
+            "title": "chapter title",
+            "start_paragraph_id": "p1",
+            "end_paragraph_id": "p5",
+            "children": [
+                {{
+                    "title": "subchapter title",
+                    "start_paragraph_id": "p1",
+                    "end_paragraph_id": "p2",
+                    "children": []
+                }}
+            ]
+        }}
+    ]
+}}
+
+Rules:
+- Every chapter range must use existing paragraph IDs.
+- Sibling chapters must be in chronological order.
+- Top-level chapters should cover all paragraphs from p1 to pN, with minimal overlap.
+- Child ranges must be within their parent range.
+
+Paragraph list:
+{chr(10).join(paragraph_lines)}
+"""
+
+    response = ChatGPT_API(model=model, prompt=prompt)
+    json_content = extract_json(response)
+    chapters = json_content.get('chapters', []) if isinstance(json_content, dict) else []
+
+    outline_ranges = _flatten_audio_outline_ranges(chapters)
+    if not chapters or not outline_ranges:
+        return [{
+            'title': 'Full Video Content',
+            'start_time': paragraphs[0]['start_time'],
+            'end_time': paragraphs[-1]['end_time'],
+            'text': '\n\n'.join([p['paragraph'] for p in paragraphs]).strip()
+        }]
+
+    built = []
+    for item in chapters:
+        node = _build_audio_node_from_outline(item, paragraphs)
+        if node is not None:
+            built.append(node)
+
+    if not built:
+        return [{
+            'title': 'Full Video Content',
+            'start_time': paragraphs[0]['start_time'],
+            'end_time': paragraphs[-1]['end_time'],
+            'text': '\n\n'.join([p['paragraph'] for p in paragraphs]).strip()
+        }]
+
+    return built
+
+
+def audio_json_to_tree(audio_json_path,
+                       model=None,
+                       if_add_node_id='yes',
+                       if_add_node_summary='yes',
+                       if_add_doc_description='yes',
+                       if_add_node_text='yes'):
+    """
+        Build a PDF-like hierarchical tree from sentence-level ASR JSON.
+
+        Input JSON format (sentence-level):
+    [
+      {"sentence": "...", "start_time": 0.0, "end_time": 1.2},
+      ...
+    ]
+
+        Output format:
+    {
+      "doc_name": "xxx.json",
+            "doc_description": "...",
+      "structure": [ ... ]
+    }
+    """
+    with open(audio_json_path, 'r', encoding='utf-8') as f:
+        raw_records = json.load(f)
+
+    if not isinstance(raw_records, list) or not raw_records:
+        raise ValueError('Audio JSON is empty or invalid; expected a sentence object list')
+
+    paragraphs = merge_audio_sentences_with_llm(raw_records, model=model)
+    if not paragraphs:
+        raise ValueError('Failed to generate valid paragraphs from audio records')
+
+    structure = build_audio_structure_with_llm(paragraphs, model=model)
+    if not structure:
+        raise ValueError('Failed to generate a valid chapter structure from paragraphs')
+
+    if if_add_node_id == 'yes':
+        write_node_id(structure)
+
+    if if_add_node_summary == 'yes':
+        asyncio.run(generate_summaries_for_structure(structure, model=model))
+
+    if if_add_node_text != 'yes':
+        remove_structure_text(structure)
+
+    result = {
+        'doc_name': os.path.basename(audio_json_path),
+        'structure': structure,
+    }
+
+    if if_add_doc_description == 'yes':
+        clean_structure = create_clean_structure_for_description(structure)
+        result['doc_description'] = generate_doc_description(clean_structure, model=model)
+
+    trees_dir = Path(__file__).resolve().parent.parent / 'db' / 'trees'
+    trees_dir.mkdir(parents=True, exist_ok=True)
+    output_name = f"{Path(audio_json_path).stem}_structure.json"
+    output_path = trees_dir / output_name
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    return result
