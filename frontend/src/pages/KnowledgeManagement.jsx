@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message, Modal } from 'antd';
 const { Text } = Typography;
-import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined, FileTextOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
+import axios from 'axios';
 import http from '../api/http';
 import getApiUrl from '../apiConfig';
 import AppLayout from '../components/layout/AppLayout';
+import MindMapViewer from '../components/MindMapViewer';
 
 export default function KnowledgeManagement() {
   const [fileList, setFileList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [knowledgeFiles, setKnowledgeFiles] = useState([]);
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewFile, setPreviewFile] = useState(null);
+  const [mindmapVisible, setMindmapVisible] = useState(false);
+  const [mindmapFile, setMindmapFile] = useState(null);
 
   useEffect(() => {
     fetchKnowledgeFiles();
@@ -99,9 +101,9 @@ export default function KnowledgeManagement() {
     }
   };
 
-  const handlePreviewFile = (file) => {
-    setPreviewFile(file);
-    setPreviewVisible(true);
+  const handleViewMindmap = (file) => {
+    setMindmapFile(file);
+    setMindmapVisible(true);
   };
 
   const getFileTypeTag = (filename) => {
@@ -186,15 +188,18 @@ export default function KnowledgeManagement() {
               return (
                 <List.Item
                   actions={[
-                    <Button
-                      type="text"
-                      icon={<FileTextOutlined />}
-                      onClick={() => handlePreviewFile(file)}
-                      size="small"
-                      style={{ marginRight: 8 }}
-                    >
-                      查看
-                    </Button>,
+                    file.filename.toLowerCase().endsWith('.pdf') && (
+                      <Button
+                        type="text"
+                        icon={<DatabaseOutlined />}
+                        onClick={() => handleViewMindmap(file)}
+                        size="small"
+                        style={{ marginRight: 8 }}
+                        title="查看思维导图"
+                      >
+                        思维导图
+                      </Button>
+                    ),
                     <Switch
                       checked={file.student_can_download}
                       checkedChildren="可下载"
@@ -250,61 +255,20 @@ export default function KnowledgeManagement() {
       </Card>
 
       <Modal
-        title={`查看文件: ${previewFile?.filename || ''}`}
-        open={previewVisible}
-        onCancel={() => setPreviewVisible(false)}
+        title={`思维导图: ${mindmapFile?.filename || ''}`}
+        open={mindmapVisible}
+        onCancel={() => setMindmapVisible(false)}
         footer={null}
-        width={800}
-        style={{ top: 20 }}
+        width="90%"
+        style={{ top: 20, maxWidth: 1400 }}
+        bodyStyle={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}
       >
-        {previewFile && (
-          <div>
-            <div style={{ marginBottom: 16, padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
-              <Space direction="vertical" size="small">
-                <Text strong>文件名: </Text><Text>{previewFile.filename}</Text><br />
-                <Text strong>上传时间: </Text><Text>{previewFile.upload_time}</Text><br />
-                <Text strong>文件大小: </Text><Text>{previewFile.file_size_display}</Text><br />
-                <Text strong>上传用户: </Text><Text>{previewFile.uploaded_by}</Text><br />
-                <Text strong>文件类型: </Text><Text>{previewFile.file_type}</Text>
-              </Space>
-            </div>
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Button
-                type="primary"
-                icon={<EyeOutlined />}
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem('token');
-                    const response = await fetch(`${getApiUrl()}/download/${encodeURIComponent(previewFile.filename)}`, {
-                      headers: {
-                        'Authorization': `Bearer ${token}`
-                      }
-                    });
-
-                    if (response.ok) {
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = previewFile.filename;
-                      link.target = '_blank';
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                    } else {
-                      message.error('文件下载失败');
-                    }
-                  } catch (error) {
-                    console.error('下载错误:', error);
-                    message.error('文件下载失败');
-                  }
-                }}
-              >
-                在新窗口中查看文件
-              </Button>
-            </div>
-          </div>
+        {mindmapFile && (
+          <MindMapViewer 
+            key={mindmapFile.filename}
+            filename={mindmapFile.filename} 
+            onClose={() => setMindmapVisible(false)}
+          />
         )}
       </Modal>
     </div>

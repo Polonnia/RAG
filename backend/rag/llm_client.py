@@ -46,17 +46,31 @@ def chat_completion(
 ):
     client = OpenAI(api_key=get_api_key(), base_url=get_base_url())
     last_error = None
+    resolved_model = _resolve_model(model)
+    
     for i in range(max_retries):
         try:
             return client.chat.completions.create(
-                model=_resolve_model(model),
+                model=resolved_model,
                 messages=messages,
                 temperature=temperature,
             )
         except Exception as e:
             last_error = e
+            error_str = str(e)
+            
+            # Check for model not exist error
+            if "Model Not Exist" in error_str or "model_not_found" in error_str.lower():
+                raise ValueError(
+                    f"模型 '{resolved_model}' 不存在。"
+                    f"请检查 DEEPSEEK_MODEL 环境变量是否设置正确。"
+                    f"当前使用的模型: {resolved_model}\n"
+                    f"错误信息: {error_str}"
+                )
+            
+            # Retry with backoff for other errors
             if i < max_retries - 1:
-                time.sleep(1)
+                time.sleep(min(2 ** i, 10))  # Exponential backoff
             else:
                 raise e
     raise last_error
