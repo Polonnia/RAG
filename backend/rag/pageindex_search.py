@@ -3,7 +3,7 @@ import json
 import asyncio  
 import re
 from typing import List, Dict, Any, Optional
-import pageindex.utils as utils  
+from .pageindex import utils  
 from .llm_client import get_default_model
   
 class MultiDocumentSearcher:  

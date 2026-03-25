@@ -21,13 +21,13 @@ export default function AppLayout({ children, maxWidth = 1000 }) {
         >
           <div
             style={{
-              maxWidth: maxWidth,
+              maxWidth: maxWidth * 1.5,
               margin: '0 auto',
-              padding: 32,
+              padding: 48,
               background: '#fff',
-              borderRadius: 18,
-              boxShadow: '0 4px 24px #e6eaf1',
-              minHeight: 600
+              borderRadius: 27,
+              boxShadow: '0 6px 36px #e6eaf1',
+              minHeight: 900
             }}
           >
             {children}

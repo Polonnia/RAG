@@ -44,22 +44,27 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getUser();
-  
+
   // 调试输出
   console.log('[Sidebar] 当前用户信息:', user);
   console.log('[Sidebar] 用户角色:', user?.role);
   console.log('[Sidebar] localStorage user:', localStorage.getItem('user'));
-  
+
   // 根据用户角色选择菜单
   const menuItems = user?.role === 'student' ? studentMenuItems : teacherMenuItems;
-  
+
   console.log('[Sidebar] 选择的菜单:', user?.role === 'student' ? 'studentMenuItems' : 'teacherMenuItems');
   console.log('[Sidebar] 菜单项数量:', menuItems.length);
 
   return (
     <Sider
       width={220}
-      style={{ background: '#f4f6fa', boxShadow: '2px 0 8px #e6eaf1', borderRight: '1.5px solid #e6eaf1', paddingTop: 0 }}
+      style={{
+        background: '#f4f6fa',
+        boxShadow: '2px 0 8px #e6eaf1',
+        borderRight: '1.5px solid #e6eaf1',
+        paddingTop: 0
+      }}
     >
       <div
         style={{
@@ -72,7 +77,7 @@ export default function Sidebar() {
           color: '#1677ff',
           letterSpacing: 2,
           marginBottom: 16,
-          background: 'linear-gradient(90deg, #1677ff 0%, #49c7f7 100%)',
+          background: '#1677ff',
           borderRadius: '0 0 18px 18px',
           boxShadow: '0 2px 8px #e6eaf1'
         }}

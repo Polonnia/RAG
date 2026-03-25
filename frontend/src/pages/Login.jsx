@@ -1,22 +1,32 @@
 import React, { useState } from 'react';
-import AppLayout from '../components/layout/AppLayout';
-import { Button, Form, Input, Modal, Select, message } from 'antd';
+import { Button, Form, Input, Modal, Select, message, Card } from 'antd';
+import { UserOutlined, LockOutlined, LoginOutlined, UserAddOutlined } from '@ant-design/icons';
+
+// 添加Google字体
+const fontLink = document.createElement('link');
+fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;1,300&display=swap';
+fontLink.rel = 'stylesheet';
+document.head.appendChild(fontLink);
 import { login as doLogin, register as doRegister } from '../services/authService';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [loginVisible, setLoginVisible] = useState(true);
+  const [loginVisible, setLoginVisible] = useState(false);
   const [registerVisible, setRegisterVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [regLoading, setRegLoading] = useState(false);
   const [form] = Form.useForm();
   const [regForm] = Form.useForm();
 
   const onLogin = async (values) => {
+    setLoading(true);
     try {
       const data = await doLogin(values.username, values.password);
       message.success('登录成功');
       setLoginVisible(false);
+      form.resetFields();
       const from = location.state?.from?.pathname;
       if (from) {
         navigate(from, { replace: true });
@@ -27,59 +37,367 @@ export default function Login() {
         else navigate('/knowledge');
       }
     } catch (e) {
-      message.error('登录失败');
+      message.error('登录失败：用户名或密码错误');
     }
+    setLoading(false);
   };
 
   const onRegister = async (values) => {
+    setRegLoading(true);
     try {
       await doRegister(values);
       message.success('注册成功，请登录');
       setRegisterVisible(false);
+      regForm.resetFields();
       setLoginVisible(true);
     } catch (e) {
-      message.error('注册失败');
+      message.error('注册失败：用户名已存在');
+    }
+    setRegLoading(false);
+  };
+
+  const handleMouseMove = (e) => {
+    const ripple = document.createElement('div');
+    const container = document.getElementById('ripple-container');
+
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      ripple.style.cssText = `
+        position: absolute;
+        left: ${x}px;
+        top: ${y}px;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.5) 40%, transparent 70%);
+        transform: translate(-50%, -50%);
+        animation: ripple-effect 1.5s ease-out forwards;
+        pointer-events: none;
+        z-index: 4;
+        border: 2px solid rgba(255, 255, 255, 0.6);
+      `;
+
+      container.appendChild(ripple);
+
+      setTimeout(() => {
+        if (ripple.parentNode) {
+          ripple.parentNode.removeChild(ripple);
+        }
+      }, 1500);
     }
   };
 
   return (
-    <AppLayout>
-      <h2 style={{ fontWeight: 700, marginTop: 0 }}>登录/注册</h2>
-      <Button type="primary" onClick={() => setLoginVisible(true)} style={{ marginRight: 8 }}>登录</Button>
-      <Button onClick={() => setRegisterVisible(true)}>注册</Button>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: `
+          radial-gradient(circle at 15% 25%, rgba(187, 222, 251, 0.9) 0%, transparent 60%),
+          radial-gradient(circle at 85% 15%, rgba(129, 212, 250, 0.7) 0%, transparent 55%),
+          radial-gradient(circle at 35% 75%, rgba(179, 229, 252, 0.8) 0%, transparent 65%),
+          radial-gradient(circle at 95% 85%, rgba(225, 245, 254, 0.6) 0%, transparent 50%),
+          radial-gradient(circle at 60% 10%, rgba(144, 202, 249, 0.5) 0%, transparent 45%),
+          radial-gradient(circle at 10% 90%, rgba(187, 222, 251, 0.4) 0%, transparent 55%),
+          linear-gradient(135deg, #bbdefb 0%, #e1f5fe 50%, #f0f8ff 100%)
+        `,
+        padding: '20px',
+        position: 'relative',
+        overflow: 'hidden',
+        backgroundBlendMode: 'multiply',
+        fontFamily: '"Noto Sans SC", "Microsoft YaHei", sans-serif'
+      }}
+      onMouseMove={handleMouseMove}
+    >
 
-      <Modal title="用户登录" open={loginVisible} onCancel={() => setLoginVisible(false)} footer={null}>
-        <Form form={form} layout="vertical" onFinish={onLogin}>
-          <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input />
+      {/* 水波纹效果容器 - 在标题和卡片之间 */}
+      <div
+        id="ripple-container"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          zIndex: 3
+        }}
+      ></div>
+
+      {/* Teaching    Assistant 标题 */}
+      <div style={{
+        position: 'absolute',
+        top: '35%',
+        left: 0,
+        right: 0,
+        fontSize: 'clamp(72px, 24vw, 144px)',
+        fontWeight: '700',
+        color: '#ffffff',
+        zIndex: 5,
+        opacity: 0.95,
+        letterSpacing: '6px',
+        textShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '0 2%',
+        alignItems: 'center',
+        fontFamily: '"Playfair Display", serif',
+        fontStyle: 'italic',
+        transition: 'all 0.3s ease',
+        cursor: 'default'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.textShadow = '0 0 30px rgba(255, 255, 255, 0.9), 0 6px 20px rgba(0, 0, 0, 0.4)';
+        e.currentTarget.style.opacity = '1';
+        e.currentTarget.style.transform = 'scale(1.02)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.textShadow = '0 4px 16px rgba(0, 0, 0, 0.3)';
+        e.currentTarget.style.opacity = '0.95';
+        e.currentTarget.style.transform = 'scale(1)';
+      }}
+      >
+        <span>Teaching</span>
+        <span style={{ marginLeft: '100px' }}>Assistant</span>
+      </div>
+
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          borderRadius: '20px',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: 'none',
+          position: 'relative',
+          zIndex: 10
+        }}
+        bodyStyle={{ padding: '48px 32px' }}
+      >
+        <div style={{
+          textAlign: 'center',
+          position: 'relative',
+          width: '100%'
+        }}>
+          <h1 style={{
+            fontSize: '32px',
+            fontWeight: '700',
+            color: '#262626',
+            margin: '0 0 8px',
+            background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent'
+          }}>
+            教学AI助手
+          </h1>
+          <p style={{ color: '#8c8c8c', fontSize: '16px', margin: '0 0 40px' }}>
+            智能教学，轻松学习
+          </p>
+        </div>
+
+        {/* 按钮区域 */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <Button
+            type="primary"
+            icon={<LoginOutlined />}
+            onClick={() => setLoginVisible(true)}
+            style={{
+              height: '52px',
+              borderRadius: '26px',
+              fontSize: '18px',
+              fontWeight: '600',
+              background: 'linear-gradient(135deg, #42a5f5 0%, #1e88e5 100%)',
+              border: 'none',
+              boxShadow: '0 4px 16px rgba(66, 165, 245, 0.3)'
+            }}
+          >
+            登录
+          </Button>
+
+          <Button
+            icon={<UserAddOutlined />}
+            onClick={() => setRegisterVisible(true)}
+            style={{
+              height: '52px',
+              borderRadius: '26px',
+              fontSize: '18px',
+              fontWeight: '600',
+              background: '#ffffff',
+              border: '2px solid #e0e0e0',
+              color: '#424242',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+            }}
+          >
+            注册
+          </Button>
+        </div>
+      </Card>
+
+      {/* 登录模态框 */}
+      <Modal
+        title="用户登录"
+        open={loginVisible}
+        onCancel={() => setLoginVisible(false)}
+        footer={null}
+        centered
+        width={400}
+        style={{ borderRadius: '20px' }}
+        className="login-modal"
+      >
+        <Form form={form} layout="vertical" onFinish={onLogin} size="large">
+          <Form.Item
+            name="username"
+            label="用户名"
+            rules={[{ required: true, message: '请输入用户名' }]}
+          >
+            <Input
+              prefix={<UserOutlined style={{ color: '#757575' }} />}
+              placeholder="请输入用户名"
+              style={{
+                height: '48px',
+                borderRadius: '10px',
+                border: '2px solid #d9d9d9',
+                fontSize: '16px',
+                background: '#ffffff',
+                paddingLeft: '8px',
+                paddingTop: '8px',
+                lineHeight: '32px'
+              }}
+              className="custom-login-input"
+            />
           </Form.Item>
-          <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password />
+          <Form.Item
+            name="password"
+            label="密码"
+            rules={[{ required: true, message: '请输入密码' }]}
+          >
+            <Input.Password
+              prefix={<LockOutlined style={{ color: '#757575' }} />}
+              placeholder="请输入密码"
+              style={{
+                height: '48px',
+                borderRadius: '10px',
+                border: '2px solid #d9d9d9',
+                fontSize: '16px',
+                background: '#ffffff'
+              }}
+            />
           </Form.Item>
-          <Button type="primary" htmlType="submit" block>登录</Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            loading={loading}
+            style={{
+              height: '48px',
+              borderRadius: '12px',
+              fontSize: '16px',
+              fontWeight: '600',
+              marginTop: '8px',
+              background: 'linear-gradient(135deg, #42a5f5 0%, #1e88e5 100%)',
+              border: 'none'
+            }}
+          >
+            登录
+          </Button>
         </Form>
       </Modal>
 
-      <Modal title="用户注册" open={registerVisible} onCancel={() => setRegisterVisible(false)} footer={null}>
-        <Form form={regForm} layout="vertical" onFinish={onRegister}>
-          <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input />
+      {/* 注册模态框 */}
+      <Modal
+        title="用户注册"
+        open={registerVisible}
+        onCancel={() => setRegisterVisible(false)}
+        footer={null}
+        centered
+        width={400}
+        style={{ borderRadius: '20px' }}
+        className="login-modal"
+      >
+        <Form form={regForm} layout="vertical" onFinish={onRegister} size="large">
+          <Form.Item
+            name="username"
+            label="用户名"
+            rules={[{ required: true, message: '请输入用户名' }]}
+          >
+            <Input
+              prefix={<UserOutlined style={{ color: '#757575' }} />}
+              placeholder="请输入用户名"
+              style={{
+                height: '48px',
+                borderRadius: '10px',
+                border: '2px solid #d9d9d9',
+                fontSize: '16px',
+                background: '#ffffff'
+              }}
+            />
           </Form.Item>
-          <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password />
+          <Form.Item
+            name="password"
+            label="密码"
+            rules={[{ required: true, message: '请输入密码' }]}
+          >
+            <Input.Password
+              prefix={<LockOutlined style={{ color: '#757575' }} />}
+              placeholder="请输入密码"
+              style={{
+                height: '48px',
+                borderRadius: '10px',
+                border: '2px solid #d9d9d9',
+                fontSize: '16px',
+                background: '#ffffff'
+              }}
+            />
           </Form.Item>
-          <Form.Item name="role" label="角色" rules={[{ required: true, message: '请选择角色' }]}>
-            <Select>
+          <Form.Item
+            name="role"
+            label="角色"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select
+              placeholder="请选择角色"
+              style={{
+                height: '48px',
+                borderRadius: '10px',
+                border: '2px solid #d9d9d9',
+                background: '#ffffff'
+              }}
+            >
               <Select.Option value="student">学生</Select.Option>
               <Select.Option value="teacher">教师</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>
-          <Button type="primary" htmlType="submit" block>注册</Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            loading={regLoading}
+            style={{
+              height: '48px',
+              borderRadius: '12px',
+              fontSize: '16px',
+              fontWeight: '600',
+              marginTop: '8px',
+              background: 'linear-gradient(135deg, #42a5f5 0%, #1e88e5 100%)',
+              border: 'none'
+            }}
+          >
+            注册
+          </Button>
         </Form>
       </Modal>
-    </AppLayout>
+    </div>
   );
 }
-
-

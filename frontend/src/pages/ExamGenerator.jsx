@@ -126,7 +126,7 @@ export default function ExamGenerator() {
           <List
             dataSource={examHistory}
             renderItem={(h) => (
-              <List.Item actions={[<a onClick={() => deleteExamHistory(h.id).then(refreshHistory)} key="del">删除</a>]}> 
+              <List.Item actions={[<a onClick={() => deleteExamHistory(h.id).then(refreshHistory)} key="del">删除</a>]}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{h.outline?.slice(0, 50)}...</div>
                 </div>

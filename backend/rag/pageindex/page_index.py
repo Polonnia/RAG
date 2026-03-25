@@ -145,25 +145,20 @@ async def toc_detector_single_page(content, model=None, semaphore=None):
     Directly return the final JSON structure. Do not output anything else.
     Please note: abstract,summary, notation list, figure list, table list, etc. are not table of contents."""
 
-<<<<<<< Updated upstream
     response = ChatGPT_API(model=model, prompt=prompt)
     # print('response', response)
-    
+
     # Handle error responses
     if response == "Error" or not response or response.startswith("Error"):
         print(f"API error response, defaulting to 'no'")
         return "no"
-    
+
     json_content = extract_json(response)
-    
+
     # Ensure we have the required key
     if not json_content or 'toc_detected' not in json_content:
         print(f"Invalid JSON response, defaulting to 'no'")
         return "no"
-    
-=======
-    json_content = await _chatgpt_json_async(prompt=prompt, model=model, semaphore=semaphore)
->>>>>>> Stashed changes
     return json_content['toc_detected']
 
 
@@ -773,15 +768,10 @@ async def process_none_page_numbers(toc_items, page_list, start_index=1, model=N
 
             item_copy = copy.deepcopy(item)
             del item_copy['page']
-<<<<<<< Updated upstream
             result = add_page_number_to_toc(page_contents, item_copy, model)
-            
+
             # Check if result is not empty and has valid structure before accessing
             if result and len(result) > 0 and isinstance(result[0].get('physical_index'), str) and result[0]['physical_index'].startswith('<physical_index'):
-=======
-            result = await add_page_number_to_toc(page_contents, item_copy, model, semaphore=semaphore)
-            if isinstance(result[0]['physical_index'], str) and result[0]['physical_index'].startswith('<physical_index'):
->>>>>>> Stashed changes
                 item['physical_index'] = int(result[0]['physical_index'].split('_')[-1].rstrip('>').strip())
                 del item['page']
     

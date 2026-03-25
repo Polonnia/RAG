@@ -1,3 +1,8 @@
+import sys
+import os
+# 添加当前目录到 Python 路径
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +15,6 @@ from api.ai_api import router as ai_router
 from api.analysis_api import router as analysis_router
 from api.assistant_api import router as assistant_router
 from api import admin_api
-import os
 
 # 用于标记初始化是否已完成
 _initialization_done = False
