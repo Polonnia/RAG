@@ -1222,8 +1222,15 @@ async def tree_parser(page_list, opt, doc=None, logger=None):
     return toc_tree
 
 
-def page_index_main(doc, opt=None):
+def page_index_main(doc, opt=None, progress_callback=None):
     logger = JsonLogger(doc)
+
+    def _notify(step, file_progress=None):
+        if callable(progress_callback):
+            try:
+                progress_callback(step=step, file_progress=file_progress)
+            except Exception:
+                pass
     
     is_valid_pdf = (
         (isinstance(doc, str) and os.path.isfile(doc) and doc.lower().endswith(".pdf")) or 
@@ -1233,13 +1240,16 @@ def page_index_main(doc, opt=None):
         raise ValueError("Unsupported input type. Expected a PDF file path or BytesIO object.")
 
     print('Parsing PDF...')
+    _notify('读取PDF内容', 45)
     page_list = get_page_tokens(doc)
 
     logger.info({'total_page_number': len(page_list)})
     logger.info({'total_token': sum([page[1] for page in page_list])})
 
     async def page_index_builder():
+        _notify('解析文档目录', 55)
         structure = await tree_parser(page_list, opt, doc=doc, logger=logger)
+        _notify('生成节点结构', 75)
 
         def write_text_to_structure(target_structure):
             if getattr(opt, 'if_add_page_labels', 'yes') == 'yes':
@@ -1252,6 +1262,7 @@ def page_index_main(doc, opt=None):
         if opt.if_add_node_text == 'yes':
             write_text_to_structure(structure)
         if opt.if_add_node_summary == 'yes':
+            _notify('生成节点摘要', 88)
             if opt.if_add_node_text == 'no':
                 write_text_to_structure(structure)
             await generate_summaries_for_structure(structure, model=opt.model)
@@ -1261,11 +1272,13 @@ def page_index_main(doc, opt=None):
                 # Create a clean structure without unnecessary fields for description generation
                 clean_structure = create_clean_structure_for_description(structure)
                 doc_description = generate_doc_description(clean_structure, model=opt.model)
+                _notify('完成结构解析', 96)
                 return {
                     'doc_name': get_pdf_name(doc),
                     'doc_description': doc_description,
                     'structure': structure,
                 }
+        _notify('完成结构解析', 96)
         return {
             'doc_name': get_pdf_name(doc),
             'structure': structure,

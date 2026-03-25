@@ -1,7 +1,6 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ExamDetail from './ExamDetail';
-import KnowledgeOverview from './pages/KnowledgeOverview';
 import QAPage from './pages/QAPage';
 import TeachingSettings from './pages/TeachingSettings';
 import ExamGenerator from './pages/ExamGenerator';

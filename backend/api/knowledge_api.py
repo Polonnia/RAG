@@ -1,18 +1,111 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, FileResponse
-from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory
+from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, SessionLocal
 from rag.pageindex_search import MultiDocumentSearcher
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
 import os
+import io
+import uuid
+import asyncio
+import threading
 from auth import get_current_user
 
 router = APIRouter()
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 TREE_JSON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'trees')
+
+UPLOAD_TASKS = {}
+UPLOAD_TASKS_LOCK = threading.Lock()
+
+
+def _upsert_upload_task(task_id, updater):
+    with UPLOAD_TASKS_LOCK:
+        task = UPLOAD_TASKS.get(task_id)
+        if not task:
+            return None
+        updater(task)
+        return task
+
+
+def _recalculate_overall_progress(task):
+    file_map = task.get('file_progress_map', {})
+    total_files = max(task.get('total_files', 0), 1)
+    total = sum(float(file_map.get(name, 0)) for name in task.get('file_names', []))
+    task['overall_progress'] = round(min(100.0, max(0.0, total / total_files)), 1)
+
+
+async def _run_upload_task(task_id: str, buffered_files: list, current_user: User):
+    db = SessionLocal()
+    try:
+        _upsert_upload_task(task_id, lambda t: t.update({'status': 'running', 'current_step': '开始处理文件'}))
+
+        def progress_handler(event):
+            filename = event.get('filename')
+            step = event.get('step')
+            status = event.get('status', 'processing')
+            file_progress = event.get('file_progress')
+            message = event.get('message')
+
+            def _update(task):
+                if step:
+                    task['current_step'] = step
+                if filename:
+                    if file_progress is not None:
+                        task['file_progress_map'][filename] = float(file_progress)
+                    per_file = task['file_status_map'].setdefault(filename, {})
+                    if step:
+                        per_file['step'] = step
+                    if status:
+                        per_file['status'] = status
+                    if message:
+                        per_file['message'] = message
+                    if file_progress is not None:
+                        per_file['progress'] = float(file_progress)
+
+                    if status == 'success':
+                        task['success_count'] = int(task.get('success_count', 0)) + 1
+                    elif status == 'error':
+                        task['error_count'] = int(task.get('error_count', 0)) + 1
+
+                _recalculate_overall_progress(task)
+
+            _upsert_upload_task(task_id, _update)
+
+        upload_result = await upload_knowledge_files(
+            files=buffered_files,
+            current_user=current_user,
+            db=db,
+            progress_callback=progress_handler
+        )
+
+        def _complete(task):
+            task['status'] = 'completed'
+            task['current_step'] = '上传与解析完成'
+            task['results'] = upload_result.get('results', [])
+            task['success_count'] = upload_result.get('success_count', 0)
+            task['error_count'] = upload_result.get('error_count', 0)
+            task['overall_progress'] = 100.0
+            for name in task.get('file_names', []):
+                task['file_progress_map'][name] = 100.0
+                status_item = task['file_status_map'].setdefault(name, {})
+                status_item.setdefault('progress', 100.0)
+                status_item.setdefault('status', 'success')
+                status_item.setdefault('step', '解析完成')
+
+        _upsert_upload_task(task_id, _complete)
+
+    except Exception as e:
+        def _fail(task):
+            task['status'] = 'failed'
+            task['current_step'] = '上传任务失败'
+            task['error'] = str(e)
+        _upsert_upload_task(task_id, _fail)
+    finally:
+        db.close()
 
 @router.post("/upload")
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
@@ -34,6 +127,81 @@ async def upload_files(files: list[UploadFile] = File(...), current_user: User =
         error_detail = traceback.format_exc()
         print(f"文件上传API异常: {error_detail}")
         return JSONResponse(status_code=500, content={"error": f"上传异常: {str(e)}", "details": error_detail})
+
+
+@router.post("/upload-with-progress")
+async def upload_files_with_progress(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一个文件")
+
+    buffered_files = []
+    file_names = []
+    for file in files:
+        content = await file.read()
+        file_names.append(file.filename)
+        buffered_files.append(type('BufferedUploadFile', (), {
+            'filename': file.filename,
+            'file': io.BytesIO(content)
+        })())
+
+    task_id = uuid.uuid4().hex
+    with UPLOAD_TASKS_LOCK:
+        UPLOAD_TASKS[task_id] = {
+            'task_id': task_id,
+            'status': 'queued',
+            'current_step': '任务已创建',
+            'overall_progress': 0.0,
+            'total_files': len(file_names),
+            'file_names': file_names,
+            'file_progress_map': {name: 0.0 for name in file_names},
+            'file_status_map': {
+                name: {'status': 'queued', 'step': '等待处理', 'progress': 0.0}
+                for name in file_names
+            },
+            'results': [],
+            'success_count': 0,
+            'error_count': 0,
+            'error': None,
+        }
+
+    asyncio.create_task(_run_upload_task(task_id, buffered_files, current_user))
+    return {
+        'task_id': task_id,
+        'status': 'queued',
+        'total_files': len(file_names)
+    }
+
+
+@router.get("/upload-task/{task_id}")
+async def get_upload_task_status(task_id: str, current_user: User = Depends(get_current_user)):
+    with UPLOAD_TASKS_LOCK:
+        task = UPLOAD_TASKS.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="上传任务不存在")
+
+        file_statuses = []
+        for name in task.get('file_names', []):
+            item = task.get('file_status_map', {}).get(name, {})
+            file_statuses.append({
+                'filename': name,
+                'status': item.get('status', 'queued'),
+                'step': item.get('step', '等待处理'),
+                'progress': item.get('progress', 0.0),
+                'message': item.get('message')
+            })
+
+        return {
+            'task_id': task.get('task_id'),
+            'status': task.get('status'),
+            'current_step': task.get('current_step'),
+            'overall_progress': task.get('overall_progress', 0.0),
+            'total_files': task.get('total_files', 0),
+            'success_count': task.get('success_count', 0),
+            'error_count': task.get('error_count', 0),
+            'error': task.get('error'),
+            'results': task.get('results', []),
+            'files': file_statuses,
+        }
 
 @router.get("/knowledge-files")
 async def get_knowledge_files_api(current_user: User = Depends(get_current_user)):

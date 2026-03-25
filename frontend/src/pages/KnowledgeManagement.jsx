@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message, Modal } from 'antd';
+import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message, Modal, Progress } from 'antd';
 const { Text } = Typography;
 import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -15,10 +15,23 @@ export default function KnowledgeManagement() {
   const [knowledgeFiles, setKnowledgeFiles] = useState([]);
   const [mindmapVisible, setMindmapVisible] = useState(false);
   const [mindmapFile, setMindmapFile] = useState(null);
+  const [uploadTaskId, setUploadTaskId] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStep, setUploadStep] = useState('');
+  const [uploadFileStatuses, setUploadFileStatuses] = useState([]);
+  const [pollingId, setPollingId] = useState(null);
 
   useEffect(() => {
     fetchKnowledgeFiles();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollingId) {
+        window.clearInterval(pollingId);
+      }
+    };
+  }, [pollingId]);
 
   const fetchKnowledgeFiles = async () => {
     setFileLoading(true);
@@ -43,38 +56,72 @@ export default function KnowledgeManagement() {
     });
     setLoading(true);
     try {
-      const response = await http.post('/upload', formData, {
+      if (pollingId) {
+        window.clearInterval(pollingId);
+        setPollingId(null);
+      }
+
+      const response = await http.post('/upload-with-progress', formData, {
         timeout: 120000,
       });
-      
-      if (response.data.results) {
-        const results = response.data.results;
-        const successCount = results.filter(r => r.status === 'success').length;
-        const errorCount = results.filter(r => r.status === 'error').length;
-        
-        if (errorCount === 0) {
-          message.success(response.data.msg);
-        } else if (successCount === 0) {
-          message.error(response.data.error);
-        } else {
-          message.warning(response.data.msg);
-        }
-        
-        results.forEach(result => {
-          if (result.status === 'success') {
-            message.success(`${result.filename}: ${result.msg}`);
-          } else {
-            message.error(`${result.filename}: ${result.msg}`);
-          }
-        });
-      } else {
-        message.success(response.data.msg);
+
+      const taskId = response.data?.task_id;
+      if (!taskId) {
+        throw new Error('未获取到上传任务ID');
       }
-      
-      setFileList([]);
-      fetchKnowledgeFiles();
+
+      setUploadTaskId(taskId);
+      setUploadProgress(0);
+      setUploadStep('任务已创建，等待处理');
+      setUploadFileStatuses([]);
+
+      const intervalId = window.setInterval(async () => {
+        try {
+          const taskRes = await http.get(`/upload-task/${taskId}`);
+          const task = taskRes.data || {};
+
+          setUploadProgress(Number(task.overall_progress || 0));
+          setUploadStep(task.current_step || '处理中');
+          setUploadFileStatuses(task.files || []);
+
+          if (task.status === 'completed') {
+            window.clearInterval(intervalId);
+            setPollingId(null);
+            setLoading(false);
+            setFileList([]);
+            fetchKnowledgeFiles();
+
+            const results = task.results || [];
+            const successCount = results.filter(r => r.status === 'success').length;
+            const errorCount = results.filter(r => r.status === 'error').length;
+            if (errorCount === 0) {
+              message.success(`所有文件上传并解析完成（${successCount} 个）`);
+            } else if (successCount === 0) {
+              message.error('所有文件处理失败');
+            } else {
+              message.warning(`部分文件处理完成（${successCount} 成功，${errorCount} 失败）`);
+            }
+          }
+
+          if (task.status === 'failed') {
+            window.clearInterval(intervalId);
+            setPollingId(null);
+            setLoading(false);
+            message.error(task.error || '上传任务失败');
+          }
+        } catch (pollErr) {
+          console.error('轮询上传进度失败:', pollErr);
+          window.clearInterval(intervalId);
+          setPollingId(null);
+          setLoading(false);
+          message.error('获取上传进度失败');
+        }
+      }, 1000);
+
+      setPollingId(intervalId);
     } catch (err) {
       console.error('上传错误:', err);
+      setLoading(false);
       if (err.response) {
         message.error(`上传失败: ${err.response.data.error || err.response.statusText}`);
       } else if (err.code === 'ECONNABORTED') {
@@ -83,7 +130,6 @@ export default function KnowledgeManagement() {
         message.error('上传失败，请检查网络连接');
       }
     }
-    setLoading(false);
   };
 
   const handleDeleteFile = async (filename) => {
@@ -157,6 +203,28 @@ export default function KnowledgeManagement() {
         <Button type="primary" onClick={handleUpload} style={{ marginTop: 16 }} loading={loading}>
           上传并入库 ({fileList.length} 个文件)
         </Button>
+
+        {uploadTaskId && (
+          <div style={{ marginTop: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
+            <div style={{ marginBottom: 8 }}>
+              <Text strong>解析进度：</Text>
+              <Text type="secondary" style={{ marginLeft: 8 }}>{uploadStep || '处理中'}</Text>
+            </div>
+            <Progress percent={Math.round(uploadProgress)} status={uploadProgress >= 100 ? 'success' : 'active'} />
+            {uploadFileStatuses.length > 0 && (
+              <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
+                {uploadFileStatuses.map((item) => (
+                  <div key={item.filename} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.filename}>
+                      {item.filename}
+                    </Text>
+                    <Text type="secondary">{item.step || '处理中'}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       <Divider />
@@ -243,7 +311,6 @@ export default function KnowledgeManagement() {
                     description={
                       <Space direction="vertical" size="small">
                         <Text type="secondary">上传时间: {file.upload_time}</Text>
-                        <Text type="secondary">文档片段: {file.chunk_count} 个</Text>
                       </Space>
                     }
                   />

@@ -1,23 +1,23 @@
 {
-  "附件1：第十九届全国大学生软件创新大赛-可支持能力清单.pdf": {
-    "filename": "附件1：第十九届全国大学生软件创新大赛-可支持能力清单.pdf",
-    "original_filename": "附件1：第十九届全国大学生软件创新大赛-可支持能力清单.pdf",
-    "upload_time": "2026-03-17 21:40:23",
-    "file_size": 101097,
-    "file_size_display": "98.7 KB",
+  "cn.pdf": {
+    "filename": "cn.pdf",
+    "original_filename": "cn.pdf",
+    "upload_time": "2025-10-17 17:07:25",
+    "file_size": 21508170,
+    "file_size_display": "20.5 MB",
     "file_type": ".pdf",
-    "uploaded_by": "laoshi",
+    "uploaded_by": "unknown",
     "student_can_download": false,
-    "status": "uploaded"
+    "status": "completed"
   },
-  "d662a1c33c1e787fde4ad9fbeed3fd21.mp4": {
-    "filename": "d662a1c33c1e787fde4ad9fbeed3fd21.mp4",
-    "original_filename": "d662a1c33c1e787fde4ad9fbeed3fd21.mp4",
-    "upload_time": "2026-03-22 22:15:04",
-    "file_size": 2760295,
-    "file_size_display": "2.6 MB",
+  "cn_ip.mp4": {
+    "filename": "cn_ip.mp4",
+    "original_filename": "cn_ip.mp4",
+    "upload_time": "2026-03-24 21:05:17",
+    "file_size": 84376100,
+    "file_size_display": "80.5 MB",
     "file_type": ".mp4",
-    "uploaded_by": "yjj1",
+    "uploaded_by": "unknown",
     "student_can_download": false,
     "status": "completed"
   }

@@ -37,90 +37,105 @@ export default function QAPage() {
 
   useEffect(() => { fetchQaHistory(); }, []);
 
-  // 时间戳格式转换函数
-  const formatTime = (seconds) => {
-    if (seconds === null || seconds === undefined) return null;
-    const sec = Math.round(seconds);
-    const hours = Math.floor(sec / 3600);
-    const minutes = Math.floor((sec % 3600) / 60);
-    const secs = sec % 60;
-    
-    if (hours > 0) {
-      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    } else {
-      return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const parseCitationInner = (inner) => {
+    const text = String(inner || '').trim();
+    if (!text) return null;
+
+    const mediaMatch = text.match(/^(.*)\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(\d{1,2}:\d{2}(?::\d{2})?)$/);
+    if (mediaMatch) {
+      return {
+        type: 'media',
+        docName: mediaMatch[1].trim(),
+        start: mediaMatch[2],
+        end: mediaMatch[3],
+      };
     }
+
+    const pageMatch = text.match(/^(.*)\s+p(\d+)$/i);
+    if (pageMatch) {
+      return {
+        type: 'pdf',
+        docName: pageMatch[1].trim(),
+        page: Number(pageMatch[2]),
+      };
+    }
+
+    const pageRangeMatch = text.match(/^(.*)\s+(\d+)\s*-\s*(\d+)$/);
+    if (pageRangeMatch) {
+      return {
+        type: 'pdf',
+        docName: pageRangeMatch[1].trim(),
+        page: Number(pageRangeMatch[2]),
+      };
+    }
+
+    return null;
   };
 
-  // 将source按文件名分组
+  const convertAnswerCitationsToMarkdownLinks = (text) => {
+    if (!text) return '';
+    return String(text).replace(/\[([^\]]+)\](?!\()/g, (full, inner) => {
+      const payload = parseCitationInner(inner);
+      if (!payload || !payload.docName) return full;
+      const encoded = encodeURIComponent(JSON.stringify(payload));
+      return `[${inner}](cite:${encoded})`;
+    });
+  };
+
+  const normalizeDocName = (name) => String(name || '').trim().toLowerCase();
+
+  const stripFileExtension = (name) => String(name || '').replace(/\.[^./\\]+$/, '');
+
+  const resolveCitationFileName = (citationDocName) => {
+    const candidateNames = Array.from(
+      new Set(
+        (qaSources || [])
+          .map(item => (item && typeof item === 'object' ? item?.metadata?.source : null))
+          .filter(Boolean)
+      )
+    );
+
+    const target = normalizeDocName(citationDocName);
+    if (!target) return citationDocName;
+
+    const exact = candidateNames.find(name => normalizeDocName(name) === target);
+    if (exact) return exact;
+
+    const targetNoExt = normalizeDocName(stripFileExtension(citationDocName));
+    const byBaseName = candidateNames.find(name => normalizeDocName(stripFileExtension(name)) === targetNoExt);
+    if (byBaseName) return byBaseName;
+
+    return citationDocName;
+  };
+
+  const parseTimeToSeconds = (timeText) => {
+    const parts = String(timeText || '').trim().split(':').map(Number);
+    if (parts.some(Number.isNaN) || parts.length < 2 || parts.length > 3) return null;
+    if (parts.length === 2) {
+      const [minutes, seconds] = parts;
+      return minutes * 60 + seconds;
+    }
+    const [hours, minutes, seconds] = parts;
+    return hours * 3600 + minutes * 60 + seconds;
+  };
+
+  // 将source按文件名去重分组，仅用于展示文件名
   const groupSourcesByFile = (sources) => {
     const grouped = {};
     sources.forEach(source => {
       if (typeof source === 'string') {
         if (!grouped[source]) {
-          grouped[source] = { fileName: source, details: [] };
+          grouped[source] = { fileName: source };
         }
       } else if (source && typeof source === 'object') {
         const metadata = source.metadata || {};
         const fileName = metadata.source || '未知来源';
         if (!grouped[fileName]) {
-          grouped[fileName] = { fileName, details: [], fileType: 'document' };
+          grouped[fileName] = { fileName };
         }
-        
-        // 检测是否为音视频文件
-        const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg', '.flv', '.wmv', '.aac', '.ogg'];
-        const isMedia = mediaExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
-        
-        grouped[fileName].fileType = isMedia ? 'media' : 'document';
-        grouped[fileName].details.push({
-          content: source.content ? String(source.content).slice(0, 120) : '',
-          page: metadata.page ?? '?',
-          startTime: metadata.start_time,
-          endTime: metadata.end_time,
-        });
       }
     });
     return Object.values(grouped);
-  };
-
-  const formatSource = (source, index) => {
-    if (typeof source === 'string') {
-      return { title: source, preview: '', timeInfo: null };
-    }
-
-    if (source && typeof source === 'object') {
-      const metadata = source.metadata || {};
-      const sourceName = metadata.source || '未知来源';
-      const page = metadata.page ?? '?';
-      const preview = source.content ? String(source.content).slice(0, 120) : '';
-      
-      // 检测是否为音视频文件
-      const mediaExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.flac', '.mov', '.avi', '.mkv', '.webm', '.ogg', '.flv', '.wmv', '.aac', '.ogg'];
-      const isMedia = mediaExtensions.some(ext => sourceName.toLowerCase().endsWith(ext));
-      
-      // 获取时间戳数据
-      const startTime = metadata.start_time;
-      const endTime = metadata.end_time;
-      
-      // 调试信息
-      console.log(`[QA来源${index+1}] 源=${sourceName}, 是否音视频=${isMedia}, startTime=${startTime}, endTime=${endTime}`);
-      
-      // 生成时间信息
-      let timeInfo = null;
-      if (startTime !== null || endTime !== null) {
-        const start = startTime !== null ? formatTime(startTime) : '?';
-        const end = endTime !== null ? formatTime(endTime) : '?';
-        timeInfo = { start, end, isMedia: true };
-      }
-      
-      return {
-        title: isMedia ? sourceName : `${sourceName} 第${page}页`,
-        preview,
-        timeInfo,
-      };
-    }
-
-    return { title: `参考片段 ${index + 1}`, preview: '', timeInfo: null };
   };
 
   const handleViewPdf = async (fileName, pageNumber) => {
@@ -175,6 +190,62 @@ export default function QAPage() {
     }
   };
 
+  const handleOpenMediaWithTime = async (fileName, startText, endText) => {
+    try {
+      message.loading({ content: '正在加载媒体文件...', duration: 0 });
+      const response = await http.get(`/download/${encodeURIComponent(fileName)}`, {
+        responseType: 'blob'
+      });
+
+      message.destroy();
+
+      const mediaBlob = new Blob([response.data], { type: response.headers?.['content-type'] || 'application/octet-stream' });
+      const blobUrl = window.URL.createObjectURL(mediaBlob);
+      const startSec = parseTimeToSeconds(startText);
+      const endSec = parseTimeToSeconds(endText);
+      const timeFragment = startSec !== null
+        ? `#t=${startSec}${endSec !== null ? `,${endSec}` : ''}`
+        : '';
+
+      const newWindow = window.open(`${blobUrl}${timeFragment}`, '_blank');
+      if (newWindow) {
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+        }, 30000);
+      }
+    } catch (error) {
+      message.destroy();
+      console.error('[媒体预览] 获取文件错误:', error);
+      if (error.response?.status === 403) {
+        message.error('您没有权限查看此文件');
+      } else if (error.response?.status === 404) {
+        message.error('文件不存在或已被删除');
+      } else if (error.response?.status === 401) {
+        message.error('认证已过期，请重新登录');
+      } else {
+        message.error('加载媒体文件失败');
+      }
+    }
+  };
+
+  const handleCitationClick = async (payload) => {
+    if (!payload?.docName) return;
+    const fileName = resolveCitationFileName(payload.docName);
+
+    if (payload.type === 'pdf') {
+      if (!fileName.toLowerCase().endsWith('.pdf')) {
+        message.warning('该引用对应文件不是PDF，无法按页跳转');
+        return;
+      }
+      await handleViewPdf(fileName, payload.page || 1);
+      return;
+    }
+
+    if (payload.type === 'media') {
+      await handleOpenMediaWithTime(fileName, payload.start, payload.end);
+    }
+  };
+
   const handleAsk = async () => {
     if (!question) { message.warning('请输入问题'); return; }
     setQaLoading(true);
@@ -208,7 +279,42 @@ export default function QAPage() {
         <Spin spinning={qaLoading}>
           {answer ? (
             <div style={{ background: '#fafafa', padding: 16, borderRadius: 8 }}>
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{answer}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  a: ({ href, children }) => {
+                    if (typeof href === 'string' && href.startsWith('cite:')) {
+                      try {
+                        const payload = JSON.parse(decodeURIComponent(href.slice(5)));
+                        return (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ paddingInline: 4 }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleCitationClick(payload);
+                            }}
+                          >
+                            {children}
+                          </Button>
+                        );
+                      } catch {
+                        return <span>{children}</span>;
+                      }
+                    }
+
+                    return (
+                      <a href={href} target="_blank" rel="noreferrer">
+                        {children}
+                      </a>
+                    );
+                  }
+                }}
+              >
+                {convertAnswerCitationsToMarkdownLinks(answer)}
+              </ReactMarkdown>
             </div>
           ) : null}
         </Spin>
@@ -217,143 +323,54 @@ export default function QAPage() {
           <List
             size="small"
             dataSource={groupSourcesByFile(qaSources)}
-            renderItem={(group, groupIndex) => {
-              // 对详情按照时间排序
-              const sortedDetails = group.details.sort((a, b) => {
-                const aStart = a.startTime || 0;
-                const bStart = b.startTime || 0;
-                return aStart - bStart;
-              });
-
-              return (
-                <List.Item>
-                  <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                    <div>
-                      <Tag color="blue">{groupIndex + 1}</Tag>
-                      <span>{group.fileType === 'media' ? group.fileName : `${group.fileName}`}</span>
-                      <Button
-                        type="text"
-                        icon={<DownloadOutlined />}
-                        size="small"
-                        style={{ marginLeft: 8 }}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const token = localStorage.getItem('token');
-                            const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
-                              headers: {
-                                'Authorization': `Bearer ${token}`
-                              }
-                            });
-
-                            if (response.ok) {
-                              const blob = await response.blob();
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = group.fileName;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                              message.success('文件下载成功');
-                            } else {
-                              message.error('文件下载失败');
-                            }
-                          } catch (error) {
-                            console.error('下载错误:', error);
-                            message.error('文件下载失败');
+            renderItem={(group, groupIndex) => (
+              <List.Item>
+                <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Tag color="blue">{groupIndex + 1}</Tag>
+                    <span style={{ color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.fileName}>
+                      {group.fileName}
+                    </span>
+                  </div>
+                  <Button
+                    type="text"
+                    icon={<DownloadOutlined />}
+                    size="small"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
+                          headers: {
+                            'Authorization': `Bearer ${token}`
                           }
-                        }}
-                      >
-                        下载
-                      </Button>
-                    </div>
-                    
-                    {/* 音视频：显示时间戳段落 */}
-                    {group.fileType === 'media' && (
-                      <div>
-                        {sortedDetails.map((detail, detailIndex) => (
-                          <div key={detailIndex} style={{ 
-                            marginBottom: 8,
-                            paddingBottom: 8,
-                            borderBottom: detailIndex < sortedDetails.length - 1 ? '1px solid #f0f0f0' : 'none'
-                          }}>
-                            <div style={{ 
-                              color: '#ff7a45', 
-                              fontSize: 12, 
-                              fontWeight: 500,
-                              padding: '4px 8px',
-                              backgroundColor: '#fff7e6',
-                              borderRadius: 4,
-                              marginBottom: 4,
-                              display: 'inline-block'
-                            }}>
-                              🎬 {detailIndex + 1}. 时间戳: {detail.startTime !== null ? formatTime(detail.startTime) : '?'} ~ {detail.endTime !== null ? formatTime(detail.endTime) : '?'}
-                            </div>
-                            {detail.content && (
-                              <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                                "{detail.content}..."
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* 文档：显示页码信息 */}
-                    {group.fileType === 'document' && sortedDetails.map((detail, detailIndex) => (
-                      <div key={detailIndex} style={{ 
-                        marginBottom: 4,
-                        paddingBottom: 4,
-                        borderBottom: detailIndex < sortedDetails.length - 1 ? '1px solid #f0f0f0' : 'none'
-                      }}>
-                        <div 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?') {
-                              handleViewPdf(group.fileName, detail.page);
-                            }
-                          }}
-                          style={{ 
-                            color: group.fileName.toLowerCase().endsWith('.pdf') ? '#1677ff' : '#888', 
-                            fontSize: 12, 
-                            fontWeight: 500,
-                            padding: '2px 6px',
-                            backgroundColor: group.fileName.toLowerCase().endsWith('.pdf') ? '#e6f7ff' : '#f0f0f0',
-                            borderRadius: 4,
-                            marginBottom: 2,
-                            display: 'inline-block',
-                            cursor: group.fileName.toLowerCase().endsWith('.pdf') ? 'pointer' : 'default',
-                            transition: 'all 0.3s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?') {
-                              e.target.style.backgroundColor = '#bae7ff';
-                              e.target.style.textDecoration = 'underline';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (group.fileName.toLowerCase().endsWith('.pdf')) {
-                              e.target.style.backgroundColor = '#e6f7ff';
-                              e.target.style.textDecoration = 'none';
-                            }
-                          }}
-                          title={group.fileName.toLowerCase().endsWith('.pdf') && detail.page !== '?' ? '点击在浏览器中查看PDF' : ''}
-                        >
-                          📄 {detailIndex + 1}. 第 {detail.page} 页
-                        </div>
-                        {detail.content && (
-                          <div style={{ color: '#666', fontSize: 12, marginTop: 2 }}>
-                            "{detail.content}..."
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </Space>
-                </List.Item>
-              );
-            }}
+                        });
+
+                        if (response.ok) {
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = group.fileName;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                          message.success('文件下载成功');
+                        } else {
+                          message.error('文件下载失败');
+                        }
+                      } catch (error) {
+                        console.error('下载错误:', error);
+                        message.error('文件下载失败');
+                      }
+                    }}
+                  >
+                    下载
+                  </Button>
+                </div>
+              </List.Item>
+            )}
           />
         </div>
         <div>

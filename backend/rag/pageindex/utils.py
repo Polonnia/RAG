@@ -658,7 +658,7 @@ def add_node_text_with_labels(node, pdf_pages):
 
 
 async def generate_node_summary(node, model=None):
-    prompt = f"""You are given a part of a document, your task is to generate a description of the partial document about what are main points covered in the partial document.
+    prompt = f"""You are given a part of a document, your task is to generate a concise description of the partial document about what are main points covered in the partial document.
 
     Partial Document Text: {node['text']}
     
@@ -703,7 +703,7 @@ def create_clean_structure_for_description(structure):
 
 def generate_doc_description(structure, model=None):
     prompt = f"""Your are an expert in generating descriptions for a document.
-    You are given a structure of a document. Your task is to generate a description for the document, which makes it easy to distinguish the document from other documents. Make sure the description covers ALL the main points of the document based on the structure. Try to make it concise but informative.
+    You are given a structure of a document. Your task is to generate a description for the document, which makes it easy to distinguish the document from other documents. Make sure the description covers the main points of the document based on the structure. Try to make it concise but informative.
         
     Document Structure: {structure}
     

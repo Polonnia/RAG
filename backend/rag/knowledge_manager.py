@@ -112,15 +112,24 @@ def _convert_office_to_pdf(input_path):
     raise RuntimeError('Office to PDF conversion failed: no available converter (win32com/soffice)')
 
 
-def _process_with_pageindex(file_path):
+def _process_with_pageindex(file_path, progress_callback=None):
     ext = os.path.splitext(file_path)[1].lower()
     config_loader = ConfigLoader()
     opt = config_loader.load({})
 
+    def _notify(step, file_progress=None):
+        if callable(progress_callback):
+            try:
+                progress_callback(step=step, file_progress=file_progress)
+            except Exception:
+                pass
+
     if ext in SUPPORTED_MEDIA:
+        _notify('音视频转写', 35)
         audio_json_path = ingest_file(file_path)
         if not audio_json_path:
             raise ValueError('Media ASR output is empty')
+        _notify('生成节点结构', 75)
         return audio_json_to_tree(
             audio_json_path=audio_json_path,
             model=opt.model,
@@ -131,17 +140,21 @@ def _process_with_pageindex(file_path):
         )
 
     if ext in SUPPORTED_WORD or ext in SUPPORTED_PPT:
+        _notify('文档格式转换', 25)
         pdf_path = _convert_office_to_pdf(file_path)
-        tree_result = page_index_main(pdf_path, opt)
+        _notify('解析文档目录', 45)
+        tree_result = page_index_main(pdf_path, opt, progress_callback=progress_callback)
         _save_tree_result(file_path, tree_result)
         return tree_result
 
     if ext == '.pdf':
-        tree_result = page_index_main(file_path, opt)
+        _notify('解析文档目录', 45)
+        tree_result = page_index_main(file_path, opt, progress_callback=progress_callback)
         _save_tree_result(file_path, tree_result)
         return tree_result
 
     if ext in SUPPORTED_MARKDOWN:
+        _notify('解析文档目录', 45)
         tree_result = asyncio.run(md_to_tree(
             md_path=file_path,
             if_thinning=False,
@@ -153,22 +166,42 @@ def _process_with_pageindex(file_path):
             if_add_node_text=opt.if_add_node_text,
             if_add_node_id=opt.if_add_node_id,
         ))
+        _notify('生成节点结构', 75)
         _save_tree_result(file_path, tree_result)
         return tree_result
 
     raise ValueError(f'Unsupported file type for pageindex processing: {ext}')
 
 
-async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
+async def upload_knowledge_files(files, current_user, db, max_concurrency=3, progress_callback=None):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     files_info = load_files_info()
     results = []
     pending_items = []
+    total_files = len(files)
+
+    def _notify(filename=None, status='processing', step=None, file_progress=None, message=None):
+        if callable(progress_callback):
+            try:
+                progress_callback({
+                    'filename': filename,
+                    'status': status,
+                    'step': step,
+                    'file_progress': file_progress,
+                    'message': message,
+                    'total_files': total_files,
+                })
+            except Exception:
+                pass
+
+    _notify(status='running', step='开始上传任务', file_progress=0)
 
     for file in files:
         try:
             safe_filename = sanitize_filename(file.filename)
             file_path = os.path.join(UPLOAD_DIR, safe_filename)
+
+            _notify(filename=file.filename, status='processing', step='保存上传文件', file_progress=10)
 
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
@@ -193,6 +226,7 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
                 'original_filename': file.filename,
                 'file_path': file_path,
             })
+            _notify(filename=file.filename, status='processing', step='文件保存完成', file_progress=20)
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
@@ -201,6 +235,7 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
             if 'safe_filename' in locals() and safe_filename in files_info:
                 files_info[safe_filename]['status'] = 'failed'
             results.append({"filename": getattr(file, 'filename', 'unknown'), "status": "error", "msg": f"上传失败: {str(e)}"})
+            _notify(filename=getattr(file, 'filename', 'unknown'), status='error', step='文件保存失败', file_progress=100, message=str(e))
 
     save_files_info(files_info)
 
@@ -208,10 +243,16 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
 
     async def _process_one(item):
         safe_filename = item['safe_filename']
+        original_filename = item['original_filename']
         try:
             print(f"开始处理文件: {safe_filename}")
             async with semaphore:
-                await asyncio.to_thread(_process_with_pageindex, item['file_path'])
+                _notify(filename=original_filename, status='processing', step='解析文档目录', file_progress=40)
+
+                def _step_callback(step=None, file_progress=None):
+                    _notify(filename=original_filename, status='processing', step=step, file_progress=file_progress)
+
+                await asyncio.to_thread(_process_with_pageindex, item['file_path'], _step_callback)
             return item, None
         except Exception as e:
             import traceback
@@ -232,16 +273,19 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
                     db.add(KnowledgeFilePermission(filename=safe_filename, student_can_download=False))
                     db.commit()
                 results.append({"filename": original_filename, "status": "success", "msg": "文件上传并处理成功"})
+                _notify(filename=original_filename, status='success', step='解析完成', file_progress=100)
                 print(f"文件处理成功: {safe_filename}")
             else:
                 files_info[safe_filename]['status'] = 'failed'
                 results.append({"filename": original_filename, "status": "error", "msg": f"上传失败: {error}"})
+                _notify(filename=original_filename, status='error', step='解析失败', file_progress=100, message=error)
 
         save_files_info(files_info)
 
     success_count = len([r for r in results if r["status"] == "success"])
     error_count = len([r for r in results if r["status"] == "error"])
     print(f"文件上传统计: 成功 {success_count}, 失败 {error_count}")
+    _notify(status='completed', step='上传任务完成', file_progress=100)
     return {
         "results": results,
         "success_count": success_count,
@@ -250,16 +294,67 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3):
 
 
 def get_knowledge_files(db):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     files_info = load_files_info()
-    files_list = list(files_info.values())
     perms = {p.filename: p.student_can_download for p in db.query(KnowledgeFilePermission).all()}
 
+    # 以 uploads 目录中的真实文件为准，补齐 files_info 中缺失的记录
+    disk_files = [
+        f for f in os.listdir(UPLOAD_DIR)
+        if os.path.isfile(os.path.join(UPLOAD_DIR, f))
+    ]
+
+    info_updated = False
+    for filename in disk_files:
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        stat = os.stat(file_path)
+
+        if filename not in files_info:
+            files_info[filename] = {
+                'filename': filename,
+                'original_filename': filename,
+                'upload_time': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                'file_size': stat.st_size,
+                'file_size_display': format_file_size(stat.st_size),
+                'file_type': os.path.splitext(filename)[1].lower(),
+                'uploaded_by': 'unknown',
+                'student_can_download': False,
+                'status': 'completed'
+            }
+            info_updated = True
+        else:
+            # 兼容旧记录缺字段的情况
+            item = files_info[filename]
+            if 'file_size' not in item:
+                item['file_size'] = stat.st_size
+                info_updated = True
+            if 'file_size_display' not in item:
+                item['file_size_display'] = format_file_size(stat.st_size)
+                info_updated = True
+            if 'file_type' not in item:
+                item['file_type'] = os.path.splitext(filename)[1].lower()
+                info_updated = True
+            if not item.get('upload_time'):
+                item['upload_time'] = datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                info_updated = True
+
+    # 清理 files_info 中已不存在的文件记录
+    disk_set = set(disk_files)
+    stale_keys = [name for name in list(files_info.keys()) if name not in disk_set]
+    for key in stale_keys:
+        del files_info[key]
+        info_updated = True
+
+    if info_updated:
+        save_files_info(files_info)
+
+    files_list = list(files_info.values())
     for item in files_list:
         item['student_can_download'] = perms.get(item['filename'], False)
         file_path = os.path.join(UPLOAD_DIR, item['filename'])
         item['file_exists'] = os.path.exists(file_path)
 
-    files_list.sort(key=lambda x: x['upload_time'], reverse=True)
+    files_list.sort(key=lambda x: x.get('upload_time', ''), reverse=True)
     return files_list
 
 
@@ -274,16 +369,19 @@ def set_student_download_permission(filename, can_download, db):
     return True
 
 def get_download_file_path(filename, current_user, db):
-    perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
-    if not perm:
-        raise FileNotFoundError("文件不存在")
-
-    if current_user.role == "student" and not perm.student_can_download:
-        raise PermissionError("该文件不允许学生下载")
-
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise FileNotFoundError("文件不存在")
+
+    perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
+    if not perm:
+        perm = KnowledgeFilePermission(filename=filename, student_can_download=False)
+        db.add(perm)
+        db.commit()
+
+    can_download = bool(getattr(perm, '__dict__', {}).get('student_can_download', False))
+    if current_user.role == "student" and not can_download:
+        raise PermissionError("该文件不允许学生下载")
 
     return file_path
 
