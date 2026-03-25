@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ask as askService } from '../services/knowledgeService';
 import http from '../api/http';
-import { DownloadOutlined } from '@ant-design/icons';
+import { BookOutlined, DownloadOutlined } from '@ant-design/icons';
 const { TextArea } = Input;
 
 export default function QAPage() {
@@ -198,7 +198,10 @@ export default function QAPage() {
 
   return (
     <AppLayout>
-      <h2 style={{ fontWeight: 700, marginTop: 0 }}>知识库问答</h2>
+      <h2 style={{ fontWeight: 700, fontSize: 22, marginTop: 0 }}>
+        <BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />
+        知识库问答
+      </h2>
       <Space direction="vertical" style={{ width: '100%' }} size="large">
         <TextArea rows={4} value={question} onChange={e => setQuestion(e.target.value)} placeholder="请输入你的问题..." />
         <Button type="primary" onClick={handleAsk} loading={qaLoading}>问答</Button>

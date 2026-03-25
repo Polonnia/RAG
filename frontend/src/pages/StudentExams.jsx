@@ -47,8 +47,8 @@ export default function StudentExams() {
     <AppLayout>
       {/* 页面顶部标题和统计 */}
       <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontWeight: 800, fontSize: 28, marginTop: 0, marginBottom: 24, color: '#1f1f1f' }}>
-          <FileTextOutlined style={{ marginRight: 12, color: '#1890ff' }} />
+        <h1 style={{ fontWeight: 700, fontSize: 22, marginTop: 0, marginBottom: 24, color: '#1f1f1f' }}>
+          <FileTextOutlined style={{ marginRight: 8, color: '#1677ff' }} />
           考试系统
         </h1>
         
