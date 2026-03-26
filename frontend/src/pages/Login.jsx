@@ -4,7 +4,7 @@ import { UserOutlined, LockOutlined, LoginOutlined, UserAddOutlined } from '@ant
 
 // 添加Google字体
 const fontLink = document.createElement('link');
-fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;1,300&display=swap';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;1,300&family=Dancing+Script:wght@400;500;600;700&display=swap';
 fontLink.rel = 'stylesheet';
 document.head.appendChild(fontLink);
 import { login as doLogin, register as doRegister } from '../services/authService';
@@ -72,12 +72,12 @@ export default function Login() {
         width: 0;
         height: 0;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.5) 40%, transparent 70%);
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.25) 40%, transparent 70%);
         transform: translate(-50%, -50%);
         animation: ripple-effect 1.5s ease-out forwards;
         pointer-events: none;
         z-index: 4;
-        border: 2px solid rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       `;
 
       container.appendChild(ripple);
@@ -130,7 +130,7 @@ export default function Login() {
         }}
       ></div>
 
-      {/* Teaching    Assistant 标题 */}
+      {/* Trace Learn 标题 */}
       <div style={{
         position: 'absolute',
         top: '35%',
@@ -163,8 +163,14 @@ export default function Login() {
         e.currentTarget.style.transform = 'scale(1)';
       }}
       >
-        <span>Teaching</span>
-        <span style={{ marginLeft: '100px' }}>Assistant</span>
+          <span style={{ 
+            marginRight: '40px', 
+            transform: 'translateX(30px)' 
+          }}>T r a c e</span>
+          <span style={{ 
+            marginLeft: '40px', 
+            transform: 'translateX(-30px)' 
+          }}>L e a r n</span>
       </div>
 
       <Card
@@ -187,15 +193,20 @@ export default function Login() {
           width: '100%'
         }}>
           <h1 style={{
-            fontSize: '32px',
-            fontWeight: '700',
+            fontSize: '36px',
+            fontWeight: '900',
             color: '#262626',
             margin: '0 0 8px',
             background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
             WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
+            WebkitTextFillColor: 'transparent',
+            fontFamily: '"Dancing Script", "Playfair Display", cursive',
+            fontStyle: 'italic',
+            letterSpacing: '2px',
+            textShadow: '0 2px 4px rgba(25, 118, 210, 0.3)',
+            position: 'relative'
           }}>
-            教学AI助手
+            溯 知
           </h1>
           <p style={{ color: '#8c8c8c', fontSize: '16px', margin: '0 0 40px' }}>
             智能教学，轻松学习
@@ -265,13 +276,11 @@ export default function Login() {
               prefix={<UserOutlined style={{ color: '#757575' }} />}
               placeholder="请输入用户名"
               style={{
-                height: '48px',
                 borderRadius: '10px',
                 border: '2px solid #d9d9d9',
                 fontSize: '16px',
                 background: '#ffffff',
-                paddingLeft: '8px',
-                paddingTop: '8px',
+                padding: '0 8px 0 38px',
                 lineHeight: '32px'
               }}
               className="custom-login-input"
@@ -286,11 +295,11 @@ export default function Login() {
               prefix={<LockOutlined style={{ color: '#757575' }} />}
               placeholder="请输入密码"
               style={{
-                height: '48px',
                 borderRadius: '10px',
                 border: '2px solid #d9d9d9',
                 fontSize: '16px',
-                background: '#ffffff'
+                background: '#ffffff',
+                padding: '0 8px 0 38px'
               }}
             />
           </Form.Item>
@@ -335,11 +344,11 @@ export default function Login() {
               prefix={<UserOutlined style={{ color: '#757575' }} />}
               placeholder="请输入用户名"
               style={{
-                height: '48px',
                 borderRadius: '10px',
                 border: '2px solid #d9d9d9',
                 fontSize: '16px',
-                background: '#ffffff'
+                background: '#ffffff',
+                padding: '0 8px 0 38px'
               }}
             />
           </Form.Item>
@@ -352,11 +361,11 @@ export default function Login() {
               prefix={<LockOutlined style={{ color: '#757575' }} />}
               placeholder="请输入密码"
               style={{
-                height: '48px',
                 borderRadius: '10px',
                 border: '2px solid #d9d9d9',
                 fontSize: '16px',
-                background: '#ffffff'
+                background: '#ffffff',
+                padding: '0 8px 0 38px'
               }}
             />
           </Form.Item>
