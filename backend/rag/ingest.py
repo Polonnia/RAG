@@ -169,8 +169,7 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
 def save_asr_sentences_to_json(records: List[Dict[str, Any]], source_file: str) -> str:
 
     source_stem = Path(source_file).stem
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_path = os.path.join(AUDIO_TEXT_DIR, f'{source_stem}_{timestamp}.json')
+    output_path = os.path.join(AUDIO_TEXT_DIR, f'{source_stem}.json')
 
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(records, f, ensure_ascii=False, indent=2)

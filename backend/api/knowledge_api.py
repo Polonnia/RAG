@@ -1,14 +1,16 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, SessionLocal
 from rag.pageindex_search import MultiDocumentSearcher
 from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
+from typing import Any
 import os
 import io
 import uuid
+import time
 import asyncio
 import threading
 from auth import get_current_user
@@ -20,6 +22,57 @@ TREE_JSON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 
 
 UPLOAD_TASKS = {}
 UPLOAD_TASKS_LOCK = threading.Lock()
+
+
+async def _resolve_maybe_async(value: Any):
+    if asyncio.iscoroutine(value) or isinstance(value, asyncio.Future):
+        return await value
+    return value
+
+
+def _build_qa_sources_from_doc_results(doc_results):
+    sources = []
+    for doc_result in doc_results:
+        doc_name = doc_result.get('doc_name', '未知来源')
+        doc_id = doc_result.get('doc_id')
+        for node in doc_result.get('results', {}).get('nodes', []):
+            page_segments = node.get('page_segments') or []
+            if page_segments:
+                for seg in page_segments:
+                    sources.append({
+                        "content": seg.get('text', ''),
+                        "metadata": {
+                            "source": doc_name,
+                            "page": seg.get('page', '?'),
+                            "file_path": doc_id,
+                            "start_time": node.get('start_time'),
+                            "end_time": node.get('end_time')
+                        }
+                    })
+            else:
+                page_value = '?'
+                page_range = str(node.get('page_range', '')).strip()
+                if page_range:
+                    first_page = page_range.split('-', 1)[0].strip()
+                    if first_page.isdigit():
+                        page_value = int(first_page)
+
+                sources.append({
+                    "content": node.get('text', ''),
+                    "metadata": {
+                        "source": doc_name,
+                        "page": page_value,
+                        "file_path": doc_id,
+                        "start_time": node.get('start_time'),
+                        "end_time": node.get('end_time')
+                    }
+                })
+    return sources
+
+
+def _json_line(payload: dict) -> str:
+    import json
+    return json.dumps(payload, ensure_ascii=False) + "\n"
 
 
 def _upsert_upload_task(task_id, updater):
@@ -75,12 +128,12 @@ async def _run_upload_task(task_id: str, buffered_files: list, current_user: Use
 
             _upsert_upload_task(task_id, _update)
 
-        upload_result = await upload_knowledge_files(
+        upload_result = await _resolve_maybe_async(upload_knowledge_files(
             files=buffered_files,
             current_user=current_user,
             db=db,
             progress_callback=progress_handler
-        )
+        ))
 
         def _complete(task):
             task['status'] = 'completed'
@@ -111,7 +164,7 @@ async def _run_upload_task(task_id: str, buffered_files: list, current_user: Use
 async def upload_files(files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
     try:
         db = next(get_db())
-        upload_result = await upload_knowledge_files(files=files, current_user=current_user, db=db)
+        upload_result = await _resolve_maybe_async(upload_knowledge_files(files=files, current_user=current_user, db=db))
         results = upload_result["results"]
         success_count = upload_result["success_count"]
         error_count = upload_result["error_count"]
@@ -225,61 +278,80 @@ async def delete_knowledge_file_api(filename: str, current_user: User = Depends(
 
 @router.post("/qa")
 async def qa(question: str = Form(...)):
+    trace_id = uuid.uuid4().hex[:8]
+    started_at = time.perf_counter()
+    print(f"[QA-DEBUG][{trace_id}] /qa start, question_len={len(str(question or ''))}")
     try:
+        stage_started = time.perf_counter()
         searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
         searcher.load_documents()
+        print(f"[QA-DEBUG][{trace_id}] load_documents done, count={len(searcher.documents)}, elapsed={time.perf_counter() - stage_started:.2f}s")
 
         if not searcher.documents:
+            print(f"[QA-DEBUG][{trace_id}] no documents available")
             return {
                 "answer": "当前没有可检索的结构化文档，请先上传并处理文件。",
                 "sources": []
             }
 
-        result = await searcher.search(question)
+        stage_started = time.perf_counter()
+        result = await searcher.search(question, trace_id=trace_id)
+        print(f"[QA-DEBUG][{trace_id}] search done, elapsed={time.perf_counter() - stage_started:.2f}s, doc_hits={len(result.get('documents', []))}")
 
-        sources = []
-        for doc_result in result.get('documents', []):
-            doc_name = doc_result.get('doc_name', '未知来源')
-            doc_id = doc_result.get('doc_id')
-            for node in doc_result.get('results', {}).get('nodes', []):
-                page_segments = node.get('page_segments') or []
-                if page_segments:
-                    for seg in page_segments:
-                        sources.append({
-                            "content": seg.get('text', ''),
-                            "metadata": {
-                                "source": doc_name,
-                                "page": seg.get('page', '?'),
-                                "file_path": doc_id,
-                                "start_time": node.get('start_time'),
-                                "end_time": node.get('end_time')
-                            }
-                        })
-                else:
-                    page_value = '?'
-                    page_range = str(node.get('page_range', '')).strip()
-                    if page_range:
-                        first_page = page_range.split('-', 1)[0].strip()
-                        if first_page.isdigit():
-                            page_value = int(first_page)
+        stage_started = time.perf_counter()
+        sources = _build_qa_sources_from_doc_results(result.get('documents', []))
 
-                    sources.append({
-                        "content": node.get('text', ''),
-                        "metadata": {
-                            "source": doc_name,
-                            "page": page_value,
-                            "file_path": doc_id,
-                            "start_time": node.get('start_time'),
-                            "end_time": node.get('end_time')
-                        }
-                    })
+        print(f"[QA-DEBUG][{trace_id}] build sources done, count={len(sources)}, elapsed={time.perf_counter() - stage_started:.2f}s")
+        print(f"[QA-DEBUG][{trace_id}] /qa finished, total_elapsed={time.perf_counter() - started_at:.2f}s")
 
         return {
             "answer": result.get('answer', ''),
             "sources": sources
         }
     except Exception as e:
+        print(f"[QA-DEBUG][{trace_id}] /qa failed after {time.perf_counter() - started_at:.2f}s, error={str(e)}")
         return JSONResponse(status_code=500, content={"error": f"问答失败: {str(e)}"})
+
+
+@router.post("/qa-stream")
+async def qa_stream(question: str = Form(...)):
+    trace_id = uuid.uuid4().hex[:8]
+
+    async def event_generator():
+        started_at = time.perf_counter()
+        answer_parts = []
+        try:
+            print(f"[QA-DEBUG][{trace_id}] /qa-stream start, question_len={len(str(question or ''))}")
+            yield _json_line({"type": "stage", "stage": "检索文档中", "progress": 20})
+
+            searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
+            searcher.load_documents()
+            doc_count = len(searcher.documents)
+            print(f"[QA-DEBUG][{trace_id}] /qa-stream load_documents done, count={doc_count}")
+
+            if not searcher.documents:
+                yield _json_line({"type": "done", "answer": "当前没有可检索的结构化文档，请先上传并处理文件。", "sources": []})
+                return
+
+            yield _json_line({"type": "stage", "stage": "筛选章节中", "progress": 45})
+            doc_results = await searcher.search_documents(question, trace_id=trace_id)
+
+            yield _json_line({"type": "stage", "stage": "整合答案中", "progress": 75})
+            yield _json_line({"type": "stage", "stage": "生成最终回答中", "progress": 90})
+
+            async for chunk in searcher.stream_comprehensive_answer(question, doc_results, trace_id=trace_id):
+                answer_parts.append(chunk)
+                yield _json_line({"type": "token", "content": chunk})
+
+            answer_text = "".join(answer_parts)
+            sources = _build_qa_sources_from_doc_results(doc_results)
+            print(f"[QA-DEBUG][{trace_id}] /qa-stream done, elapsed={time.perf_counter() - started_at:.2f}s, answer_len={len(answer_text)}, sources={len(sources)}")
+            yield _json_line({"type": "done", "answer": answer_text, "sources": sources})
+        except Exception as e:
+            print(f"[QA-DEBUG][{trace_id}] /qa-stream failed after {time.perf_counter() - started_at:.2f}s, error={str(e)}")
+            yield _json_line({"type": "error", "message": f"问答失败: {str(e)}"})
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 @router.post("/qa-history")
 async def save_qa_history(question: str = Form(...), answer: str = Form(...), sources: str = Form(default="[]"), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

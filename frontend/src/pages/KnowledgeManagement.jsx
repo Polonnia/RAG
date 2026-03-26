@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message, Modal, Progress } from 'antd';
 const { Text } = Typography;
 import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
@@ -19,7 +19,7 @@ export default function KnowledgeManagement() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStep, setUploadStep] = useState('');
   const [uploadFileStatuses, setUploadFileStatuses] = useState([]);
-  const [pollingId, setPollingId] = useState(null);
+  const pollingRef = useRef(null);
 
   useEffect(() => {
     fetchKnowledgeFiles();
@@ -27,11 +27,49 @@ export default function KnowledgeManagement() {
 
   useEffect(() => {
     return () => {
-      if (pollingId) {
-        window.clearInterval(pollingId);
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
     };
-  }, [pollingId]);
+  }, []);
+
+  const mergeAndSortFileStatuses = (incomingStatuses, preferredOrder) => {
+    const incomingMap = new Map((incomingStatuses || []).map(item => [item.filename, item]));
+    const ordered = [];
+
+    (preferredOrder || []).forEach((name) => {
+      if (incomingMap.has(name)) {
+        ordered.push(incomingMap.get(name));
+        incomingMap.delete(name);
+      }
+    });
+
+    const leftovers = Array.from(incomingMap.values()).sort((a, b) =>
+      String(a.filename || '').localeCompare(String(b.filename || ''), 'zh-CN')
+    );
+
+    return [...ordered, ...leftovers];
+  };
+
+  const shallowEqualStatuses = (a, b) => {
+    if (a === b) return true;
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      const left = a[i] || {};
+      const right = b[i] || {};
+      if (
+        left.filename !== right.filename
+        || left.status !== right.status
+        || left.step !== right.step
+        || Number(left.progress || 0) !== Number(right.progress || 0)
+        || (left.message || '') !== (right.message || '')
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   const fetchKnowledgeFiles = async () => {
     setFileLoading(true);
@@ -56,9 +94,9 @@ export default function KnowledgeManagement() {
     });
     setLoading(true);
     try {
-      if (pollingId) {
-        window.clearInterval(pollingId);
-        setPollingId(null);
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
 
       const response = await http.post('/upload-with-progress', formData, {
@@ -79,14 +117,23 @@ export default function KnowledgeManagement() {
         try {
           const taskRes = await http.get(`/upload-task/${taskId}`);
           const task = taskRes.data || {};
+          const orderedStatuses = mergeAndSortFileStatuses(task.files || [], fileList.map(file => file.name).filter(Boolean));
 
-          setUploadProgress(Number(task.overall_progress || 0));
-          setUploadStep(task.current_step || '处理中');
-          setUploadFileStatuses(task.files || []);
+          setUploadProgress((prev) => {
+            const next = Number(task.overall_progress || 0);
+            return prev === next ? prev : next;
+          });
+
+          setUploadStep((prev) => {
+            const next = task.current_step || '处理中';
+            return prev === next ? prev : next;
+          });
+
+          setUploadFileStatuses((prev) => shallowEqualStatuses(prev, orderedStatuses) ? prev : orderedStatuses);
 
           if (task.status === 'completed') {
             window.clearInterval(intervalId);
-            setPollingId(null);
+            pollingRef.current = null;
             setLoading(false);
             setFileList([]);
             fetchKnowledgeFiles();
@@ -105,20 +152,20 @@ export default function KnowledgeManagement() {
 
           if (task.status === 'failed') {
             window.clearInterval(intervalId);
-            setPollingId(null);
+            pollingRef.current = null;
             setLoading(false);
             message.error(task.error || '上传任务失败');
           }
         } catch (pollErr) {
           console.error('轮询上传进度失败:', pollErr);
           window.clearInterval(intervalId);
-          setPollingId(null);
+          pollingRef.current = null;
           setLoading(false);
           message.error('获取上传进度失败');
         }
       }, 1000);
 
-      setPollingId(intervalId);
+      pollingRef.current = intervalId;
     } catch (err) {
       console.error('上传错误:', err);
       setLoading(false);
@@ -213,12 +260,14 @@ export default function KnowledgeManagement() {
             <Progress percent={Math.round(uploadProgress)} status={uploadProgress >= 100 ? 'success' : 'active'} />
             {uploadFileStatuses.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
-                {uploadFileStatuses.map((item) => (
-                  <div key={item.filename} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                {uploadFileStatuses.map((item, index) => (
+                  <div key={`${item.filename}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 28, marginBottom: 6 }}>
                     <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.filename}>
                       {item.filename}
                     </Text>
-                    <Text type="secondary">{item.step || '处理中'}</Text>
+                    <Text type="secondary" style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }} title={item.step || '处理中'}>
+                      {item.step || '处理中'}
+                    </Text>
                   </div>
                 ))}
               </div>

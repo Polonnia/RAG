@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import AsyncGenerator, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
@@ -140,4 +140,40 @@ async def completion_text_async(
                 await asyncio.sleep(1)
             else:
                 raise e
+    raise last_error
+
+
+async def completion_stream_async(
+    prompt: str,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    chat_history: Optional[List[dict]] = None,
+    temperature: float = 0,
+    max_retries: int = 3,
+) -> AsyncGenerator[str, None]:
+    messages = _build_messages(prompt, system_prompt, chat_history)
+    last_error = None
+
+    for i in range(max_retries):
+        client = AsyncOpenAI(api_key=get_api_key(), base_url=get_base_url())
+        try:
+            stream = await client.chat.completions.create(
+                model=_resolve_model(model),
+                messages=messages,
+                temperature=temperature,
+                stream=True,
+            )
+
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    yield delta
+            return
+        except Exception as e:
+            last_error = e
+            if i < max_retries - 1:
+                await asyncio.sleep(1)
+            else:
+                raise e
+
     raise last_error

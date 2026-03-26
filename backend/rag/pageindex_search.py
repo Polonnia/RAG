@@ -2,9 +2,10 @@ import os
 import json  
 import asyncio  
 import re
-from typing import List, Dict, Any, Optional
+import time
+from typing import AsyncGenerator, List, Dict, Any, Optional
 from .pageindex import utils  
-from .llm_client import get_default_model
+from .llm_client import completion_stream_async, get_default_model
   
 class MultiDocumentSearcher:  
     """多文档搜索器，加载预生成的JSON结构文件"""  
@@ -13,6 +14,10 @@ class MultiDocumentSearcher:
         self.json_dir = json_dir  
         self.model = model or get_default_model()
         self.documents = {}  # {doc_id: {"tree": tree, "metadata": metadata}}  
+
+    @staticmethod
+    def _debug(trace_id: str, message: str):
+        print(f"[QA-DEBUG][{trace_id}][{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
     @staticmethod
     def _iter_nodes(tree):
@@ -96,35 +101,122 @@ class MultiDocumentSearcher:
               
         print(f"已加载 {len(self.documents)} 个文档")  
       
-    async def search(self, query: str, top_k: int = 5) -> Dict[str, Any]:  
-        """在所有文档中搜索查询"""  
+    async def search_documents(self, query: str, top_k: int = 5, trace_id: str = "-", max_parallel_docs: int = 3) -> List[Dict[str, Any]]:
+        """在所有文档中搜索并返回命中文档（不生成最终答案）"""
+        started_at = time.perf_counter()
+        self._debug(trace_id, f"search start, total_docs={len(self.documents)}, top_k={top_k}, query_len={len(str(query or ''))}")
         all_results = []  
-          
-        # 在每个文档中搜索  
-        for doc_id, doc_data in self.documents.items():  
-            result = await self._search_single_document(doc_id, doc_data, query)  
-            if result["nodes"]:  
-                all_results.append({  
-                    "doc_id": doc_id,  
-                    "doc_name": doc_data["metadata"]["name"],  
-                    "doc_description": doc_data["metadata"]["description"],  
-                    "results": result  
-                })  
+
+        # 在每个文档中并发搜索（限制并发度）
+        semaphore = asyncio.Semaphore(max(1, int(max_parallel_docs or 1)))
+        docs = list(self.documents.items())
+
+        async def _search_doc(index: int, total: int, doc_id: str, doc_data: Dict):
+            doc_name = doc_data.get("metadata", {}).get("name", doc_id)
+            self._debug(trace_id, f"doc_search start [{index}/{total}] doc_id={doc_id}, doc_name={doc_name}")
+            per_doc_started = time.perf_counter()
+            async with semaphore:
+                result = await self._search_single_document(doc_id, doc_data, query, trace_id=trace_id)
+            self._debug(trace_id, f"doc_search done [{index}/{total}] doc_id={doc_id}, nodes={len(result.get('nodes', []))}, elapsed={time.perf_counter() - per_doc_started:.2f}s")
+            return doc_id, doc_data, result
+
+        tasks = [
+            _search_doc(index, len(docs), doc_id, doc_data)
+            for index, (doc_id, doc_data) in enumerate(docs, start=1)
+        ]
+        search_outputs = await asyncio.gather(*tasks)
+
+        for doc_id, doc_data, result in search_outputs:
+            if result["nodes"]:
+                all_results.append({
+                    "doc_id": doc_id,
+                    "doc_name": doc_data["metadata"]["name"],
+                    "doc_description": doc_data["metadata"]["description"],
+                    "results": result
+                })
           
         # 按相关节点数量排序  
         all_results.sort(key=lambda x: len(x["results"]["nodes"]), reverse=True)  
           
-        # 生成综合答案  
-        final_answer = await self._generate_comprehensive_answer(query, all_results[:top_k])  
+        self._debug(trace_id, f"search finished, total_elapsed={time.perf_counter() - started_at:.2f}s")
+        return all_results[:top_k]
+
+    @staticmethod
+    def _build_answer_prompt(query: str, doc_results: List[Dict]) -> str:
+        if not doc_results:
+            return ""
+
+        all_context = []
+        for doc_result in doc_results:
+            doc_name = doc_result["doc_name"]
+            nodes = doc_result["results"]["nodes"]
+            doc_type = doc_result.get("results", {}).get("nodes", [{}])[0].get("doc_type", "pdf") if nodes else "pdf"
+
+            context_parts = [f"\n=== 文档: {doc_name} ==="]
+            for node in nodes:
+                context_parts.append(f"章节: {node['title']}")
+                if doc_type == 'media':
+                    context_parts.append(f"时间段: {node.get('time_range', '')}")
+                else:
+                    context_parts.append(f"位置: {node['page_range']}")
+
+                page_segments = node.get("page_segments", [])
+                if doc_type != 'media' and page_segments:
+                    for seg in page_segments:
+                        snippet = seg["text"][:400].replace("\n", " ")
+                        context_parts.append(f"页码 p{seg['page']}: {snippet}...")
+                else:
+                    context_parts.append(f"内容: {node['text'][:500]}...")
+
+            all_context.append("\n".join(context_parts))
+
+        combined_context = "\n".join(all_context)
+        return f"""  
+    基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。  
+  
+    问题: {query}  
+  
+    文档内容:  
+    {combined_context}  
+  
+    要求：
+    1) PDF/文档类型优先引用“页码 pX”证据，格式示例：[文档名 p23]。
+    2) 媒体类型必须引用时间段，格式示例：[文档名 00:10-00:35]。
+    3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档名 12-15]。
+    4) 引用必须使用英文方括号'[]'，不能是中文括号'【】'。
+    """
+
+    async def stream_comprehensive_answer(self, query: str, doc_results: List[Dict], trace_id: str = "-") -> AsyncGenerator[str, None]:
+        if not doc_results:
+            yield "未找到相关信息。"
+            return
+
+        answer_prompt = self._build_answer_prompt(query, doc_results)
+        self._debug(trace_id, f"llm final_answer stream start, context_docs={len(doc_results)}")
+        llm_started = time.perf_counter()
+        total_chars = 0
+        async for chunk in completion_stream_async(prompt=answer_prompt, model=self.model):
+            total_chars += len(chunk)
+            yield chunk
+        self._debug(trace_id, f"llm final_answer stream done, elapsed={time.perf_counter() - llm_started:.2f}s, chars={total_chars}")
+
+    async def search(self, query: str, top_k: int = 5, trace_id: str = "-", max_parallel_docs: int = 3) -> Dict[str, Any]:  
+        """在所有文档中搜索查询"""  
+        all_results = await self.search_documents(query, top_k=top_k, trace_id=trace_id, max_parallel_docs=max_parallel_docs)
+
+        self._debug(trace_id, f"compose answer start, matched_docs={len(all_results)}")
+        answer_started = time.perf_counter()
+        final_answer = await self._generate_comprehensive_answer(query, all_results, trace_id=trace_id)
+        self._debug(trace_id, f"compose answer done, elapsed={time.perf_counter() - answer_started:.2f}s")
           
         return {  
             "query": query,  
             "answer": final_answer,  
-            "documents": all_results[:top_k],  
+            "documents": all_results,  
             "total_docs_searched": len(self.documents)  
         }  
       
-    async def _search_single_document(self, doc_id: str, doc_data: Dict, query: str) -> Dict[str, Any]:  
+    async def _search_single_document(self, doc_id: str, doc_data: Dict, query: str, trace_id: str = "-") -> Dict[str, Any]:  
         """在单个文档中搜索"""  
         tree = doc_data["tree"]  
         doc_type = doc_data.get("metadata", {}).get("doc_type", "pdf")
@@ -152,7 +244,10 @@ Directly return the final JSON structure. Do not output anything else.
 """  
           
         # 调用LLM进行搜索  
+        self._debug(trace_id, f"llm tree_search request start doc_id={doc_id}, doc_type={doc_type}")
+        llm_started = time.perf_counter()
         tree_search_result = await utils.ChatGPT_API_async(self.model, search_prompt)  
+        self._debug(trace_id, f"llm tree_search response done doc_id={doc_id}, elapsed={time.perf_counter() - llm_started:.2f}s, response_len={len(str(tree_search_result or ''))}")
         tree_search_json = utils.extract_json(tree_search_result)  
           
         # 创建节点映射  
@@ -184,55 +279,16 @@ Directly return the final JSON structure. Do not output anything else.
             "nodes": relevant_nodes  
         }  
       
-    async def _generate_comprehensive_answer(self, query: str, doc_results: List[Dict]) -> str:  
+    async def _generate_comprehensive_answer(self, query: str, doc_results: List[Dict], trace_id: str = "-") -> str:  
         """基于多个文档的搜索结果生成综合答案"""  
         if not doc_results:  
             return "未找到相关信息。"  
+        answer_prompt = self._build_answer_prompt(query, doc_results)
           
-        # 收集所有相关内容  
-        all_context = []  
-        for doc_result in doc_results:  
-            doc_name = doc_result["doc_name"]  
-            nodes = doc_result["results"]["nodes"]  
-            doc_type = doc_result.get("results", {}).get("nodes", [{}])[0].get("doc_type", "pdf") if nodes else "pdf"
-              
-            context_parts = [f"\n=== 文档: {doc_name} ==="]  
-            for node in nodes:  
-                context_parts.append(f"章节: {node['title']}")  
-                if doc_type == 'media':
-                    context_parts.append(f"时间段: {node.get('time_range', '')}")
-                else:
-                    context_parts.append(f"位置: {node['page_range']}")  
-
-                page_segments = node.get("page_segments", [])
-                if doc_type != 'media' and page_segments:
-                    for seg in page_segments:
-                        snippet = seg["text"][:400].replace("\n", " ")
-                        context_parts.append(f"页码 p{seg['page']}: {snippet}...")
-                else:
-                    context_parts.append(f"内容: {node['text'][:500]}...")  
-              
-            all_context.append("\n".join(context_parts))  
-          
-        combined_context = "\n".join(all_context)  
-          
-        # 生成最终答案  
-        answer_prompt = f"""  
-    基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。  
-  
-    问题: {query}  
-  
-    文档内容:  
-    {combined_context}  
-  
-    要求：
-    1) PDF/文档类型优先引用“页码 pX”证据，格式示例：[文档名 p23]。
-    2) 媒体类型必须引用时间段，格式示例：[文档名 00:10-00:35]。
-    3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档名 12-15]。
-    4) 不要把媒体来源写成页码。
-    """  
-          
+        self._debug(trace_id, f"llm final_answer request start, context_docs={len(doc_results)}")
+        llm_started = time.perf_counter()
         answer = await utils.ChatGPT_API_async(self.model, answer_prompt)  
+        self._debug(trace_id, f"llm final_answer response done, elapsed={time.perf_counter() - llm_started:.2f}s, answer_len={len(str(answer or ''))}")
         return answer  
       
     def list_documents(self) -> List[Dict[str, str]]:  

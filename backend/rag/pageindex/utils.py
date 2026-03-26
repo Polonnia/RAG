@@ -658,7 +658,7 @@ def add_node_text_with_labels(node, pdf_pages):
 
 
 async def generate_node_summary(node, model=None):
-    prompt = f"""You are given a part of a document, your task is to generate a concise description of the partial document about what are main points covered in the partial document.
+    prompt = f"""You are given a part of a document, your task is to generate a concise description of the partial document about what are main points covered in the partial document. The description should be concise.
 
     Partial Document Text: {node['text']}
     
@@ -1138,6 +1138,28 @@ Paragraph list:
     return built
 
 
+def resolve_media_doc_name_from_uploads(audio_json_path):
+    json_path = Path(audio_json_path)
+    json_stem = json_path.stem
+    project_root = Path(__file__).resolve().parents[3]
+    uploads_dir = project_root / 'uploads'
+    media_exts = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.mp3', '.wav', '.m4a', '.aac', '.ogg'}
+
+    if not uploads_dir.exists() or not uploads_dir.is_dir():
+        return json_path.name
+
+    for ext in media_exts:
+        candidate = uploads_dir / f"{json_stem}{ext}"
+        if candidate.exists() and candidate.is_file():
+            return candidate.name
+
+    for candidate in uploads_dir.rglob('*'):
+        if candidate.is_file() and candidate.suffix.lower() in media_exts and candidate.stem == json_stem:
+            return candidate.name
+
+    return json_path.name
+
+
 def audio_json_to_tree(audio_json_path,
                        model=None,
                        if_add_node_id='yes',
@@ -1155,8 +1177,8 @@ def audio_json_to_tree(audio_json_path,
 
         Output format:
     {
-      "doc_name": "xxx.json",
-            "doc_description": "...",
+      "doc_name": "xxx.mp4",
+      "doc_description": "...",
       "structure": [ ... ]
     }
     """
@@ -1184,7 +1206,7 @@ def audio_json_to_tree(audio_json_path,
         remove_structure_text(structure)
 
     result = {
-        'doc_name': os.path.basename(audio_json_path),
+        'doc_name': resolve_media_doc_name_from_uploads(audio_json_path),
         'structure': structure,
     }
 
