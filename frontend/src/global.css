@@ -450,12 +450,42 @@ body {
   }
 }
 
+/* 纸飞机微妙浮动效果 */
+@keyframes paperPlaneFloat {
+  0%, 100% {
+    transform: scaleX(-1) translateY(0px);
+  }
+  50% {
+    transform: scaleX(-1) translateY(-15px);
+  }
+}
+
 @keyframes bounce {
   0%, 100% {
     transform: translateX(-50%) translateY(0px);
   }
   50% {
     transform: translateX(-50%) translateY(-10px);
+  }
+}
+
+/* 书籍微妙浮动效果 */
+@keyframes bookFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+/* 云彩微妙浮动效果 */
+@keyframes cloudFloat {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0px);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-12px);
   }
 }
 
@@ -498,6 +528,17 @@ body {
     textShadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 4px 16px rgba(0, 0, 0, 0.2);
     opacity: 1;
   }
+}
+
+/* ==================== 登录页面卡片透明样式 ==================== */
+.login-card {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 2px solid rgba(100, 150, 200, 0.5) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.login-card:hover {
+  border-color: rgba(100, 150, 200, 0.7) !important;
 }
 
 /* ==================== 响应式设计 ==================== */

@@ -115,6 +115,42 @@ export default function Login() {
       onMouseMove={handleMouseMove}
     >
 
+      {/* Paper Plane 装饰图片 - Trace文字T字母上方 + 浮动动画 */}
+      <img
+        src="/images/paper plane.png"
+        alt="Paper Plane"
+        style={{
+          position: 'absolute',
+          top: '22%',
+          left: '0.1%',
+          width: '180px',
+          height: '180px',
+          opacity: 0.8,
+          animation: 'paperPlaneFloat 4s ease-in-out infinite',
+          zIndex: 2,
+          pointerEvents: 'none'
+        }}
+      />
+
+      {/* Learn 装饰图片 - 顶部拉宽 + 浮动动画 */}
+      <img
+        src="/images/learn.png"
+        alt="Learn"
+        style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '80%',
+          maxWidth: '1000px',
+          height: 'auto',
+          opacity: 0.7,
+          animation: 'cloudFloat 5s ease-in-out infinite',
+          zIndex: 1,
+          pointerEvents: 'none'
+        }}
+      />
+
       {/* 水波纹效果容器 - 在标题和卡片之间 */}
       <div
         id="ripple-container"
@@ -174,14 +210,12 @@ export default function Login() {
       </div>
 
       <Card
+        className="login-card"
         style={{
           width: '100%',
           maxWidth: 420,
           borderRadius: '20px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(10px)',
-          border: 'none',
           position: 'relative',
           zIndex: 10
         }}
