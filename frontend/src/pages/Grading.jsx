@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { Card, Table, Modal, Select, InputNumber, Input, Button, message } from 'antd';
-import axios from 'axios';
-import getApiUrl from '../apiConfig';
+import http from '../api/http';
 
 export default function Grading() {
   const [gradingList, setGradingList] = useState([]);
@@ -16,11 +15,11 @@ export default function Grading() {
   const fetchGradingList = async () => {
     setGradingLoading(true);
     try {
-      const examsRes = await axios.get(`${getApiUrl()}/teacher/exams`);
+      const examsRes = await http.get('/teacher/exams');
       const exams = examsRes.data.exams || [];
       let questionMap = {};
       for (const exam of exams) {
-        const ansRes = await axios.get(`${getApiUrl()}/teacher/exam/${exam.id}/answers`);
+        const ansRes = await http.get(`/teacher/exam/${exam.id}/answers`);
         const students = ansRes.data.students || [];
         for (const stu of students) {
           for (const ans of stu.answers) {
@@ -68,12 +67,12 @@ export default function Grading() {
   // 批改弹窗提交
   const handleModalGrade = async (studentExamId, questionId, score, comment) => {
     try {
-      await axios.post(`${getApiUrl()}/teacher/grade-answer`, new URLSearchParams({
+      await http.post('/teacher/grade-answer', {
         student_exam_id: studentExamId,
         question_id: questionId,
         points_earned: score,
         comment
-      }));
+      });
       message.success('批改成功');
       setGradingModalVisible(false);
       fetchGradingList();
