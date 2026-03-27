@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, List, Empty, Spin, Tag, Button, Input, Modal, Radio, Space, Progress, Result, Checkbox } from 'antd';
-import { DeleteOutlined, BookOutlined } from '@ant-design/icons';
+import { DeleteOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
@@ -71,7 +71,7 @@ export default function StudentAnalysis() {
   return (
     <AppLayout>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />学情分析</span>} 
+        <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BarChartOutlined style={{ color: '#1677ff', marginRight: 8 }} />学情分析</span>} 
               style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', marginBottom: 24 }}>
           {loading ? (
             <Spin style={{ display: 'block', textAlign: 'center', padding: '48px 0' }} />

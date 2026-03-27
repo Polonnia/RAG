@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { Button, Input, Space, message, Spin, List, Tag } from 'antd';
+import { FileTextOutlined } from '@ant-design/icons';
 import { designTeachingPlan, saveTeachingPlanHistory, getTeachingPlanHistory, deleteTeachingPlanHistory, generateTeachingDetail, generatePPTFromOutline } from '../services/teachingService';
 const { TextArea } = Input;
 
@@ -62,7 +63,10 @@ export default function TeachingSettings() {
 
   return (
     <AppLayout>
-      <h2 style={{ fontWeight: 700, marginTop: 0 }}>教学内容设置</h2>
+      <h2 style={{ fontWeight: 700, marginTop: 0 }}>
+        <FileTextOutlined style={{ marginRight: 8, color: '#1677ff' }} />
+        教学内容设置
+      </h2>
       <Space direction="vertical" style={{ width: '100%' }} size="large">
         <TextArea rows={4} value={courseOutline} onChange={e => setCourseOutline(e.target.value)} placeholder="请输入课程大纲..." />
         <Button type="primary" onClick={handleDesign} loading={planLoading}>生成教学内容</Button>

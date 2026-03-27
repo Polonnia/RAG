@@ -3,7 +3,7 @@ import AppLayout from '../components/layout/AppLayout';
 import { Button, List, message, Modal, Card, Tag, Row, Col, Statistic, Divider, Empty, Space } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { listStudentExams, getStudentExam, submitExam, getLatestAnalysis, saveExamDraft } from '../services/studentExamService';
-import { CheckCircleOutlined, ClockCircleOutlined, FileTextOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined, FormOutlined } from '@ant-design/icons';
 
 export default function StudentExams() {
   const [exams, setExams] = useState([]);
@@ -48,7 +48,7 @@ export default function StudentExams() {
       {/* 页面顶部标题和统计 */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontWeight: 700, fontSize: 22, marginTop: 0, marginBottom: 24, color: '#1f1f1f' }}>
-          <FileTextOutlined style={{ marginRight: 8, color: '#1677ff' }} />
+          <FormOutlined style={{ marginRight: 8, color: '#1677ff' }} />
           考试系统
         </h1>
         

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { Button, Input, Space, Spin, Select, message, Modal, Form, InputNumber, List, Tag } from 'antd';
+import { FormOutlined } from '@ant-design/icons';
 import { generateExam, saveExamHistory, getExamHistory, deleteExamHistory, listTeacherExams, createExam } from '../services/examTeacherService';
 const { TextArea } = Input;
 
@@ -67,7 +68,10 @@ export default function ExamGenerator() {
 
   return (
     <AppLayout>
-      <h2 style={{ fontWeight: 700, marginTop: 0 }}>考试内容生成</h2>
+      <h2 style={{ fontWeight: 700, marginTop: 0 }}>
+        <FormOutlined style={{ marginRight: 8, color: '#1677ff' }} />
+        考试内容生成
+      </h2>
       <Space direction="vertical" style={{ width: '100%' }} size="large">
         <TextArea rows={4} value={outline} onChange={e => setOutline(e.target.value)} placeholder="请输入课程大纲..." />
         <Space align="center">
