@@ -97,10 +97,18 @@ export default function ExamGenerator() {
                 dataSource={allQuestions}
                 renderItem={(q, idx) => (
                   <List.Item onClick={() => setSelectedQuestions(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
-                             style={{ cursor: 'pointer', background: selectedQuestions.includes(idx) ? '#e6f4ff' : undefined }}
+                             style={{
+                               cursor: 'pointer',
+                               background: selectedQuestions.includes(idx) ? '#e6f4ff' : undefined,
+                               border: selectedQuestions.includes(idx) ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                               borderRadius: '6px',
+                               marginBottom: '8px'
+                             }}
                   >
                     <div>
-                      <Tag color="blue">{q.type}</Tag> {q.question}
+                      <Tag color={selectedQuestions.includes(idx) ? "green" : "blue"}>
+                        {selectedQuestions.includes(idx) ? "✓ " : ""}{q.type}
+                      </Tag> {q.question}
                     </div>
                   </List.Item>
                 )}

@@ -192,6 +192,8 @@ async def create_exam(title: str = Form(...), description: str = Form(""), durat
 
 @router.get("/teacher/exams")
 async def get_teacher_exams(current_user: User = Depends(get_current_user)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="需要教师权限")
     db = next(get_db())
     exams = db.query(Exam).filter(Exam.teacher_id == current_user.id).all()
     result = []
