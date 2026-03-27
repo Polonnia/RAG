@@ -3,7 +3,7 @@ import AppLayout from '../components/layout/AppLayout';
 import { Button, List, message, Modal, Card, Tag, Row, Col, Statistic, Divider, Empty, Space } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { listStudentExams, getStudentExam, submitExam, getLatestAnalysis, saveExamDraft } from '../services/studentExamService';
-import { CheckCircleOutlined, ClockCircleOutlined, FormOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined, FormOutlined, FileTextOutlined } from '@ant-design/icons';
 
 export default function StudentExams() {
   const [exams, setExams] = useState([]);
