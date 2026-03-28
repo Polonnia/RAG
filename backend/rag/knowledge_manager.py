@@ -7,8 +7,10 @@ import re
 import shutil
 import asyncio
 import subprocess
+import random
 from datetime import datetime
 from pathlib import Path
+from pypdf import PdfReader
 
 from models import KnowledgeFilePermission
 from rag.ingest import ingest_file
@@ -67,6 +69,26 @@ def _save_tree_result(source_file_path, tree_result):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(tree_result, f, ensure_ascii=False, indent=2)
     return output_path
+
+
+def _is_scanned_pdf(pdf_path, sample_pages=2, min_chars=10):
+    if not os.path.exists(pdf_path):
+        raise FileNotFoundError(f'PDF文件不存在: {pdf_path}')
+
+    reader = PdfReader(pdf_path)
+    total_pages = len(reader.pages)
+    if total_pages == 0:
+        return True
+
+    sampled_count = min(sample_pages, total_pages)
+    sampled_indexes = random.sample(range(total_pages), sampled_count)
+
+    extracted_chars = 0
+    for idx in sampled_indexes:
+        text = reader.pages[idx].extract_text() or ''
+        extracted_chars += len(re.sub(r'\s+', '', text))
+
+    return extracted_chars < min_chars
 
 
 def _convert_office_to_pdf(input_path):
@@ -142,12 +164,18 @@ def _process_with_pageindex(file_path, progress_callback=None):
     if ext in SUPPORTED_WORD or ext in SUPPORTED_PPT:
         _notify('文档格式转换', 25)
         pdf_path = _convert_office_to_pdf(file_path)
+        _notify('检测PDF是否为扫描件', 35)
+        if _is_scanned_pdf(pdf_path):
+            ocr_json = ingest_file(pdf_path)
         _notify('解析文档目录', 45)
         tree_result = page_index_main(pdf_path, opt, progress_callback=progress_callback)
         _save_tree_result(file_path, tree_result)
         return tree_result
 
     if ext == '.pdf':
+        _notify('检测PDF是否为扫描件', 35)
+        if _is_scanned_pdf(file_path):
+            raise ValueError('检测到扫描版PDF（随机抽取两页文本总字数小于10），请先进行OCR后再上传。')
         _notify('解析文档目录', 45)
         tree_result = page_index_main(file_path, opt, progress_callback=progress_callback)
         _save_tree_result(file_path, tree_result)

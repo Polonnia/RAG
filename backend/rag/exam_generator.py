@@ -1,5 +1,7 @@
 import os
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import List, Dict, Any, Union
 from langchain.schema import Document
@@ -7,17 +9,29 @@ from langchain.text_splitter import CharacterTextSplitter
 
 # 导入LLM调用模块
 from .qa import get_completion
-from .resources import get_embeddings, get_vector_db
+from .resources import get_embeddings
+from .pageindex_search import MultiDocumentSearcher
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
-vector_db = get_vector_db()
+TREE_JSON_DIR = os.path.join(DB_DIR, 'trees')
 
 class ExamGenerator:
     """考核内容生成器"""
     
     def __init__(self):
         self.embeddings = get_embeddings()
+
+    @staticmethod
+    def _run_coroutine_sync(coro):
+        """在同步上下文安全执行协程。若当前线程已有事件循环，则在新线程执行。"""
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda: asyncio.run(coro))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(coro)
     
     def get_existing_keywords(self) -> List[str]:
         """获取已有关词池（从知识库、历史关键词等）"""
@@ -41,16 +55,47 @@ class ExamGenerator:
         except Exception as e:
             print(f"获取已有关键词失败: {str(e)}")
             return []
-    
-    
-    def search_knowledge(self, query: str, top_k: int = 5) -> List[Document]:
-        """搜索相关知识"""
+
+    def search_knowledge_by_pageindex(self, query: str, top_k_docs: int = 5, max_nodes: int = 20) -> List[Document]:
+        """基于 pageindex 结构树检索相关节点原文，不做最终QA整合回答。"""
         try:
-            docs = vector_db.similarity_search(query, k=top_k)
-            return docs
+            searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
+            searcher.load_documents()
+            if not searcher.documents:
+                return []
+
+            doc_results = self._run_coroutine_sync(
+                searcher.search_documents(query=query, top_k=top_k_docs, trace_id="exam")
+            )
+
+            knowledge_docs: List[Document] = []
+            for doc_result in doc_results or []:
+                doc_name = doc_result.get("doc_name", "未知来源")
+                nodes = doc_result.get("results", {}).get("nodes", [])
+                for node in nodes:
+                    raw_text = str(node.get("text", "") or "").strip()
+                    if not raw_text:
+                        continue
+
+                    knowledge_docs.append(
+                        Document(
+                            page_content=raw_text,
+                            metadata={
+                                "source": doc_name,
+                                "node_id": node.get("node_id"),
+                                "title": node.get("title", "")
+                            },
+                        )
+                    )
+
+                    if len(knowledge_docs) >= max_nodes:
+                        return knowledge_docs
+
+            return knowledge_docs
         except Exception as e:
-            print(f"知识搜索失败: {str(e)}")
+            print(f"pageindex知识搜索失败: {str(e)}")
             return []
+    
     
     def generate_concept_questions(self, outline: str, knowledge_docs: List[Document], count: int = 5, difficulty: str = "中等") -> List[Dict]:
         """生成概念题，支持难度选择"""
@@ -130,7 +175,7 @@ class ExamGenerator:
             prompt = f"""
 基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的填空题：
 
-课程大纲：
+教学内容：
 {outline}
 
 相关知识：
@@ -190,7 +235,7 @@ class ExamGenerator:
             prompt = f"""
 基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的简答题：
 
-课程大纲：
+教学内容：
 {outline}
 
 相关知识：
@@ -251,7 +296,7 @@ class ExamGenerator:
             prompt = f"""
 基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的编程题：
 
-课程大纲：
+教学内容：
 {outline}
 
 相关知识：
@@ -309,9 +354,9 @@ class ExamGenerator:
         try:
             knowledge_text = "\n".join([doc.page_content for doc in knowledge_docs])
             prompt = f"""
-基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的多选题：
+基于以下教学内容和知识库内容，生成{count}道{difficulty}难度的多选题：
 
-课程大纲：
+教学内容：
 {outline}
 
 相关知识：
@@ -614,7 +659,7 @@ class ExamGenerator:
         try:
             print("开始生成考核内容...")
             # 搜索相关知识
-            knowledge_docs = self.search_knowledge(outline, top_k=10)
+            knowledge_docs = self.search_knowledge_by_pageindex(outline, top_k_docs=5, max_nodes=20)
             print(f"找到 {len(knowledge_docs)} 个相关知识片段")
             # 生成不同类型的题目
             exam_content = {

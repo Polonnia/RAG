@@ -1,3 +1,6 @@
+'''''''''
+向量检索的rag，已停用
+'''''''''
 from rank_bm25 import BM25Okapi
 import jieba
 from .resources import get_vector_db

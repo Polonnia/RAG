@@ -1,9 +1,58 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, Input, Space, Spin, Select, message, Modal, Form, InputNumber, List, Tag } from 'antd';
+import { Button, Input, Space, Spin, Select, message, Modal, Form, InputNumber, List, Tag, Progress } from 'antd';
 import { FormOutlined } from '@ant-design/icons';
-import { generateExam, saveExamHistory, getExamHistory, deleteExamHistory, listTeacherExams, createExam } from '../services/examTeacherService';
+import { generateExamStream, saveExamHistory, getExamHistory, deleteExamHistory, listTeacherExams, createExam } from '../services/examTeacherService';
 const { TextArea } = Input;
+
+const typeMap = {
+  choice: '单选',
+  multi: '多选',
+  fill_blank: '填空',
+  short_answer: '简答',
+  programming: '编程'
+};
+
+const renderQuestionOptions = (q) => {
+  if (!q.type) return null;
+  
+  // 单选/多选题显示选项
+  if ((q.type === 'choice' || q.type === 'multi') && q.options) {
+    let options = q.options;
+    if (typeof options === 'string') {
+      try { options = JSON.parse(options); } catch { return null; }
+    }
+    
+    if (Array.isArray(options)) {
+      return (
+        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#666' }}>
+          {options.map((opt, i) => (
+            <div key={i}>{String.fromCharCode(65 + i)}. {opt}</div>
+          ))}
+        </div>
+      );
+    } else if (typeof options === 'object') {
+      return (
+        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#666' }}>
+          {Object.entries(options).map(([k, v]) => (
+            <div key={k}>{k}. {v}</div>
+          ))}
+        </div>
+      );
+    }
+  }
+  
+  // 简答题/编程题显示答案提示
+  if ((q.type === 'short_answer' || q.type === 'programming') && q.explanation) {
+    return (
+      <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#999', maxWidth: 300 }}>
+        <strong>参考答案：</strong> {q.explanation.slice(0, 100)}{q.explanation.length > 100 ? '...' : ''}
+      </div>
+    );
+  }
+  
+  return null;
+};
 
 export default function ExamGenerator() {
   const [outline, setOutline] = useState('');
@@ -12,6 +61,8 @@ export default function ExamGenerator() {
   const [loading, setLoading] = useState(false);
   const [examContent, setExamContent] = useState(null);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
+  const [streamStage, setStreamStage] = useState('');
+  const [streamProgress, setStreamProgress] = useState(0);
   const [createVisible, setCreateVisible] = useState(false);
   const [examHistory, setExamHistory] = useState([]);
   const [teacherExams, setTeacherExams] = useState([]);
@@ -38,18 +89,61 @@ export default function ExamGenerator() {
 
   const handleGenerate = async () => {
     if (!outline.trim()) { message.warning('请输入课程大纲'); return; }
+
     setLoading(true);
+    setExamContent(null);
+    setSelectedQuestions([]);
+    setStreamStage('准备生成...');
+    setStreamProgress(0);
+
+    let finalContent = null;
+
     try {
-      const data = await generateExam({ courseOutline: outline, questionConfig, difficulty });
-      setExamContent(data.exam_content);
-      setSelectedQuestions([]);
-      await saveExamHistory(outline, data.exam_content);
+      await generateExamStream({
+        courseOutline: outline,
+        questionConfig,
+        difficulty,
+        onEvent: (event) => {
+          if (typeof event.progress === 'number') {
+            setStreamProgress(Math.max(0, Math.min(100, event.progress)));
+          }
+
+          if (event.type === 'stage') {
+            setStreamStage(event.stage || '生成中...');
+            return;
+          }
+
+          if (event.type === 'partial' && event.exam_content) {
+            setStreamStage(event.stage || '生成中...');
+            setExamContent({ ...event.exam_content });
+            return;
+          }
+
+          if (event.type === 'done' && event.exam_content) {
+            finalContent = event.exam_content;
+            setStreamStage('生成完成');
+            setExamContent({ ...event.exam_content });
+            return;
+          }
+
+          if (event.type === 'error') {
+            throw new Error(event.message || '生成失败');
+          }
+        },
+      });
+
+      if (!finalContent) {
+        throw new Error('生成未返回最终结果');
+      }
+
+      await saveExamHistory(outline, finalContent);
       refreshHistory();
       message.success('考核内容生成完成');
     } catch (e) {
-      message.error('生成失败');
+      message.error(e?.message || '生成失败');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCreateExam = async () => {
@@ -88,6 +182,12 @@ export default function ExamGenerator() {
           </Space>
         </Space>
         <Button type="primary" onClick={handleGenerate} loading={loading}>生成考核内容</Button>
+        {loading && (
+          <div style={{ maxWidth: 560 }}>
+            <div style={{ marginBottom: 8, color: '#666' }}>{streamStage || '生成中...'}</div>
+            <Progress percent={streamProgress} status="active" />
+          </div>
+        )}
         <Spin spinning={loading}>
           {allQuestions.length > 0 && (
             <div>
@@ -105,10 +205,13 @@ export default function ExamGenerator() {
                                marginBottom: '8px'
                              }}
                   >
-                    <div>
-                      <Tag color={selectedQuestions.includes(idx) ? "green" : "blue"}>
-                        {selectedQuestions.includes(idx) ? "✓ " : ""}{q.type}
-                      </Tag> {q.question}
+                    <div style={{ width: '100%' }}>
+                      <div>
+                        <Tag color={selectedQuestions.includes(idx) ? "green" : "blue"}>
+                          {selectedQuestions.includes(idx) ? "✓ " : ""}{typeMap[q.type] || q.type}
+                        </Tag> {q.question}
+                      </div>
+                      {renderQuestionOptions(q)}
                     </div>
                   </List.Item>
                 )}

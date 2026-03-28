@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Form, HTTPException, Depends, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from models import get_db, User, Exam, Question, StudentExam, StudentAnswer, ExamHistory, StudentKeywordAccuracy
 from rag.exam_generator import exam_generator
 from datetime import datetime
 import json
+import asyncio
 from auth import get_current_user
 import threading
 
 router = APIRouter()
+
+
+def _json_line(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False) + "\n"
 
 
 def normalize_question_config(raw_config: dict) -> dict:
@@ -123,6 +128,87 @@ async def generate_exam(
         return {"exam_content": exam_content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成考核内容失败: {str(e)}")
+
+@router.post("/generate-exam-stream")
+async def generate_exam_stream(
+    course_outline: str = Form(...),
+    question_config: str = Form(...),
+    difficulty: str = Form("中等"),
+    current_user: User = Depends(get_current_user)
+):
+    """流式生成考核内容：按题型逐步返回 partial 结果。"""
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="只有教师可以生成考核内容")
+
+    try:
+        config = normalize_question_config(json.loads(question_config))
+        difficulty_text = normalize_difficulty(difficulty)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"参数错误: {str(e)}")
+
+    async def event_generator():
+        try:
+            yield _json_line({"type": "stage", "stage": "检索知识库中", "progress": 10})
+            knowledge_docs = await asyncio.to_thread(
+                exam_generator.search_knowledge_by_pageindex,
+                course_outline,
+                5,
+                20,
+            )
+
+            exam_content = {
+                "outline": course_outline,
+                "generated_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "concept_questions": [],
+                "multi_questions": [],
+                "fill_blank_questions": [],
+                "short_answer_questions": [],
+                "programming_questions": []
+            }
+
+            stages = [
+                ("choice", "concept_questions", "生成单选题", exam_generator.generate_concept_questions, 30),
+                ("multi", "multi_questions", "生成多选题", exam_generator.generate_multi_questions, 45),
+                ("fill_blank", "fill_blank_questions", "生成填空题", exam_generator.generate_fill_blank_questions, 60),
+                ("short_answer", "short_answer_questions", "生成简答题", exam_generator.generate_short_answer_questions, 78),
+                ("programming", "programming_questions", "生成编程题", exam_generator.generate_programming_questions, 92),
+            ]
+
+            for cfg_key, content_key, stage_name, fn, progress in stages:
+                cfg_item = config.get(cfg_key, {})
+                if not cfg_item.get("enabled", False):
+                    continue
+                count = int(cfg_item.get("count", 0) or 0)
+                if count <= 0:
+                    continue
+
+                yield _json_line({"type": "stage", "stage": stage_name, "progress": progress})
+
+                questions = await asyncio.to_thread(
+                    fn,
+                    course_outline,
+                    knowledge_docs,
+                    count,
+                    difficulty_text,
+                )
+                points = int(cfg_item.get("points", 1) or 1)
+                for q in questions:
+                    q["points"] = points
+
+                exam_content[content_key] = questions
+                yield _json_line({
+                    "type": "partial",
+                    "stage": stage_name,
+                    "progress": progress,
+                    "exam_content": exam_content,
+                })
+
+            yield _json_line({"type": "done", "progress": 100, "exam_content": exam_content})
+        except Exception as e:
+            yield _json_line({"type": "error", "message": f"生成考核内容失败: {str(e)}"})
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
 
 @router.post("/exam-history")
 async def save_exam_history(outline: str = Form(...), exam_content: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

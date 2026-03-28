@@ -4,7 +4,7 @@ import { UserOutlined, LockOutlined, LoginOutlined, UserAddOutlined } from '@ant
 
 // 添加Google字体
 const fontLink = document.createElement('link');
-fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;1,300&family=Dancing+Script:wght@400;500;600;700&display=swap';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;1,300&family=Noto+Sans+SC:wght@400;700;900&display=swap';
 fontLink.rel = 'stylesheet';
 document.head.appendChild(fontLink);
 import { login as doLogin, register as doRegister } from '../services/authService';
@@ -227,23 +227,23 @@ export default function Login() {
           width: '100%'
         }}>
           <h1 style={{
-            fontSize: '36px',
+            fontSize: 'clamp(44px, 9vw, 60px)',
             fontWeight: '900',
             color: '#262626',
             margin: '0 0 8px',
-            background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+            background: 'linear-gradient(135deg, #0d47a1 0%, #1976d2 45%, #42a5f5 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
-            fontFamily: '"Dancing Script", "Playfair Display", cursive',
-            fontStyle: 'italic',
-            letterSpacing: '2px',
-            textShadow: '0 2px 4px rgba(25, 118, 210, 0.3)',
+            fontFamily: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+            letterSpacing: '4px',
+            lineHeight: '1.1',
+            textShadow: '0 3px 12px rgba(13, 71, 161, 0.25)',
             position: 'relative'
           }}>
             溯 知
           </h1>
           <p style={{ color: '#8c8c8c', fontSize: '16px', margin: '0 0 40px' }}>
-            智能教学，轻松学习
+            一站式教学智能体平台
           </p>
         </div>
 

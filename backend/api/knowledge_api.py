@@ -2,7 +2,13 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, SessionLocal
 from rag.pageindex_search import MultiDocumentSearcher
-from rag.teaching_design import generate_teaching_outline, generate_detailed_content_for_outline, generate_lesson_schedule
+from rag.teaching_design import (
+    generate_teaching_outline,
+    generate_detailed_content_for_outline,
+    generate_lesson_schedule,
+    generate_teaching_schedule_markdown,
+    generate_teaching_schedule_markdown_stream,
+)
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
@@ -13,12 +19,15 @@ import uuid
 import time
 import asyncio
 import threading
+import json
+import re
 from auth import get_current_user
 
 router = APIRouter()
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 TREE_JSON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'trees')
+AUDIO_TEXT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'audio_text')
 
 UPLOAD_TASKS = {}
 UPLOAD_TASKS_LOCK = threading.Lock()
@@ -394,6 +403,163 @@ async def design_teaching_plan(course_outline: str = Form(...), current_user: Us
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"教学内容设计失败: {str(e)}"})
 
+
+@router.get("/teaching/materials")
+async def get_teaching_materials(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """返回可用于教学设计的教材文件列表（来自知识库）。"""
+    try:
+        files_list = get_knowledge_files(db)
+        return {
+            "status": "success",
+            "materials": files_list,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"获取教材列表失败: {str(e)}"})
+
+
+@router.post("/teaching/structure")
+async def get_teaching_structure(filename: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """基于 pageindex 结构文件返回教材目录树。"""
+    try:
+        # 权限校验：仅知识库内且当前用户有权限的文件可以读取结构
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+
+        structure_file_path = os.path.join(TREE_JSON_DIR, f"{os.path.splitext(filename)[0]}_structure.json")
+        structure_data = None
+
+        if os.path.exists(structure_file_path):
+            with open(structure_file_path, 'r', encoding='utf-8') as f:
+                structure_data = json.load(f)
+        else:
+            # 若没有结构文件，兜底触发一次生成并返回（复用现有能力）
+            mindmap_data = await get_mindmap_data_async(filename, file_path)
+            if mindmap_data is None:
+                raise FileNotFoundError("教材结构不存在且生成失败")
+            if os.path.exists(structure_file_path):
+                with open(structure_file_path, 'r', encoding='utf-8') as f:
+                    structure_data = json.load(f)
+
+        if not structure_data:
+            raise FileNotFoundError("未找到教材目录结构")
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "doc_name": structure_data.get("doc_name", filename),
+            "doc_description": structure_data.get("doc_description", ""),
+            "structure": structure_data.get("structure", []),
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="教材结构文件格式错误")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取教材结构失败: {str(e)}")
+
+
+@router.post("/teaching/schedule")
+async def generate_teaching_schedule(
+    filename: str = Form(...),
+    selected_outline: str = Form(...),
+    total_hours: int = Form(...),
+    total_lessons: int = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """根据教师勾选后的目录和课时生成固定格式教学安排表。"""
+    try:
+        # 权限校验
+        get_download_file_path(filename=filename, current_user=current_user, db=db)
+
+        if not str(selected_outline or '').strip():
+            raise HTTPException(status_code=400, detail="请先勾选章节并生成最终大纲")
+        if int(total_hours) <= 0:
+            raise HTTPException(status_code=400, detail="课时必须为正整数")
+        if int(total_lessons) <= 0:
+            raise HTTPException(status_code=400, detail="课数必须为正整数")
+
+        table_markdown = generate_teaching_schedule_markdown(
+            selected_outline=selected_outline,
+            total_hours=int(total_hours),
+            total_lessons=int(total_lessons),
+            material_name=filename,
+        )
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "total_hours": int(total_hours),
+            "total_lessons": int(total_lessons),
+            "table_markdown": table_markdown,
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成教学安排失败: {str(e)}")
+
+
+@router.post("/teaching/schedule-stream")
+async def generate_teaching_schedule_stream(
+    filename: str = Form(...),
+    selected_outline: str = Form(...),
+    total_hours: int = Form(...),
+    total_lessons: int = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """流式生成教学安排 Markdown 表格。"""
+    try:
+        get_download_file_path(filename=filename, current_user=current_user, db=db)
+
+        if not str(selected_outline or '').strip():
+            raise HTTPException(status_code=400, detail="请先勾选章节并生成最终大纲")
+        if int(total_hours) <= 0:
+            raise HTTPException(status_code=400, detail="课时必须为正整数")
+        if int(total_lessons) <= 0:
+            raise HTTPException(status_code=400, detail="课数必须为正整数")
+
+        async def event_generator():
+            try:
+                yield _json_line({"type": "stage", "stage": "正在生成教学安排", "progress": 30})
+                full_text_parts = []
+                async for chunk in generate_teaching_schedule_markdown_stream(
+                    selected_outline=selected_outline,
+                    total_hours=int(total_hours),
+                    total_lessons=int(total_lessons),
+                    material_name=filename,
+                ):
+                    full_text_parts.append(chunk)
+                    yield _json_line({"type": "token", "content": chunk})
+
+                final_text = "".join(full_text_parts).strip()
+                # 尽量去掉代码块包裹，避免前端显示 ```markdown
+                if final_text.startswith("```"):
+                    final_text = re.sub(r'^```[a-zA-Z0-9_-]*\s*', '', final_text)
+                    final_text = re.sub(r'\s*```\s*$', '', final_text)
+                    final_text = final_text.strip()
+
+                yield _json_line({
+                    "type": "done",
+                    "filename": filename,
+                    "total_hours": int(total_hours),
+                    "total_lessons": int(total_lessons),
+                    "table_markdown": final_text,
+                })
+            except Exception as e:
+                yield _json_line({"type": "error", "message": f"生成教学安排失败: {str(e)}"})
+
+        return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成教学安排失败: {str(e)}")
+
 # 新增接口：生成详细内容
 @router.post("/generate-teaching-detail")
 async def generate_teaching_detail(outline: str = Form(...), current_user: User = Depends(get_current_user)):
@@ -456,6 +622,60 @@ async def download_file(filename: str, current_user: User = Depends(get_current_
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+@router.get("/media-subtitles/{filename}")
+async def get_media_subtitles(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """返回媒体文件对应的字幕（来自 rag/db/audio_text）。"""
+    try:
+        # 复用下载权限校验，避免越权读取字幕
+        get_download_file_path(filename=filename, current_user=current_user, db=db)
+
+        source_stem = os.path.splitext(os.path.basename(filename))[0]
+        subtitle_path = os.path.join(AUDIO_TEXT_DIR, f"{source_stem}.json")
+
+        if not os.path.exists(subtitle_path):
+            return {
+                "status": "success",
+                "filename": filename,
+                "subtitles": []
+            }
+
+        with open(subtitle_path, 'r', encoding='utf-8') as f:
+            raw_subtitles = json.load(f)
+
+        subtitles = []
+        for item in raw_subtitles if isinstance(raw_subtitles, list) else []:
+            sentence = str(item.get('sentence', '')).strip()
+            try:
+                start_time = float(item.get('start_time'))
+                end_time = float(item.get('end_time'))
+            except (TypeError, ValueError):
+                continue
+
+            if end_time < start_time:
+                end_time = start_time
+
+            subtitles.append({
+                "sentence": sentence,
+                "start_time": start_time,
+                "end_time": end_time,
+            })
+
+        subtitles.sort(key=lambda x: x['start_time'])
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "subtitles": subtitles,
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="字幕文件格式错误")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取字幕失败: {str(e)}")
+
 @router.get("/view-pdf/{filename}")
 async def view_pdf_file(filename: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """在浏览器中预览PDF文件"""
@@ -484,14 +704,7 @@ async def generate_mindmap(filename: str = Form(...), current_user: User = Depen
     try:
         # 检查文件是否存在和权限
         file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
-        
-        # 仅支持PDF文件
-        if not filename.lower().endswith('.pdf'):
-            return JSONResponse(
-                status_code=400, 
-                content={"error": f"暂不支持{os.path.splitext(filename)[1]}格式的思维导图生成，仅支持PDF"}
-            )
-        
+
         # 获取思维导图数据（使用异步版本）
         mindmap_data = await get_mindmap_data_async(filename, file_path)
         
@@ -527,14 +740,7 @@ async def regenerate_mindmap(filename: str = Form(...), current_user: User = Dep
     try:
         # 检查文件是否存在和权限
         file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
-        
-        # 仅支持PDF文件
-        if not filename.lower().endswith('.pdf'):
-            return JSONResponse(
-                status_code=400, 
-                content={"error": f"暂不支持{os.path.splitext(filename)[1]}格式的思维导图生成，仅支持PDF"}
-            )
-        
+
         # 获取思维导图数据（强制重新生成，使用异步版本）
         mindmap_data = await get_mindmap_data_async(filename, file_path, force_regenerate=True)
         

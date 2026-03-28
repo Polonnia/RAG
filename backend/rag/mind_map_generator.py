@@ -5,9 +5,8 @@ import json
 import os
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-from .pageindex.page_index import page_index
-from .resources import get_vector_db
+from typing import Dict, List, Any, Optional, cast
+from .knowledge_manager import _process_with_pageindex
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -47,57 +46,24 @@ def generate_structure_json(file_path: str, model: Optional[str] = None) -> Opti
     """
     try:
         ensure_trees_dir()
-        
-        # 获取文件扩展名
-        file_ext = os.path.splitext(file_path)[1].lower()
-        
-        # 如果是PDF，使用page_index处理
-        if file_ext == '.pdf':
-            print(f"开始处理PDF文件: {file_path}")
-            result = page_index(
-                file_path,
-                model=model,
-                if_add_node_id='yes',
-                if_add_node_summary='yes',
-                if_add_doc_description='no',
-                if_add_node_text='no'
-            )
-            
-            # 检查是否返回了协程，如果是则需要在事件循环中运行
-            if asyncio.iscoroutine(result):
-                # 如果已经在事件循环中，使用 run_until_complete 不会起作用
-                # 应该创建一个新的事件循环或使用其他方式
-                # 但这种情况不应该出现在同步函数中
-                # 为了兼容，我们在这里用try-except处理
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # 如果事件循环正在运行，无法使用 run_until_complete
-                        # 这需要在调用者处使用async处理
-                        raise RuntimeError("Cannot wait for coroutine in running event loop. Use async function instead.")
-                    else:
-                        structure_data = loop.run_until_complete(result)
-                except RuntimeError as e:
-                    if "running event loop" in str(e):
-                        raise RuntimeError("generate_structure_json must be called from async context when page_index returns coroutine")
-                    raise
-            else:
-                structure_data = result
-            
-            # 保存结构文件
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            structure_file = os.path.join(TREES_DIR, f"{base_name}_structure.json")
-            os.makedirs(os.path.dirname(structure_file), exist_ok=True)
-            
-            with open(structure_file, 'w', encoding='utf-8') as f:
-                json.dump(structure_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"结构文件已保存: {structure_file}")
-            return structure_data
-        
-        # 其他格式暂不支持思维导图
-        print(f"暂不支持{file_ext}格式的思维导图生成")
-        return None
+        print(f"开始处理文件并生成结构: {file_path}")
+        structure_data = _process_with_pageindex(file_path)
+        if asyncio.iscoroutine(structure_data):
+            structure_data = asyncio.run(structure_data)
+        if structure_data is None:
+            return None
+        structure_data = cast(Dict, structure_data)
+
+        # 保存结构文件（与知识管理模块保持同一命名规则）
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        structure_file = os.path.join(TREES_DIR, f"{base_name}_structure.json")
+        os.makedirs(os.path.dirname(structure_file), exist_ok=True)
+
+        with open(structure_file, 'w', encoding='utf-8') as f:
+            json.dump(structure_data, f, ensure_ascii=False, indent=2)
+
+        print(f"结构文件已保存: {structure_file}")
+        return structure_data
         
     except Exception as e:
         error_msg = str(e)
@@ -123,42 +89,24 @@ async def generate_structure_json_async(file_path: str, model: Optional[str] = N
     """
     try:
         ensure_trees_dir()
-        
-        # 获取文件扩展名
-        file_ext = os.path.splitext(file_path)[1].lower()
-        
-        # 如果是PDF，使用page_index处理
-        if file_ext == '.pdf':
-            print(f"开始处理PDF文件: {file_path}")
-            result = page_index(
-                file_path,
-                model=model,
-                if_add_node_id='yes',
-                if_add_node_summary='yes',
-                if_add_doc_description='no',
-                if_add_node_text='no'
-            )
-            
-            # 如果返回了协程，等待它
-            if asyncio.iscoroutine(result):
-                structure_data = await result
-            else:
-                structure_data = result
-            
-            # 保存结构文件
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            structure_file = os.path.join(TREES_DIR, f"{base_name}_structure.json")
-            os.makedirs(os.path.dirname(structure_file), exist_ok=True)
-            
-            with open(structure_file, 'w', encoding='utf-8') as f:
-                json.dump(structure_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"结构文件已保存: {structure_file}")
-            return structure_data
-        
-        # 其他格式暂不支持思维导图
-        print(f"暂不支持{file_ext}格式的思维导图生成")
-        return None
+        print(f"开始处理文件并生成结构(异步): {file_path}")
+        structure_data = await asyncio.to_thread(_process_with_pageindex, file_path)
+        if asyncio.iscoroutine(structure_data):
+            structure_data = await structure_data
+        if structure_data is None:
+            return None
+        structure_data = cast(Dict, structure_data)
+
+        # 保存结构文件（与知识管理模块保持同一命名规则）
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        structure_file = os.path.join(TREES_DIR, f"{base_name}_structure.json")
+        os.makedirs(os.path.dirname(structure_file), exist_ok=True)
+
+        with open(structure_file, 'w', encoding='utf-8') as f:
+            json.dump(structure_data, f, ensure_ascii=False, indent=2)
+
+        print(f"结构文件已保存: {structure_file}")
+        return structure_data
         
     except Exception as e:
         error_msg = str(e)
@@ -178,7 +126,26 @@ async def generate_structure_json_async(file_path: str, model: Optional[str] = N
         return None
 
 
-def convert_structure_to_mindmap(structure: List[Dict]) -> Dict[str, Any]:
+def _normalize_structure_list(structure: Any) -> List[Dict]:
+    """将多种结构结果统一为节点列表。"""
+    if structure is None:
+        return []
+
+    if isinstance(structure, list):
+        return structure
+
+    if isinstance(structure, dict):
+        if isinstance(structure.get('structure'), list):
+            return structure['structure']
+        if isinstance(structure.get('nodes'), list):
+            return structure['nodes']
+        if 'title' in structure:
+            return [structure]
+
+    return []
+
+
+def convert_structure_to_mindmap(structure: Any) -> Dict[str, Any]:
     """
     将文档结构转换为思维导图格式
     
@@ -194,6 +161,25 @@ def convert_structure_to_mindmap(structure: List[Dict]) -> Dict[str, Any]:
     }
     """
     
+    def _format_seconds(seconds: float) -> str:
+        total = int(round(max(0.0, float(seconds))))
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+        secs = total % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    def _build_time_range(node: Dict) -> str:
+        start_time = node.get('start_time')
+        end_time = node.get('end_time')
+        if start_time is None or end_time is None:
+            return ""
+        try:
+            return f"{_format_seconds(float(start_time))}-{_format_seconds(float(end_time))}"
+        except Exception:
+            return ""
+
     def convert_node(node: Dict, parent_id: str = "root") -> Dict:
         """递归转换单个节点"""
         node_id = node.get('node_id', f"node_{hash(str(node))}")
@@ -207,13 +193,18 @@ def convert_structure_to_mindmap(structure: List[Dict]) -> Dict[str, Any]:
                 page_range = f"第{start_index}页"
             else:
                 page_range = f"第{start_index}-{end_index}页"
+
+        # 媒体类结构使用时间范围（例如 00:15-01:23）
+        time_range = _build_time_range(node)
+        display_range = page_range or time_range
         
         converted = {
             'id': node_id,
             'name': node.get('title', '未命名'),
             'data': {
                 'summary': node.get('summary', ''),
-                'pageRange': page_range,
+                'pageRange': display_range,
+                'timeRange': time_range,
                 'nodeId': node_id
             }
         }
@@ -228,7 +219,8 @@ def convert_structure_to_mindmap(structure: List[Dict]) -> Dict[str, Any]:
         return converted
     
     # 创建根节点
-    root_children = [convert_node(node) for node in structure]
+    normalized_structure = _normalize_structure_list(structure)
+    root_children = [convert_node(node) for node in normalized_structure]
     
     return {
         'id': 'root',
@@ -256,14 +248,8 @@ def get_mindmap_data(filename: str, file_path: str, model: Optional[str] = None,
     if structure is None:
         return None
     
-    # 提取structure字段
-    if isinstance(structure, dict) and 'structure' in structure:
-        structure_list = structure['structure']
-    else:
-        structure_list = structure
-    
     # 转换为思维导图格式
-    mindmap = convert_structure_to_mindmap(structure_list)
+    mindmap = convert_structure_to_mindmap(structure)
     
     return mindmap
 
@@ -287,14 +273,8 @@ async def get_mindmap_data_async(filename: str, file_path: str, model: Optional[
     if structure is None:
         return None
     
-    # 提取structure字段
-    if isinstance(structure, dict) and 'structure' in structure:
-        structure_list = structure['structure']
-    else:
-        structure_list = structure
-    
     # 转换为思维导图格式
-    mindmap = convert_structure_to_mindmap(structure_list)
+    mindmap = convert_structure_to_mindmap(structure)
     
     return mindmap
 

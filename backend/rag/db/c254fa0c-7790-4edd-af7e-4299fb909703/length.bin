@@ -1,1 +1,10 @@
-invalid type: string "Summary\n• Software\n• Software’s dual roles\n• Software vs. hardware\n• Software engineering\n• Software engineering layers\n• Five framework activities\n• Umbrella activities\n• Software myths\n38", expected f64loyment\nUmbrella  Activities\n普适性活动贯穿软件项目始终，帮助团队管理\n和控制项目进度、质量、变更和风险。\n�
+The impact of change varies with the time at which it is introduced.  As time passes, cost impact grows rapidly. 
+•
+Change can cause upheaval that requires additional resources and major design modification.
+Practitioner
+Myth
+Until I get the program running, I have no way of assessing its quality.
+Reality
+•
+The formal technical review is one of most effective quality assurance mechanisms.
+•

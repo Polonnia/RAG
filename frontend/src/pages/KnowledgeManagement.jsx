@@ -6,14 +6,13 @@ import axios from 'axios';
 import http from '../api/http';
 import getApiUrl from '../apiConfig';
 import AppLayout from '../components/layout/AppLayout';
-import MindMapViewer from '../components/MindMapViewer';
+import MindMapViewer from '../components/MindmapViewer';
 
 export default function KnowledgeManagement() {
-  const [fileList, setFileList] = useState([]);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [knowledgeFiles, setKnowledgeFiles] = useState([]);
-  const [mindmapVisible, setMindmapVisible] = useState(false);
   const [mindmapFile, setMindmapFile] = useState(null);
   const [uploadTaskId, setUploadTaskId] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -59,11 +58,11 @@ export default function KnowledgeManagement() {
       const left = a[i] || {};
       const right = b[i] || {};
       if (
-        left.filename !== right.filename
-        || left.status !== right.status
-        || left.step !== right.step
-        || Number(left.progress || 0) !== Number(right.progress || 0)
-        || (left.message || '') !== (right.message || '')
+        left.filename !== right.filename ||
+        left.status !== right.status ||
+        left.step !== right.step ||
+        Number(left.progress ?? left.file_progress ?? 0) !== Number(right.progress ?? right.file_progress ?? 0) ||
+        left.message !== right.message
       ) {
         return false;
       }
@@ -84,13 +83,22 @@ export default function KnowledgeManagement() {
   };
 
   const handleUpload = async () => {
-    if (fileList.length === 0) {
+    if (selectedUploadFiles.length === 0) {
       message.warning('请先选择文件');
       return;
     }
+
+    const validFiles = selectedUploadFiles
+      .map((item) => item?.originFileObj)
+      .filter((file) => file instanceof File);
+    if (validFiles.length === 0) {
+      message.error('未检测到可上传的文件，请重新选择文件后再试');
+      return;
+    }
+
     const formData = new FormData();
-    fileList.forEach(file => {
-      formData.append('files', file);
+    validFiles.forEach((file) => {
+      formData.append('files', file, file.name);
     });
     setLoading(true);
     try {
@@ -117,7 +125,7 @@ export default function KnowledgeManagement() {
         try {
           const taskRes = await http.get(`/upload-task/${taskId}`);
           const task = taskRes.data || {};
-          const orderedStatuses = mergeAndSortFileStatuses(task.files || [], fileList.map(file => file.name).filter(Boolean));
+          const orderedStatuses = mergeAndSortFileStatuses(task.files || [], validFiles.map(file => file.name).filter(Boolean));
 
           setUploadProgress((prev) => {
             const next = Number(task.overall_progress || 0);
@@ -135,7 +143,7 @@ export default function KnowledgeManagement() {
             window.clearInterval(intervalId);
             pollingRef.current = null;
             setLoading(false);
-            setFileList([]);
+            setSelectedUploadFiles([]);
             fetchKnowledgeFiles();
 
             const results = task.results || [];
@@ -170,7 +178,9 @@ export default function KnowledgeManagement() {
       console.error('上传错误:', err);
       setLoading(false);
       if (err.response) {
-        message.error(`上传失败: ${err.response.data.error || err.response.statusText}`);
+        const detail = err.response.data?.detail;
+        const detailText = Array.isArray(detail) ? JSON.stringify(detail) : (detail || '');
+        message.error(`上传失败: ${err.response.data?.error || detailText || err.response.statusText}`);
       } else if (err.code === 'ECONNABORTED') {
         message.error('上传超时，请稍后重试');
       } else {
@@ -196,7 +206,10 @@ export default function KnowledgeManagement() {
 
   const handleViewMindmap = (file) => {
     setMindmapFile(file);
-    setMindmapVisible(true);
+  };
+
+  const handleCloseMindmap = () => {
+    setMindmapFile(null);
   };
 
   const getFileTypeTag = (filename) => {
@@ -221,7 +234,13 @@ export default function KnowledgeManagement() {
   };
 
   const handleFileChange = ({ fileList: newFileList }) => {
-    setFileList(newFileList.map(file => file.originFileObj || file));
+    setSelectedUploadFiles(newFileList || []);
+  };
+
+  const getPerFileProgressStatus = (item) => {
+    if (item?.status === 'error' || item?.status === 'failed') return 'exception';
+    if (item?.status === 'success' || Number(item?.progress || 0) >= 100) return 'success';
+    return 'active';
   };
 
   return (
@@ -236,11 +255,7 @@ export default function KnowledgeManagement() {
         </div>
         <Upload
           beforeUpload={() => false}
-          fileList={fileList.map((file, index) => ({
-            uid: index,
-            name: file.name || `文件${index + 1}`,
-            status: 'done',
-          }))}
+          fileList={selectedUploadFiles}
           onChange={handleFileChange}
           multiple={true}
           accept=".pdf,.doc,.docx,.mp3,.wav,.m4a,.aac,.ogg,.mp4,.avi,.mov,.mkv,.flv,.wmv"
@@ -248,26 +263,29 @@ export default function KnowledgeManagement() {
           <Button icon={<UploadOutlined />}>选择文件</Button>
         </Upload>
         <Button type="primary" onClick={handleUpload} style={{ marginTop: 16 }} loading={loading}>
-          上传并入库 ({fileList.length} 个文件)
+          上传并入库 ({selectedUploadFiles.length} 个文件)
         </Button>
 
         {uploadTaskId && (
           <div style={{ marginTop: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>解析进度：</Text>
-              <Text type="secondary" style={{ marginLeft: 8 }}>{uploadStep || '处理中'}</Text>
-            </div>
-            <Progress percent={Math.round(uploadProgress)} status={uploadProgress >= 100 ? 'success' : 'active'} />
             {uploadFileStatuses.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
                 {uploadFileStatuses.map((item, index) => (
-                  <div key={`${item.filename}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 28, marginBottom: 6 }}>
-                    <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.filename}>
-                      {item.filename}
-                    </Text>
-                    <Text type="secondary" style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }} title={item.step || '处理中'}>
-                      {item.step || '处理中'}
-                    </Text>
+                  <div key={`${item.filename}-${index}`} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 28, marginBottom: 4 }}>
+                      <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.filename}>
+                        {item.filename}
+                      </Text>
+                      <Text type="secondary" style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }} title={item.step || '处理中'}>
+                        {item.step || '处理中'}
+                      </Text>
+                    </div>
+                    <Progress
+                      percent={Math.round(Number(item.progress || 0))}
+                      size="small"
+                      status={getPerFileProgressStatus(item)}
+                      strokeColor={item?.status === 'error' ? '#ff4d4f' : undefined}
+                    />
                   </div>
                 ))}
               </div>
@@ -305,16 +323,16 @@ export default function KnowledgeManagement() {
               return (
                 <List.Item
                   actions={[
-                    file.filename.toLowerCase().endsWith('.pdf') && (
+                    (
                       <Button
                         type="text"
                         icon={<DatabaseOutlined />}
                         onClick={() => handleViewMindmap(file)}
                         size="small"
                         style={{ marginRight: 8 }}
-                        title="查看思维导图"
+                        title="查看详情"
                       >
-                        思维导图
+                        章节内容
                       </Button>
                     ),
                     <Switch
@@ -371,19 +389,20 @@ export default function KnowledgeManagement() {
       </Card>
 
       <Modal
-        title={`思维导图: ${mindmapFile?.filename || ''}`}
-        open={mindmapVisible}
-        onCancel={() => setMindmapVisible(false)}
+        title={null}
+        open={!!mindmapFile}
+        onCancel={handleCloseMindmap}
         footer={null}
+        destroyOnClose
         width="90%"
         style={{ top: 20, maxWidth: 1400 }}
         bodyStyle={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}
       >
         {mindmapFile && (
-          <MindMapViewer 
+          <MindMapViewer
             key={mindmapFile.filename}
-            filename={mindmapFile.filename} 
-            onClose={() => setMindmapVisible(false)}
+            filename={mindmapFile.filename}
+            onClose={handleCloseMindmap}
           />
         )}
       </Modal>

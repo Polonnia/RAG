@@ -382,189 +382,49 @@ def asr_records_to_documents(records: List[Dict[str, Any]]) -> List[Document]:
     return docs
 
 def ingest_file(file_path):
-    try:
-        media_type = is_media_file(file_path)
-        if media_type:
-            print(f"检测到媒体文件，类型: {media_type}")
-            asr_result = process_media_file(file_path)
-            
-            if not asr_result:
-                raise ValueError(f"媒体文件ASR处理返回空结果")
-            
-            print(f"ASR处理完成，获得 {len(asr_result)} 个结果")
-            asr_records = process_asr_result(asr_result)
-            
-            if not asr_records:
-                raise ValueError("ASR结果处理完成，但未生成任何Document")
+    media_type = is_media_file(file_path)
+    if media_type:
+        print(f"检测到媒体文件，类型: {media_type}")
+        asr_result = process_media_file(file_path)
+        
+        if not asr_result:
+            raise ValueError(f"媒体文件ASR处理返回空结果")
+        
+        print(f"ASR处理完成，获得 {len(asr_result)} 个结果")
+        asr_records = process_asr_result(asr_result)
+        
+        if not asr_records:
+            raise ValueError("ASR结果处理完成，但未生成任何Document")
 
-            # docs = asr_records_to_documents(asr_records)
-            
-            filename = os.path.basename(file_path)
-            file_path_str = str(file_path)  # 确保是字符串
-
-            json_path = save_asr_sentences_to_json(asr_records, file_path_str)
-    
-            # 为每个文档添加元数据
-            # for doc in docs:
-            #     doc.metadata['source'] = filename
-            #     doc.metadata['file_path'] = file_path_str
-            
-            # if docs:
-            #     vector_db.add_documents(docs)
-            #     print(f"已处理并入库 {len(docs)} 个文档片段")
-            # else:
-            #     print("媒体文件处理失败，未生成文档")
-            return json_path
+        # docs = asr_records_to_documents(asr_records)
         
-        ext = os.path.splitext(file_path)[1].lower()
-        # 尝试多种PDF解析器
-        if ext == '.pdf':
-            # 首先检测是否为扫描版PDF
-            # if is_scanned_pdf(file_path):
-            #     print("检测到扫描版PDF，使用OCR处理...")
-            #     docs = process_scanned_pdf(file_path)
-            #     if docs:
-            #         # 直接处理OCR结果
-            #         print(f"OCR处理完成，获得 {len(docs)} 个文档片段")
-                    
-            #         # 文本分割
-            #         docs_split = custom_split_documents(docs)
-            #         print(f"分割后文档数量: {len(docs_split)}")
-                    
-            #         if not docs_split:
-            #             raise ValueError('OCR处理后文档分割为空，无法处理')
-                    
-            #         # 过滤空内容并添加元数据
-            #         valid_docs = []
-            #         filename = os.path.basename(file_path)
-            #         upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    
-            #         for doc in docs_split:
-            #             if doc.page_content.strip():
-            #                 # 添加元数据
-            #                 doc.metadata.update({
-            #                     'source': filename,
-            #                     'upload_time': upload_time,
-            #                     'file_path': file_path,
-            #                     'processing_method': 'OCR'
-            #                 })
-            #                 valid_docs.append(doc)
-                    
-            #         print(f"有效文档数量: {len(valid_docs)}")
-                    
-            #         if not valid_docs:
-            #             raise ValueError('OCR处理后没有有效的文档内容')
-                    
-            #         print(f"处理了 {len(valid_docs)} 个文档片段")
-                    
-            #         # 入库
-            #         vector_db.add_documents(valid_docs)
-            #         print("文档入库完成")
-            #         return
-            #     else:
-            #         print("OCR处理失败，尝试常规PDF解析...")
-            
-            # 常规PDF解析
-            docs = None
-            loaders_to_try = []
-            
-            # 按优先级排序解析器
-            if HAS_PYMUPDF:
-                loaders_to_try.append(("PyMuPDF", PyMuPDFLoader))
-            if HAS_PDFPLUMBER:
-                loaders_to_try.append(("PDFPlumber", PDFPlumberLoader))
-            loaders_to_try.append(("PyPDF", PyPDFLoader))
-            
-            for loader_name, loader_class in loaders_to_try:
-                try:
-                    print(f"尝试使用 {loader_name} 解析PDF...")
-                    loader = loader_class(file_path)
-                    docs = loader.load()
-                    if docs and any(len(doc.page_content.strip()) > 0 for doc in docs):
-                        print(f"成功使用 {loader_name} 解析PDF")
-                        break
-                    else:
-                        print(f"{loader_name} 解析结果为空，尝试下一个解析器")
-                except Exception as e:
-                    print(f"{loader_name} 解析失败: {str(e)}")
-                    continue
-            
-        elif ext == '.doc':
-            # 处理旧版.doc文件
-            print("检测到旧版.doc文件，使用特殊解析方法...")
-            docs_data = parse_doc_file(file_path)
-            if docs_data:
-                # 转换为Document对象
-                docs = []
-                for doc_data in docs_data:
-                    doc = Document(
-                        page_content=doc_data["page_content"],
-                        metadata=doc_data.get("metadata", {})
-                    )
-                    docs.append(doc)
-            else:
-                raise ValueError('无法解析.doc文件，请确保文件格式正确或转换为.docx格式')
-                
-        elif ext == '.docx':
-            print("检测到Word文档，使用页码处理功能...")
-            docs = process_word_with_pages(file_path)
-            if not docs:
-                raise ValueError('Word文档处理失败，无法提取到有效内容')
-        else:
-            raise ValueError('仅支持PDF和Word文档')
-        
-        if not docs:
-            raise ValueError('文档内容为空，无法处理')
-        
-        print(f"准备分割文档，原始文档数量: {len(docs)}")
-        text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=50,
-                separators=["\n\n", "\n", "。", "！", "？", "；", "，", "、", " ", ""],
-                length_function=len
-            )
-            
-        docs_split = text_splitter.split_documents(docs)
-        
-        if not docs_split:
-            raise ValueError('文档分割后为空，无法处理')
-        
-        if len(docs_split) > 10000:
-            print("警告：分割后文档数量过大，可能参数设置不合理！")
-        
-        # 过滤空内容并添加元数据
-        valid_docs = []
         filename = os.path.basename(file_path)
-        upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        for doc in docs_split:
-            if doc.page_content.strip():
-                # 添加元数据
-                doc.metadata.update({
-                    'source': filename,
-                    'file_path': file_path,
-                })
-                valid_docs.append(doc)
-        
-        if not valid_docs:
-            raise ValueError('没有有效的文档内容')
-        
-        print(f"处理了 {len(valid_docs)} 个文档片段")
-        
-        print("准备入库...")
-        # 入库（加进度打印）
-        total = len(valid_docs)
-        for i, doc in enumerate(valid_docs):
-            vector_db.add_documents([doc])
-            if (i+1) % 10 == 0 or (i+1) == total:
-                print(f"已入库 {i+1}/{total} 个片段")
-        print("全部片段入库完成")
-        
-    except Exception as e:
-        import traceback
-        print(f"文档处理错误: {str(e)}")
-        traceback.print_exc()
-        raise e 
+        file_path_str = str(file_path)  # 确保是字符串
+
+        json_path = save_asr_sentences_to_json(asr_records, file_path_str)
+
+        return json_path
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    # 尝试多种PDF解析器
+    if ext == '.pdf':
+        from paddleocr import PaddleOCR
+        ocr = PaddleOCR(
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False)
+
+        # Run OCR inference on a sample image 
+        result = ocr.predict(
+            input="https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_002.png")
+
+        # Visualize the results and save the JSON results
+        for res in result:
+            res.print()
+            res.save_to_img("output")
+            res.save_to_json("output")
+            
+            
 
 if __name__ == "__main__":
     test_file = "E:\\TraceLearn\\uploads\\asrtest.mp4"

@@ -71,6 +71,47 @@ class MultiDocumentSearcher:
                     "text": page_text
                 })
         return segments
+
+    @staticmethod
+    def _normalize_level_nodes(nodes: Any) -> List[Dict[str, Any]]:
+        """将某一层节点标准化为列表。"""
+        if isinstance(nodes, dict):
+            return [nodes]
+        if isinstance(nodes, list):
+            return [n for n in nodes if isinstance(n, dict)]
+        return []
+
+    @staticmethod
+    def _build_level_search_prompt(query: str, candidate_nodes: List[Dict[str, Any]], level: int) -> str:
+        """构建单层节点筛选提示词。"""
+        compact_nodes = []
+        for node in candidate_nodes:
+            compact_nodes.append({
+                "node_id": node.get("node_id"),
+                "title": node.get("title", ""),
+                "summary": node.get("summary", ""),
+                "start_index": node.get("start_index"),
+                "end_index": node.get("end_index"),
+                "has_children": bool(node.get("nodes")),
+            })
+
+        return f"""
+You are given a user question and a candidate node list from one level of a document tree.
+Select all node IDs that are likely relevant to the question from this level only.
+
+Question: {query}
+Current level: {level}
+
+Candidate nodes:
+{json.dumps(compact_nodes, ensure_ascii=False, indent=2)}
+
+Please reply in the following JSON format:
+{{
+  "thinking": "<brief reasoning>",
+  "node_list": ["node_id_1", "node_id_2"]
+}}
+Directly return the final JSON structure. Do not output anything else.
+"""
           
     def load_documents(self):  
         """从目录加载所有JSON结构文件"""  
@@ -220,43 +261,72 @@ class MultiDocumentSearcher:
         """在单个文档中搜索"""  
         tree = doc_data["tree"]  
         doc_type = doc_data.get("metadata", {}).get("doc_type", "pdf")
-          
-        # 移除文本字段以减少token数量  
-        tree_without_text = utils.remove_fields(tree.copy(), fields=['text'])  
-          
-        # 构建搜索提示  
-        search_prompt = f"""  
-You are given a question and a tree structure of a document.  
-Each node contains a node id, node title, and a corresponding summary.  
-Your task is to find all nodes that are likely to contain the answer to the question.  
-  
-Question: {query}  
-  
-Document tree structure:  
-{json.dumps(tree_without_text, indent=2)}  
-  
-Please reply in the following JSON format:  
-{{  
-    "thinking": "<Your thinking process on which nodes are relevant to the question>",  
-    "node_list": ["node_id_1", "node_id_2", ..., "node_id_n"]  
-}}  
-Directly return the final JSON structure. Do not output anything else.  
-"""  
-          
-        # 调用LLM进行搜索  
-        self._debug(trace_id, f"llm tree_search request start doc_id={doc_id}, doc_type={doc_type}")
-        llm_started = time.perf_counter()
-        tree_search_result = await utils.ChatGPT_API_async(self.model, search_prompt)  
-        self._debug(trace_id, f"llm tree_search response done doc_id={doc_id}, elapsed={time.perf_counter() - llm_started:.2f}s, response_len={len(str(tree_search_result or ''))}")
-        tree_search_json = utils.extract_json(tree_search_result)  
+        current_level_nodes = self._normalize_level_nodes(tree)
+        level = 1
+        level_thinking = []
+        terminal_selected_nodes = []
+        last_selected_nodes = []
+
+        while current_level_nodes:
+            self._debug(
+                trace_id,
+                f"llm tree_search request start doc_id={doc_id}, level={level}, candidates={len(current_level_nodes)}, doc_type={doc_type}"
+            )
+            llm_started = time.perf_counter()
+            search_prompt = self._build_level_search_prompt(query, current_level_nodes, level)
+            tree_search_result = await utils.ChatGPT_API_async(self.model, search_prompt)
+            self._debug(
+                trace_id,
+                f"llm tree_search response done doc_id={doc_id}, level={level}, elapsed={time.perf_counter() - llm_started:.2f}s, response_len={len(str(tree_search_result or ''))}"
+            )
+            tree_search_json = utils.extract_json(tree_search_result)
+            thinking = tree_search_json.get("thinking", "") if isinstance(tree_search_json, dict) else ""
+            if thinking:
+                level_thinking.append(f"L{level}: {thinking}")
+
+            node_list = tree_search_json.get("node_list", []) if isinstance(tree_search_json, dict) else []
+            if not isinstance(node_list, list):
+                node_list = []
+            selected_ids = {str(node_id) for node_id in node_list}
+            selected_nodes = [n for n in current_level_nodes if str(n.get("node_id")) in selected_ids]
+            self._debug(
+                trace_id,
+                f"tree_search level result doc_id={doc_id}, level={level}, selected={len(selected_nodes)}"
+            )
+
+            if not selected_nodes:
+                break
+
+            last_selected_nodes = selected_nodes
+            next_level_nodes = []
+            for node in selected_nodes:
+                children = self._normalize_level_nodes(node.get("nodes", []))
+                if children:
+                    next_level_nodes.extend(children)
+                else:
+                    terminal_selected_nodes.append(node)
+
+            if not next_level_nodes:
+                break
+
+            current_level_nodes = next_level_nodes
+            level += 1
+
+        if not terminal_selected_nodes:
+            terminal_selected_nodes = last_selected_nodes
+
+        selected_node_ids = [
+            str(node.get("node_id"))
+            for node in terminal_selected_nodes
+            if node.get("node_id") is not None
+        ]
           
         # 创建节点映射  
         node_map = utils.create_node_mapping(tree)  
           
         # 提取相关节点内容  
         relevant_nodes = []  
-        node_list = tree_search_json.get("node_list", []) if isinstance(tree_search_json, dict) else []
-        for node_id in node_list:  
+        for node_id in selected_node_ids:
             if node_id in node_map:  
                 node_info = node_map[node_id]  
                 start_time = node_info["node"].get("start_time")
@@ -275,7 +345,7 @@ Directly return the final JSON structure. Do not output anything else.
                 })  
           
         return {  
-            "thinking": tree_search_json.get("thinking", ""),  
+            "thinking": "\n".join(level_thinking),
             "nodes": relevant_nodes  
         }  
       

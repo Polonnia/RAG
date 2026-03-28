@@ -1,4 +1,5 @@
 import http from '../api/http';
+import getApiUrl from '../apiConfig';
 
 export async function generateExam({ courseOutline, questionConfig, difficulty }) {
   const formData = new FormData();
@@ -7,6 +8,65 @@ export async function generateExam({ courseOutline, questionConfig, difficulty }
   formData.append('difficulty', difficulty);
   const res = await http.post('/generate-exam', formData, { timeout: 180000 });
   return res.data;
+}
+
+export async function generateExamStream({ courseOutline, questionConfig, difficulty, onEvent }) {
+  const formData = new FormData();
+  formData.append('course_outline', courseOutline);
+  formData.append('question_config', JSON.stringify(questionConfig));
+  formData.append('difficulty', difficulty);
+
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${getApiUrl()}/generate-exam-stream`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(errText || `HTTP ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error('浏览器不支持流式响应');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed);
+        if (onEvent) onEvent(event);
+      } catch {
+        // 忽略非JSON片段
+      }
+    }
+  }
+
+  const tail = buffer.trim();
+  if (tail) {
+    try {
+      const event = JSON.parse(tail);
+      if (onEvent) onEvent(event);
+    } catch {
+      // 忽略尾部非JSON片段
+    }
+  }
 }
 
 export async function saveExamHistory(outline, examContent) {
