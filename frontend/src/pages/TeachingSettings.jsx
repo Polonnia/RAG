@@ -232,44 +232,40 @@ export default function TeachingSettings() {
         .teaching-toolbar {
           display: flex;
           flex-wrap: wrap;
-          gap: 10px;
+          gap: 6px;
           align-items: center;
+          height: 28px;
+          margin: 0;
         }
         .teaching-section-caption {
           color: #8c8c8c;
           font-size: 12px;
+          margin: 8px 0 0 0;
         }
-        .teaching-outline-box {
-          height: 520px;
-          max-height: 520px;
+        /* 左右内容容器统一尺寸，顶端对齐 */
+        .teaching-tree-box, .teaching-outline-box {
+          height: calc(100% - 48px);
+          max-height: unset;
+          margin-top: 4px;
           overflow: auto;
-          margin-bottom: 0;
-          padding: 12px;
           border-radius: 10px;
           border: 1px solid #f0f0f0;
+        }
+        .teaching-outline-box {
+          padding: 12px;
           background: #fafafa;
           white-space: pre-wrap;
         }
         .teaching-tree-box {
-          height: 520px;
-          max-height: 520px;
-          border: 1px solid #f0f0f0;
-          border-radius: 10px;
           padding: 8px;
-          overflow: auto;
           background: #fcfcfd;
         }
         .teaching-tree-spin {
-          height: 520px;
-          max-height: 520px;
-          display: flex;
-          flex-direction: column;
-        }
-        .teaching-tree-spin .ant-spin-nested-loading {
           height: 100%;
           display: flex;
           flex-direction: column;
         }
+        .teaching-tree-spin .ant-spin-nested-loading,
         .teaching-tree-spin .ant-spin-container {
           height: 100%;
           display: flex;
@@ -297,7 +293,7 @@ export default function TeachingSettings() {
 
       <div style={{ marginBottom: 12 }}>
         <h2 style={{ fontWeight: 700, marginTop: 0, marginBottom: 2 }}>
-          <FileTextOutlined style={{ marginRight: 8, color: '#1677ff' }} />
+          <FileTextOutlined style={{ marginright: 8, color: '#1677ff' }} />
           教学内容设计
         </h2>
         <Text className="teaching-section-caption">选择教材目录、取消不需要章节，生成结构化教学安排。</Text>
@@ -329,7 +325,16 @@ export default function TeachingSettings() {
         <Card
           className="teaching-panel-card"
           title={<Space><Tag color="blue">教材思维导图</Tag><Text type="secondary">可取消任意章节/小节</Text></Space>}
-          styles={{ body: { height: 'calc(72vh - 57px)', minHeight: 520, display: 'flex', flexDirection: 'column', gap: 10 } }}
+          styles={{
+            body: {
+              height: 'calc(72vh - 57px)',
+              minHeight: 520,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0,
+              padding: '16px'
+            }
+          }}
         >
           <div className="teaching-toolbar">
             <Button size="small" onClick={() => {
@@ -344,10 +349,10 @@ export default function TeachingSettings() {
             <Button size="small" onClick={() => setExpandedKeys(flattenTreeKeys(treeData))}>展开全部</Button>
             <Button size="small" onClick={() => setExpandedKeys([])}>收起全部</Button>
           </div>
-          <Spin spinning={structureLoading} className="teaching-tree-spin">
-            {treeData.length === 0 ? (
-              <Empty description="请选择教材后加载目录" />
-            ) : (
+          {treeData.length === 0 ? (
+            <Empty description="请选择教材后加载目录" style={{marginTop:16}}/>
+          ) : (
+            <Spin spinning={structureLoading} className="teaching-tree-spin">
               <div className="teaching-tree-box">
                 <Tree
                   checkable
@@ -364,24 +369,36 @@ export default function TeachingSettings() {
                   }}
                 />
               </div>
-            )}
-          </Spin>
+            </Spin>
+          )}
         </Card>
 
         <Card
           className="teaching-panel-card"
           title={<Space><Tag color="green">最终大纲</Tag><Text type="secondary">用于生成课程安排</Text></Space>}
-          styles={{ body: { height: 'calc(72vh - 57px)', minHeight: 520, display: 'flex', flexDirection: 'column', gap: 10 } }}
+          styles={{
+            body: {
+              height: 'calc(72vh - 57px)',
+              minHeight: 520,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0,
+              padding: '16px'
+            }
+          }}
         >
           <div className="teaching-toolbar">
-              <Text>总课时</Text>
-              <InputNumber min={1} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} />
-              <Text>总课数</Text>
-              <InputNumber min={1} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} />
-              <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading}>生成教学安排表</Button>
+            <Text strong>总课时</Text>
+            <InputNumber min={1} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} />
+            <Text strong>总课数</Text>
+            <InputNumber min={1} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} />
+            <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading}>生成教学安排表</Button>
           </div>
-          {scheduleStage ? <Text className="teaching-section-caption">状态：{scheduleStage}</Text> : <Text className="teaching-section-caption">提示：可在左侧取消不需要的小节。</Text>}
-
+          {scheduleStage ? (
+            <Text className="teaching-section-caption">状态：{scheduleStage}</Text>
+          ) : (
+            <Text className="teaching-section-caption">提示：可在左侧取消不需要的小节。</Text>
+          )}
           <Paragraph className="teaching-outline-box">
             {selectedOutline || '请在左侧勾选目录节点'}
           </Paragraph>
@@ -424,5 +441,3 @@ export default function TeachingSettings() {
     </AppLayout>
   );
 }
-
-

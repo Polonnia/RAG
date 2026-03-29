@@ -296,16 +296,8 @@ export default function KnowledgeManagement() {
 
       <Divider />
 
-      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><DatabaseOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识库文件列表</span>} 
+      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><DatabaseOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识库文件列表</span>}
             style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
-        <div style={{ marginBottom: 16 }}>
-          <Button onClick={fetchKnowledgeFiles} loading={fileLoading} icon={<EyeOutlined />}>
-            刷新列表
-          </Button>
-          <Text style={{ marginLeft: 16, color: '#666' }}>
-            共 {knowledgeFiles.length} 个文件
-          </Text>
-        </div>
         {fileLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
             <Spin size="large" />
@@ -386,6 +378,14 @@ export default function KnowledgeManagement() {
             }}
           />
         )}
+        <div style={{ marginTop: 16 }}>
+          <Button onClick={fetchKnowledgeFiles} loading={fileLoading} icon={<EyeOutlined />}>
+            刷新列表
+          </Button>
+          <Text style={{ marginLeft: 16, color: '#666' }}>
+            共 {knowledgeFiles.length} 个文件
+          </Text>
+        </div>
       </Card>
 
       <Modal

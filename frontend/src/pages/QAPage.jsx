@@ -849,9 +849,8 @@ export default function QAPage() {
           </div>
         ) : null}
         <div>
-          <h4>参考出处：</h4>
+          <h3>参考出处</h3>
           <List
-            size="small"
             dataSource={displaySources}
             renderItem={(group, groupIndex) => (
               <List.Item>
