@@ -4,12 +4,20 @@ from sqlalchemy.orm import Session
 from models import get_db, User, Exam, Question, StudentExam, StudentAnswer, ExamHistory, StudentKeywordAccuracy
 from rag.exam_generator import exam_generator
 from datetime import datetime
+from pydantic import BaseModel
 import json
 import asyncio
 from auth import get_current_user
 import threading
 
 router = APIRouter()
+
+
+class GradeAnswerRequest(BaseModel):
+    student_exam_id: int
+    question_id: int
+    points_earned: float
+    comment: str = ""
 
 
 def _json_line(payload: dict) -> str:
@@ -825,23 +833,23 @@ async def get_exam_result(exam_id: int, current_user: User = Depends(get_current
     }
 
 @router.post("/teacher/grade-answer")
-async def grade_answer(student_exam_id: int = Form(...), question_id: int = Form(...), points_earned: float = Form(...), comment: str = Form(""), current_user: User = Depends(get_current_user)):
+async def grade_answer(request: GradeAnswerRequest, current_user: User = Depends(get_current_user)):
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="只有教师可以批改试卷")
     db = next(get_db())
     try:
-        answer = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam_id, StudentAnswer.question_id == question_id).first()
+        answer = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == request.student_exam_id, StudentAnswer.question_id == request.question_id).first()
         if not answer:
             raise HTTPException(status_code=404, detail="未找到该学生答案")
-        q = db.query(Question).filter(Question.id == question_id).first()
+        q = db.query(Question).filter(Question.id == request.question_id).first()
         if q.question_type not in ["short_answer", "programming"]:
             raise HTTPException(status_code=400, detail="只能批改简答题和编程题")
-        answer.points_earned = points_earned
-        answer.comment = comment
-        answer.is_correct = points_earned > 0
+        answer.points_earned = request.points_earned
+        answer.comment = request.comment
+        answer.is_correct = request.points_earned > 0
         db.commit()
-        student_exam = db.query(StudentExam).filter(StudentExam.id == student_exam_id).first()
-        all_answers = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam_id).all()
+        student_exam = db.query(StudentExam).filter(StudentExam.id == request.student_exam_id).first()
+        all_answers = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == request.student_exam_id).all()
         total_score = sum(a.points_earned for a in all_answers)
         student_exam.score = total_score
         db.commit()

@@ -1970,12 +1970,12 @@ function App() {
 
   const handleGrade = async (record, score, comment) => {
     try {
-      await axios.post(`${getApiUrl()}/teacher/grade-answer`, new URLSearchParams({
+      await axios.post(`${getApiUrl()}/teacher/grade-answer`, {
         student_exam_id: record.studentExamId,
         question_id: record.questionId,
         points_earned: score,
         comment
-      }));
+      });
       fetchGradingList();
       message.success('批改成功');
     } catch (e) {
@@ -2007,12 +2007,12 @@ function App() {
   // 批改弹窗提交
   const handleModalGrade = async (studentExamId, questionId, score, comment) => {
     try {
-      await axios.post(`${getApiUrl()}/teacher/grade-answer`, new URLSearchParams({
+      await axios.post(`${getApiUrl()}/teacher/grade-answer`, {
         student_exam_id: studentExamId,
         question_id: questionId,
         points_earned: score,
         comment
-      }));
+      });
       message.success('批改成功');
       setGradingModalVisible(false);
       fetchGradingList();
