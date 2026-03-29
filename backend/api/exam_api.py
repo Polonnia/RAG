@@ -645,7 +645,7 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                 # 逐个比较每个空的答案
                 correct_count = 0
                 for i in range(len(student_answers)):
-                    if student_answers[i].lower() == correct_answers[i].lower():
+                    if i < len(correct_answers) and student_answers[i].lower() == correct_answers[i].lower():
                         correct_count += 1
                 
                 # 如果所有空都正确，则全对；否则部分正确
@@ -951,4 +951,4 @@ def exam_analysis(exam_id: int, current_user: User = Depends(get_current_user), 
         "question_stats": question_stats,
         "knowledge_stats": knowledge_stats,
         "ai_suggestion": ai_suggestion
-    } 
+    }  

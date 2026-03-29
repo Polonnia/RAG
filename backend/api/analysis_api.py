@@ -34,7 +34,12 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
         for ans in valid_answers:
             question = ans.question
             if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
-                keywords = question.knowledge_points.split(',')
+                try:
+                    keywords = json.loads(question.knowledge_points) if isinstance(question.knowledge_points, str) else question.knowledge_points
+                except (json.JSONDecodeError, TypeError):
+                    keywords = [question.knowledge_points]
+                if isinstance(keywords, str):
+                    keywords = [keywords]
                 for kw in keywords:
                     kw = kw.strip()
                     if kw:
