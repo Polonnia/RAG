@@ -3,10 +3,24 @@ from sqlalchemy.orm import Session
 from models import get_db, User, StudentKeywordAccuracy
 from auth import get_current_user
 import sys, os
+import uuid
+import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from rag.qa import get_completion, qa_query
+from rag.llm_client import completion_text
+from rag.pageindex_search import MultiDocumentSearcher
 
 router = APIRouter()
+TREE_JSON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'trees')
+
+
+async def _search_context_by_pageindex(query: str, top_k: int = 3) -> str:
+    searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
+    searcher.load_documents()
+    if not searcher.documents:
+        return ""
+    trace_id = f"assistant-{uuid.uuid4().hex[:8]}"
+    result = await searcher.search(query=query, top_k=top_k, trace_id=trace_id, max_parallel_docs=3)
+    return result.get("answer", "")
 
 @router.post("/student/socratic-assistant")
 async def socratic_assistant(
@@ -44,9 +58,8 @@ async def socratic_assistant(
         else:
             chat_history += f"学生: {msg['content']}\n"
 
-    # 检索知识库
-    rag_result = qa_query(weak_point, top_k=3)
-    context = rag_result["answer"]
+    # 使用 pageindex_search 检索知识库
+    context = await _search_context_by_pageindex(weak_point, top_k=3)
 
     if action == "next":
         prompt = f"""
@@ -56,7 +69,7 @@ async def socratic_assistant(
 
 请基于知识内容，提出一个能引导学生思考的启发式问题，不要直接给出答案。
 """
-        question = get_completion(prompt)
+        question = await asyncio.to_thread(completion_text, prompt)
         return {"question": question, "knowledge_point": weak_point}
     elif action == "answer":
         prompt = f"""
@@ -70,7 +83,7 @@ async def socratic_assistant(
 
 请基于知识内容和学生回答，继续追问或引导学生深入思考，不要直接给出答案。
 """
-        reply = get_completion(prompt)
+        reply = await asyncio.to_thread(completion_text, prompt)
         return {"reply": reply, "knowledge_point": weak_point}
     elif action == "explain":
         prompt = f"""
@@ -80,7 +93,7 @@ async def socratic_assistant(
 
 请基于知识内容，详细讲解该知识点。
 """
-        explanation = get_completion(prompt)
+        explanation = await asyncio.to_thread(completion_text, prompt)
         return {"explanation": explanation, "knowledge_point": weak_point}
     else:
         raise HTTPException(status_code=400, detail="未知操作") 

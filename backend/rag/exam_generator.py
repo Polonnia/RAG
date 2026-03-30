@@ -8,7 +8,7 @@ from langchain.schema import Document
 from langchain.text_splitter import CharacterTextSplitter
 
 # 导入LLM调用模块
-from .qa import get_completion
+from .llm_client import completion_text
 from .resources import get_embeddings
 from .pageindex_search import MultiDocumentSearcher
 
@@ -138,7 +138,7 @@ class ExamGenerator:
 }}
 """
             
-            response = get_completion(prompt)
+            response = completion_text(prompt=prompt)
             print(f"LLM响应: {response}")  # 打印前200个字符用于调试
             
             # 尝试解析JSON响应
@@ -202,7 +202,7 @@ class ExamGenerator:
 }}
 """
             
-            response = get_completion(prompt)
+            response = completion_text(prompt=prompt)
             print(f"填空题LLM响应: {response}")
             
             try:
@@ -263,7 +263,7 @@ class ExamGenerator:
 }}
 """
             
-            response = get_completion(prompt)
+            response = completion_text(prompt=prompt)
             print(f"简答题LLM响应: {response}")
             
             try:
@@ -323,7 +323,7 @@ class ExamGenerator:
 }}
 """
             
-            response = get_completion(prompt)
+            response = completion_text(prompt=prompt)
             print(f"编程题LLM响应: {response}")
             
             try:
@@ -387,7 +387,7 @@ class ExamGenerator:
     ]
 }}
 """
-            response = get_completion(prompt)
+            response = completion_text(prompt=prompt)
             print(f"多选题LLM响应: {response}")
             import re
             json_match = re.search(r'\{.*\}', response, re.DOTALL)

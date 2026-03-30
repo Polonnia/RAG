@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 from api.auth_api import router as auth_router
 from api.knowledge_api import router as knowledge_router
 from api.exam_api import router as exam_router
-from api.ai_api import router as ai_router
 # from api.teaching_api import router as teaching_router
 from api.analysis_api import router as analysis_router
 from api.assistant_api import router as assistant_router
@@ -50,7 +49,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(knowledge_router)
 app.include_router(exam_router)
-app.include_router(ai_router)
 # app.include_router(teaching_router)
 app.include_router(analysis_router)
 app.include_router(assistant_router)
