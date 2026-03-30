@@ -9,11 +9,11 @@ export default function AppLayout({ children, maxWidth = 1000 }) {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
-      <Layout>
+      <Layout style={{ marginLeft: 220 }}>
         <HeaderBar />
         <Content
           style={{
-            padding: '48px 0',
+            padding: '0',
             background: '#f4f6fa',
             minHeight: 800,
             fontFamily: 'Noto Sans SC, Microsoft YaHei, PingFang SC, HarmonyOS Sans, Segoe UI, Arial, sans-serif'

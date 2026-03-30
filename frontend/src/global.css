@@ -96,7 +96,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  background: rgba(255,255,255,0.1);
   transition: left 0.6s ease;
 }
 
@@ -106,7 +106,7 @@ body {
 
 /* 主要按钮 */
 .ant-btn-primary {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%) !important;
+  background: var(--primary-color) !important;
   border-radius: 8px !important;
   border: none !important;
   box-shadow: var(--shadow-primary) !important;
@@ -116,7 +116,7 @@ body {
 .ant-btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(22, 119, 255, 0.25) !important;
-  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%) !important;
+  background: var(--primary-dark) !important;
 }
 
 .ant-btn-primary:active {
@@ -139,7 +139,7 @@ body {
 
 /* 危险按钮 */
 .ant-btn-dangerous {
-  background: linear-gradient(135deg, var(--error-color) 0%, #ff7875 100%) !important;
+  background: var(--error-color) !important;
   color: var(--text-light) !important;
   border-radius: 8px !important;
   box-shadow: 0 2px 8px rgba(255, 77, 79, 0.2) !important;

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Button, Space } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOutlined, DatabaseOutlined, FileTextOutlined, FormOutlined, CheckCircleOutlined, BarChartOutlined, RobotOutlined } from '@ant-design/icons';
+import { BookOutlined, DatabaseOutlined, FileTextOutlined, FormOutlined, CheckCircleOutlined, BarChartOutlined, RobotOutlined, LogoutOutlined } from '@ant-design/icons';
 import { getUser } from '../../auth/authUtils';
+import { logout } from '../../services/authService';
 
 const { Sider } = Layout;
 
@@ -56,14 +57,26 @@ export default function Sidebar() {
   console.log('[Sidebar] 选择的菜单:', user?.role === 'student' ? 'studentMenuItems' : 'teacherMenuItems');
   console.log('[Sidebar] 菜单项数量:', menuItems.length);
 
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
-    <Sider
-      width={220}
+    <div
       style={{
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 220,
         background: '#f4f6fa',
         boxShadow: '2px 0 8px #e6eaf1',
         borderRight: '1.5px solid #e6eaf1',
-        paddingTop: 0
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 999,
+        overflow: 'hidden'
       }}
     >
       <div
@@ -79,7 +92,8 @@ export default function Sidebar() {
           marginBottom: 16,
           background: '#1677ff',
           borderRadius: '0 0 18px 18px',
-          boxShadow: '0 2px 8px #e6eaf1'
+          boxShadow: '0 2px 8px #e6eaf1',
+          flexShrink: 0
         }}
       >
         <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
@@ -93,12 +107,13 @@ export default function Sidebar() {
           if (item && item.path) navigate(item.path);
         }}
         style={{
-          height: '100%',
+          flex: 1,
           borderRight: 0,
           fontSize: 18,
           background: '#f4f6fa',
           fontFamily: 'Noto Sans SC, Microsoft YaHei, PingFang SC, HarmonyOS Sans, Segoe UI, Arial, sans-serif',
-          fontWeight: 500
+          fontWeight: 500,
+          overflow: 'hidden'
         }}
         items={menuItems.map(item => ({
           ...item,
@@ -110,7 +125,32 @@ export default function Sidebar() {
         }))}
         theme="light"
       />
-    </Sider>
+      <div
+        style={{
+          padding: '16px 12px',
+          borderTop: '1px solid #e6eaf1',
+          background: '#f4f6fa',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          flexShrink: 0
+        }}
+      >
+        <Button 
+          type="primary" 
+          icon={<LogoutOutlined />} 
+          onClick={handleLogout}
+          style={{ 
+            borderRadius: 20, 
+            fontWeight: 500,
+            fontSize: 14,
+            width: '100%'
+          }}
+          size="middle"
+        >
+          退出登录
+        </Button>
+      </div>
+    </div>
   );
 }
 
