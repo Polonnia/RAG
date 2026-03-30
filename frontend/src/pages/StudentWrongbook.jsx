@@ -222,13 +222,23 @@ export default function StudentWrongbook() {
               <List
                 dataSource={questions}
                 locale={{ emptyText: <Empty description="该知识点暂无错题" /> }}
-                renderItem={q => (
+                renderItem={q => {
+                  // 防御性处理 options - 如果是字符串则尝试解析
+                  let displayOptions = q.options;
+                  if (typeof displayOptions === 'string') {
+                    try {
+                      displayOptions = JSON.parse(displayOptions);
+                    } catch {
+                      displayOptions = {};
+                    }
+                  }
+                  return (
                   <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
                     <div style={{ width: '100%' }}>
                       <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{q.question}</div>
-                      {q.options && Object.keys(q.options).length > 0 && (
+                      {displayOptions && Object.keys(displayOptions).length > 0 && (
                         <div style={{ margin: '8px 0' }}>
-                          {Object.entries(q.options).map(([k, v]) => (
+                          {Object.entries(displayOptions).map(([k, v]) => (
                             <div key={k}>{k}. {v}</div>
                           ))}
                         </div>
@@ -240,7 +250,8 @@ export default function StudentWrongbook() {
                       }} style={{ marginTop: 8, borderRadius: 12, fontWeight: 600 }}>重做</Button>
                     </div>
                   </List.Item>
-                )}
+                  );
+                }}
               />
             )}
 
@@ -251,13 +262,23 @@ export default function StudentWrongbook() {
               ) : (
                 <List
                   dataSource={practiceHistory}
-                  renderItem={h => (
+                  renderItem={h => {
+                    // 防御性处理 options - 如果是字符串则尝试解析
+                    let displayOptions = h.options;
+                    if (typeof displayOptions === 'string') {
+                      try {
+                        displayOptions = JSON.parse(displayOptions);
+                      } catch {
+                        displayOptions = {};
+                      }
+                    }
+                    return (
                     <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
                       <div style={{ width: '100%' }}>
                         <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{h.question}</div>
-                        {h.options && Object.keys(h.options).length > 0 && (
+                        {displayOptions && Object.keys(displayOptions).length > 0 && (
                           <div style={{ margin: '8px 0' }}>
-                            {Object.entries(h.options).map(([k, v]) => (
+                            {Object.entries(displayOptions).map(([k, v]) => (
                               <div key={k}>{k}. {v}</div>
                             ))}
                           </div>
@@ -268,7 +289,8 @@ export default function StudentWrongbook() {
                         <div style={{ color: '#888', fontSize: 12 }}>{h.time}</div>
                       </div>
                     </List.Item>
-                  )}
+                    );
+                  }}
                 />
               )}
             </div>
@@ -285,19 +307,61 @@ export default function StudentWrongbook() {
           {activeQuestion && (
             <div>
               <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 16 }}>{activeQuestion.question}</div>
-              {activeQuestion.options && Object.keys(activeQuestion.options).length > 0 ? (
+              {/* 根据题目类型显示对应的输入界面 */}
+              {activeQuestion.type === 'choice' ? (
+                // 单选题
                 <Radio.Group
                   value={answer}
                   onChange={e => setAnswer(e.target.value)}
                   style={{ marginBottom: 16 }}
                 >
                   <Space direction="vertical">
-                    {Object.entries(activeQuestion.options).map(([k, v]) => (
+                    {activeQuestion.options && Object.entries(activeQuestion.options).map(([k, v]) => (
                       <Radio key={k} value={k}>{k}. {v}</Radio>
                     ))}
                   </Space>
                 </Radio.Group>
+              ) : activeQuestion.type === 'multi' ? (
+                // 多选题
+                <Checkbox.Group
+                  value={answer ? answer.split(',') : []}
+                  onChange={checkedValues => setAnswer(checkedValues.join(','))}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Space direction="vertical">
+                    {activeQuestion.options && Object.entries(activeQuestion.options).map(([k, v]) => (
+                      <Checkbox key={k} value={k}>{k}. {v}</Checkbox>
+                    ))}
+                  </Space>
+                </Checkbox.Group>
+              ) : activeQuestion.type === 'fill_blank' ? (
+                // 填空题
+                <Input
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="请输入答案，多个空用空格分隔"
+                  style={{ width: '100%', marginBottom: 16, fontSize: 16, padding: 8, borderRadius: 8 }}
+                />
+              ) : activeQuestion.type === 'short_answer' ? (
+                // 简答题
+                <TextArea
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="请输入答案"
+                  rows={4}
+                  style={{ marginBottom: 16, fontSize: 16, padding: 8, borderRadius: 8 }}
+                />
+              ) : activeQuestion.type === 'programming' ? (
+                // 编程题
+                <TextArea
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="请输入代码"
+                  rows={6}
+                  style={{ marginBottom: 16, fontSize: 16, padding: 8, borderRadius: 8, fontFamily: 'monospace' }}
+                />
               ) : (
+                // 默认：文本输入
                 <Input
                   value={answer}
                   onChange={e => setAnswer(e.target.value)}
@@ -354,23 +418,75 @@ export default function StudentWrongbook() {
           ) : (
             <List
               dataSource={practiceQuestions}
-              renderItem={(q, idx) => (
+              renderItem={(q, idx) => {
+                // 防御性处理 options - 如果是字符串则尝试解析
+                let displayOptions = q.options;
+                if (typeof displayOptions === 'string') {
+                  try {
+                    displayOptions = JSON.parse(displayOptions);
+                  } catch {
+                    displayOptions = {};
+                  }
+                }
+                return (
                 <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
                   <div style={{ width: '100%' }}>
                     <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>题目{idx + 1}：{q.question}</div>
-                    {q.options && Object.keys(q.options).length > 0 ? (
+                    {/* 根据题目类型显示对应的输入界面 */}
+                    {q.type === 'choice' ? (
+                      // 单选题
                       <Radio.Group
                         value={practiceAnswers[idx]}
                         onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
                         style={{ marginBottom: 8 }}
                       >
                         <Space direction="vertical">
-                          {Object.entries(q.options).map(([k, v]) => (
+                          {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
                             <Radio key={k} value={k}>{k}. {v}</Radio>
                           ))}
                         </Space>
                       </Radio.Group>
+                    ) : q.type === 'multi' ? (
+                      // 多选题
+                      <Checkbox.Group
+                        value={practiceAnswers[idx] ? practiceAnswers[idx].split(',') : []}
+                        onChange={checkedValues => setPracticeAnswers({ ...practiceAnswers, [idx]: checkedValues.join(',') })}
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Space direction="vertical">
+                          {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
+                            <Checkbox key={k} value={k}>{k}. {v}</Checkbox>
+                          ))}
+                        </Space>
+                      </Checkbox.Group>
+                    ) : q.type === 'fill_blank' ? (
+                      // 填空题
+                      <Input
+                        value={practiceAnswers[idx] || ''}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        placeholder="请输入答案，多个空用空格分隔"
+                        style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                      />
+                    ) : q.type === 'short_answer' ? (
+                      // 简答题
+                      <TextArea
+                        value={practiceAnswers[idx] || ''}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        placeholder="请输入答案"
+                        rows={3}
+                        style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                      />
+                    ) : q.type === 'programming' ? (
+                      // 编程题
+                      <TextArea
+                        value={practiceAnswers[idx] || ''}
+                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                        placeholder="请输入代码"
+                        rows={5}
+                        style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8, fontFamily: 'monospace' }}
+                      />
                     ) : (
+                      // 默认：文本输入
                       <Input
                         value={practiceAnswers[idx] || ''}
                         onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
@@ -380,7 +496,8 @@ export default function StudentWrongbook() {
                     )}
                   </div>
                 </List.Item>
-              )}
+                );
+              }}
             />
           )}
           {practiceQuestions.length > 0 && !practiceResult && (

@@ -111,38 +111,56 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     ).order_by(StudentExam.start_time.asc()).all()  # 按时间升序，便于绘制曲线
     accuracy_curve = []
     for se in exams:
-        # 只统计已判分（is_correct为True或False）的题目
-        valid_answers = [ans for ans in se.answers if ans.is_correct is not None]
-        total = len(valid_answers)
-        correct = sum(1 for ans in valid_answers if ans.is_correct)
-        accuracy = round(correct / total * 100, 2) if total > 0 else None
+        # 使用分数比例计算正确率，而不是二元判定
+        valid_answers = [ans for ans in se.answers if ans.points_earned is not None]
+        
+        if not valid_answers:
+            # 如果没有已判分的题目，跳过
+            continue
+            
+        # 计算总分和得分
+        total_points = sum(q.points for q in [db.query(Question).filter(Question.id == ans.question_id).first() for ans in valid_answers] if q)
+        earned_points = sum(ans.points_earned for ans in valid_answers)
+        accuracy = round(earned_points / total_points * 100, 2) if total_points > 0 else 0
+        
         # 安全处理start_time可能为None的情况
         date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
         
-        # 统计该次考试每个知识点的正确率
+        # 统计该次考试每个知识点的正确率（使用分数比例）
         keyword_stats = {}
         for ans in valid_answers:
-            question = ans.question
+            question = db.query(Question).filter(Question.id == ans.question_id).first()
             if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
-                keywords = question.knowledge_points.split(',')
+                # 解析知识点（支持JSON数组和逗号分隔两种格式）
+                keywords = []
+                try:
+                    if isinstance(question.knowledge_points, str):
+                        if question.knowledge_points.startswith('['):
+                            keywords = json.loads(question.knowledge_points)
+                        else:
+                            keywords = [kw.strip() for kw in question.knowledge_points.split(',') if kw.strip()]
+                    elif isinstance(question.knowledge_points, list):
+                        keywords = question.knowledge_points
+                except:
+                    keywords = []
+                
                 for kw in keywords:
-                    kw = kw.strip()
+                    kw = kw.strip() if isinstance(kw, str) else str(kw)
                     if kw:
                         if kw not in keyword_stats:
-                            keyword_stats[kw] = {'total': 0, 'correct': 0}
-                        keyword_stats[kw]['total'] += 1
-                        if ans.is_correct:
-                            keyword_stats[kw]['correct'] += 1
+                            keyword_stats[kw] = {'total': 0.0, 'earned': 0.0}
+                        keyword_stats[kw]['total'] += question.points
+                        keyword_stats[kw]['earned'] += ans.points_earned
         
-        # 计算每个知识点的正确率
+        # 计算每个知识点的正确率（分数比例）
         keyword_accuracy_list = []
         for kw, stats in keyword_stats.items():
-            kw_accuracy = round(stats['correct'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
+            kw_accuracy = round(stats['earned'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
             keyword_accuracy_list.append({
                 "keyword": kw,
                 "accuracy": kw_accuracy,
                 "total": stats['total'],
-                "correct": stats['correct']
+                "earned": stats['earned']
             })
         
         accuracy_curve.append({
@@ -203,10 +221,16 @@ async def generate_practice(
         
         print(f"[API] 生成选择题，数量={choice_count}")
         questions = exam_generator.generate_concept_questions(outline, [], count=choice_count, difficulty=difficulty)
+        # 为选择题添加 type 字段
+        for q in questions:
+            q["type"] = "choice"
         print(f"[API] 选择题生成完毕，数量={len(questions)}")
         
         print(f"[API] 生成填空题，数量={fill_count}")
         fill_questions = exam_generator.generate_fill_blank_questions(outline, [], count=fill_count, difficulty=difficulty)
+        # 为填空题添加 type 字段
+        for q in fill_questions:
+            q["type"] = "fill_blank"
         print(f"[API] 填空题生成完毕，数量={len(fill_questions)}")
         
         all_questions = questions + fill_questions
@@ -249,8 +273,14 @@ async def submit_practice(
                 "options": a.get('options', {})
             })
             # 新增：直接用keyword更新正确率
-            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
-                """更新学生-关键词的正确率统计"""
+            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
+                """
+                更新学生-关键词的正确率统计
+                
+                参数：
+                - is_correct: 用于客观题（选择题、填空题），True/False
+                - score_ratio: 用于主观题（简答题、编程题），分数占比 (0.0 ~ 1.0)
+                """
                 try:
                     if not keyword or keyword.strip() == "":
                         return
@@ -270,8 +300,16 @@ async def submit_practice(
                         )
                         db.add(accuracy_record)
                     accuracy_record.total_count += 1
-                    if is_correct:
-                        accuracy_record.correct_count += 1
+                    
+                    # 根据参数类型计算correct_count
+                    if score_ratio is not None:
+                        # 使用分数比例贡献
+                        accuracy_record.correct_count += score_ratio
+                    else:
+                        # 使用布尔值（默认行为）
+                        if is_correct:
+                            accuracy_record.correct_count += 1
+                    
                     accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
                     accuracy_record.last_updated = datetime.now()
                 except Exception as e:
@@ -321,20 +359,41 @@ async def get_wrong_questions(keyword: str, current_user: User = Depends(get_cur
     wrongs = db.query(StudentWrongQuestion).filter(StudentWrongQuestion.student_id == current_user.id, StudentWrongQuestion.keyword == keyword).order_by(StudentWrongQuestion.time.desc()).all()
     result = []
     for w in wrongs:
+        # 先尝试从 question_data 获取
         qdata = None
         try:
             import json
-            qdata = json.loads(w.question_data)
+            qdata = json.loads(w.question_data) if w.question_data else {}
         except:
             qdata = {}
+        
+        # 如果 question_text 为空，从数据库查询原始题目获取
+        if not qdata.get("question_text"):
+            original_question = db.query(Question).filter(Question.id == w.question_id).first()
+            if original_question:
+                qdata["question_text"] = original_question.question_text
+                qdata["type"] = original_question.question_type
+                qdata["options"] = original_question.options
+                qdata["knowledge_points"] = original_question.knowledge_points
+                qdata["explanation"] = original_question.explanation
+        
+        # 处理 options - 如果是字符串则解析
+        options = qdata.get("options", {})
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except:
+                options = {}
+        
         result.append({
             "id": w.id,
             "question_id": w.question_id,
             "exam_id": w.exam_id,
             "keyword": w.keyword,
-            "question": qdata.get("question", ""),
-            "options": qdata.get("options", {}),
+            "question": qdata.get("question_text", ""),  # 从 question_text 获取，返回为 question
+            "options": options,
             "type": qdata.get("type", ""),
+            "question_type": qdata.get("type", ""),
             "knowledge_points": qdata.get("knowledge_points", ""),
             "explanation": w.explanation,
             "answer": w.answer,
@@ -350,7 +409,22 @@ async def submit_wrongbook_answer(wrong_id: int = Form(...), answer: str = Form(
     if not wrong:
         raise HTTPException(status_code=404, detail="未找到该错题")
     import json
-    qdata = json.loads(wrong.question_data)
+    qdata = {}
+    try:
+        qdata = json.loads(wrong.question_data) if wrong.question_data else {}
+    except:
+        qdata = {}
+    
+    # 如果 question_text 为空，从数据库查询原始题目获取
+    if not qdata.get("question_text"):
+        original_question = db.query(Question).filter(Question.id == wrong.question_id).first()
+        if original_question:
+            qdata["question_text"] = original_question.question_text
+            qdata["type"] = original_question.question_type
+            qdata["options"] = original_question.options
+            qdata["knowledge_points"] = original_question.knowledge_points
+            qdata["explanation"] = original_question.explanation
+    
     correct = False
     if qdata.get("type") == "choice":
         correct = answer == wrong.correct_answer
@@ -368,13 +442,22 @@ async def submit_wrongbook_answer(wrong_id: int = Form(...), answer: str = Form(
         # 如果所有空都正确，则全对
         correct = correct_count == len(correct_answers) and len(student_answers) == len(correct_answers)
     # 其他题型可扩展
+    
+    # 处理 options - 如果是字符串则解析
+    options = qdata.get("options", {})
+    if isinstance(options, str):
+        try:
+            options = json.loads(options)
+        except:
+            options = {}
+    
     return {
         "is_correct": correct,
         "correct_answer": wrong.correct_answer,
         "explanation": wrong.explanation,
         "your_answer": answer,
-        "question": qdata.get("question", ""),
-        "options": qdata.get("options", {}),
+        "question": qdata.get("question_text", ""),
+        "options": options,
         "type": qdata.get("type", ""),
         "knowledge_points": qdata.get("knowledge_points", "")
     } 
@@ -462,7 +545,7 @@ async def fix_wrongbook(current_user: User = Depends(get_current_user), db: Sess
                         qdata = json.loads(wrong_q.question_data) if wrong_q.question_data else {}
                     except:
                         qdata = {
-                            "question": question.question_text,
+                            "question_text": question.question_text,
                             "options": json.loads(question.options) if question.options else {},
                             "type": question.question_type,
                             "knowledge_points": question.knowledge_points,
