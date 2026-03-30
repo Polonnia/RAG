@@ -798,7 +798,7 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                         keywords_list = json.loads(q.knowledge_points) if isinstance(q.knowledge_points, str) else (q.knowledge_points if isinstance(q.knowledge_points, list) else [q.knowledge_points])
                         # 题目快照
                         qdata = {
-                            "question": q.question_text,
+                            "question_text": q.question_text,
                             "options": pyjson.loads(q.options) if q.options else {},
                             "type": q.question_type,
                             "knowledge_points": q.knowledge_points,
@@ -997,7 +997,7 @@ async def grade_answer(request: GradeAnswerRequest, current_user: User = Depends
                     question_data = {
                         "id": q.id,
                         "question_text": q.question_text,
-                        "question_type": q.question_type,
+                        "type": q.question_type,
                         "correct_answer": q.correct_answer,
                         "explanation": q.explanation,
                         "options": q.options,
