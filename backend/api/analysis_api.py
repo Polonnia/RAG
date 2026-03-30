@@ -131,10 +131,16 @@ async def generate_practice(
         
         print(f"[API] 生成选择题，数量={choice_count}")
         questions = exam_generator.generate_concept_questions(outline, [], count=choice_count, difficulty=difficulty)
+        # 为选择题添加 type 字段
+        for q in questions:
+            q["type"] = "choice"
         print(f"[API] 选择题生成完毕，数量={len(questions)}")
         
         print(f"[API] 生成填空题，数量={fill_count}")
         fill_questions = exam_generator.generate_fill_blank_questions(outline, [], count=fill_count, difficulty=difficulty)
+        # 为填空题添加 type 字段
+        for q in fill_questions:
+            q["type"] = "fill_blank"
         print(f"[API] 填空题生成完毕，数量={len(fill_questions)}")
         
         all_questions = questions + fill_questions
@@ -263,19 +269,39 @@ async def get_wrong_questions(keyword: str, current_user: User = Depends(get_cur
     wrongs = db.query(StudentWrongQuestion).filter(StudentWrongQuestion.student_id == current_user.id, StudentWrongQuestion.keyword == keyword).order_by(StudentWrongQuestion.time.desc()).all()
     result = []
     for w in wrongs:
+        # 先尝试从 question_data 获取
         qdata = None
         try:
             import json
-            qdata = json.loads(w.question_data)
+            qdata = json.loads(w.question_data) if w.question_data else {}
         except:
             qdata = {}
+        
+        # 如果 question_text 为空，从数据库查询原始题目获取
+        if not qdata.get("question_text"):
+            original_question = db.query(Question).filter(Question.id == w.question_id).first()
+            if original_question:
+                qdata["question_text"] = original_question.question_text
+                qdata["type"] = original_question.question_type
+                qdata["options"] = original_question.options
+                qdata["knowledge_points"] = original_question.knowledge_points
+                qdata["explanation"] = original_question.explanation
+        
+        # 处理 options - 如果是字符串则解析
+        options = qdata.get("options", {})
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except:
+                options = {}
+        
         result.append({
             "id": w.id,
             "question_id": w.question_id,
             "exam_id": w.exam_id,
             "keyword": w.keyword,
             "question": qdata.get("question_text", ""),  # 从 question_text 获取，返回为 question
-            "options": qdata.get("options", {}),
+            "options": options,
             "type": qdata.get("type", ""),
             "question_type": qdata.get("type", ""),
             "knowledge_points": qdata.get("knowledge_points", ""),
@@ -293,7 +319,22 @@ async def submit_wrongbook_answer(wrong_id: int = Form(...), answer: str = Form(
     if not wrong:
         raise HTTPException(status_code=404, detail="未找到该错题")
     import json
-    qdata = json.loads(wrong.question_data)
+    qdata = {}
+    try:
+        qdata = json.loads(wrong.question_data) if wrong.question_data else {}
+    except:
+        qdata = {}
+    
+    # 如果 question_text 为空，从数据库查询原始题目获取
+    if not qdata.get("question_text"):
+        original_question = db.query(Question).filter(Question.id == wrong.question_id).first()
+        if original_question:
+            qdata["question_text"] = original_question.question_text
+            qdata["type"] = original_question.question_type
+            qdata["options"] = original_question.options
+            qdata["knowledge_points"] = original_question.knowledge_points
+            qdata["explanation"] = original_question.explanation
+    
     correct = False
     if qdata.get("type") == "choice":
         correct = answer == wrong.correct_answer
@@ -311,13 +352,22 @@ async def submit_wrongbook_answer(wrong_id: int = Form(...), answer: str = Form(
         # 如果所有空都正确，则全对
         correct = correct_count == len(correct_answers) and len(student_answers) == len(correct_answers)
     # 其他题型可扩展
+    
+    # 处理 options - 如果是字符串则解析
+    options = qdata.get("options", {})
+    if isinstance(options, str):
+        try:
+            options = json.loads(options)
+        except:
+            options = {}
+    
     return {
         "is_correct": correct,
         "correct_answer": wrong.correct_answer,
         "explanation": wrong.explanation,
         "your_answer": answer,
-        "question": qdata.get("question", ""),
-        "options": qdata.get("options", {}),
+        "question": qdata.get("question_text", ""),
+        "options": options,
         "type": qdata.get("type", ""),
         "knowledge_points": qdata.get("knowledge_points", "")
     } 
@@ -405,7 +455,7 @@ async def fix_wrongbook(current_user: User = Depends(get_current_user), db: Sess
                         qdata = json.loads(wrong_q.question_data) if wrong_q.question_data else {}
                     except:
                         qdata = {
-                            "question": question.question_text,
+                            "question_text": question.question_text,
                             "options": json.loads(question.options) if question.options else {},
                             "type": question.question_type,
                             "knowledge_points": question.knowledge_points,

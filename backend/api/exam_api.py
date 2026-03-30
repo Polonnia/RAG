@@ -1000,7 +1000,7 @@ async def grade_answer(request: GradeAnswerRequest, current_user: User = Depends
                         "type": q.question_type,
                         "correct_answer": q.correct_answer,
                         "explanation": q.explanation,
-                        "options": q.options,
+                        "options": json.loads(q.options) if q.options else {},
                         "points": q.points
                     }
                     
