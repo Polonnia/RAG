@@ -159,8 +159,14 @@ async def submit_practice(
                 "options": a.get('options', {})
             })
             # 新增：直接用keyword更新正确率
-            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
-                """更新学生-关键词的正确率统计"""
+            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
+                """
+                更新学生-关键词的正确率统计
+                
+                参数：
+                - is_correct: 用于客观题（选择题、填空题），True/False
+                - score_ratio: 用于主观题（简答题、编程题），分数占比 (0.0 ~ 1.0)
+                """
                 try:
                     if not keyword or keyword.strip() == "":
                         return
@@ -180,8 +186,16 @@ async def submit_practice(
                         )
                         db.add(accuracy_record)
                     accuracy_record.total_count += 1
-                    if is_correct:
-                        accuracy_record.correct_count += 1
+                    
+                    # 根据参数类型计算correct_count
+                    if score_ratio is not None:
+                        # 使用分数比例贡献
+                        accuracy_record.correct_count += score_ratio
+                    else:
+                        # 使用布尔值（默认行为）
+                        if is_correct:
+                            accuracy_record.correct_count += 1
+                    
                     accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
                     accuracy_record.last_updated = datetime.now()
                 except Exception as e:

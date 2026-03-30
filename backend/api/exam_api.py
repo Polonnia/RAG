@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, HTTPException, Depends, Body
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from models import get_db, User, Exam, Question, StudentExam, StudentAnswer, ExamHistory, StudentKeywordAccuracy
+from models import get_db, User, Exam, Question, StudentExam, StudentAnswer, ExamHistory, StudentKeywordAccuracy, StudentWrongQuestion
 from rag.exam_generator import exam_generator
 from datetime import datetime
 from pydantic import BaseModel
@@ -71,8 +71,68 @@ def normalize_difficulty(difficulty: str) -> str:
     }
     return mapping.get((difficulty or "").strip(), "中等")
 
-def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
-    """更新学生-关键词的正确率统计"""
+
+def undo_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
+    """
+    撤销学生-关键词的正确率统计（用于重新批改场景）
+    
+    参数：
+    - is_correct: 用于客观题，True/False
+    - score_ratio: 用于主观题，分数占比 (0.0 ~ 1.0)
+    """
+    try:
+        if not keyword or keyword.strip() == "":
+            return
+        
+        keyword = keyword.strip()
+        
+        # 查找学生-关键词记录
+        accuracy_record = db.query(StudentKeywordAccuracy).filter(
+            StudentKeywordAccuracy.student_id == student_id,
+            StudentKeywordAccuracy.keyword == keyword
+        ).first()
+        
+        if not accuracy_record:
+            return
+        
+        # 撤销统计（反向操作）
+        if accuracy_record.total_count > 0:
+            accuracy_record.total_count -= 1
+            
+            # 根据参数类型撤销correct_count
+            if score_ratio is not None:
+                # 主观题：撤销分数比例贡献
+                if accuracy_record.correct_count >= score_ratio:
+                    accuracy_record.correct_count -= score_ratio
+                else:
+                    accuracy_record.correct_count = 0
+            else:
+                # 客观题：撤销布尔值贡献
+                if is_correct and accuracy_record.correct_count > 0:
+                    accuracy_record.correct_count -= 1
+            
+            # 重新计算正确率
+            if accuracy_record.total_count > 0:
+                accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
+            else:
+                accuracy_record.accuracy = 0.0
+            
+            accuracy_record.last_updated = datetime.now()
+    
+    except Exception as e:
+        print(f"撤销学生关键词正确率失败: {str(e)}")
+        raise  # 抛出异常，让上层处理
+
+
+def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
+    """
+    更新学生-关键词的正确率统计
+    
+    参数：
+    - is_correct: 用于客观题（选择题、填空题），True/False
+    - score_ratio: 用于主观题（简答题、编程题），分数占比 (0.0 ~ 1.0)
+      例如：得8分满分10分，则 score_ratio = 0.8
+    """
     try:
         if not keyword or keyword.strip() == "":
             return
@@ -98,18 +158,24 @@ def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, 
         
         # 更新统计
         accuracy_record.total_count += 1
-        if is_correct:
-            accuracy_record.correct_count += 1
+        
+        # 根据不同参数类型计算correct_count
+        if score_ratio is not None:
+            # 主观题：使用分数比例贡献
+            # score_ratio 是小数（0.0-1.0），正确计算中应该累积
+            accuracy_record.correct_count += score_ratio
+        else:
+            # 客观题：使用布尔值（默认行为）
+            if is_correct:
+                accuracy_record.correct_count += 1
         
         # 计算正确率
         accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
         accuracy_record.last_updated = datetime.now()
         
-        db.commit()
-        
     except Exception as e:
         print(f"更新学生关键词正确率失败: {str(e)}")
-        db.rollback()
+        raise  # 抛出异常，让上层处理
 
 @router.post("/generate-exam")
 async def generate_exam(
@@ -675,9 +741,11 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                 # 假设knowledge_points是JSON字符串数组
                 keywords = json.loads(question.knowledge_points) if isinstance(question.knowledge_points, str) else question.knowledge_points
                 for keyword in keywords:
-                    # 只有已判分的题目才更新正确率统计
+                    # 只有已判分的题目（客观题）才更新正确率统计
                     if is_correct is not None:
-                        update_student_keyword_accuracy(db, current_user.id, keyword, is_correct)
+                        # 使用分数比例计算掌握度贡献
+                        score_ratio = points_earned / question.points if question.points > 0 else 0.0
+                        update_student_keyword_accuracy(db, current_user.id, keyword, score_ratio=score_ratio)
         student_exam.score = total_score
         student_exam.end_time = datetime.now()
         db.commit()
@@ -838,24 +906,141 @@ async def grade_answer(request: GradeAnswerRequest, current_user: User = Depends
         raise HTTPException(status_code=403, detail="只有教师可以批改试卷")
     db = next(get_db())
     try:
-        answer = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == request.student_exam_id, StudentAnswer.question_id == request.question_id).first()
+        # 获取学生答案
+        answer = db.query(StudentAnswer).filter(
+            StudentAnswer.student_exam_id == request.student_exam_id, 
+            StudentAnswer.question_id == request.question_id
+        ).first()
         if not answer:
             raise HTTPException(status_code=404, detail="未找到该学生答案")
+        
+        # 获取题目信息
         q = db.query(Question).filter(Question.id == request.question_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="未找到题目")
         if q.question_type not in ["short_answer", "programming"]:
             raise HTTPException(status_code=400, detail="只能批改简答题和编程题")
+        
+        # 获取学生考试信息
+        student_exam = db.query(StudentExam).filter(StudentExam.id == request.student_exam_id).first()
+        if not student_exam:
+            raise HTTPException(status_code=404, detail="未找到考试记录")
+        
+        if not student_exam.exam_id:
+            # 诊断问题
+            print(f"ERROR: StudentExam {request.student_exam_id} 的 exam_id 为 None/NULL")
+            print(f"student_exam 内容: id={student_exam.id}, student_id={student_exam.student_id}, exam_id={student_exam.exam_id}")
+            raise HTTPException(status_code=400, detail="考试信息不完整，缺少exam_id。请联系管理员")
+        
+        student_id = student_exam.student_id
+        exam_id = student_exam.exam_id
+        
+        # 解析知识点（支持JSON数组和逗号分隔两种格式）
+        keywords = []
+        try:
+            if q.knowledge_points:
+                if isinstance(q.knowledge_points, str):
+                    if q.knowledge_points.startswith('['):
+                        keywords = json.loads(q.knowledge_points)
+                    else:
+                        keywords = [kw.strip() for kw in q.knowledge_points.split(',') if kw.strip()]
+                elif isinstance(q.knowledge_points, list):
+                    keywords = q.knowledge_points
+        except Exception as e:
+            print(f"知识点解析失败: {str(e)}")
+            keywords = []
+        
+        # 旧的批改状态和分数
+        old_is_correct = answer.is_correct
+        old_points_earned = answer.points_earned
+        
+        # 对于主观题：满分才算完全正确，否则是部分正确
+        new_is_correct = (request.points_earned == q.points)
+        
+        # 计算分数比例（用于知识点掌握度计算）
+        score_ratio = request.points_earned / q.points if q.points > 0 else 0.0
+        old_score_ratio = old_points_earned / q.points if (old_points_earned and q.points > 0) else 0.0
+        
+        # ========== 在单个事务中完成所有操作 ==========
+        
+        # 1. 更新学生答案
         answer.points_earned = request.points_earned
         answer.comment = request.comment
-        answer.is_correct = request.points_earned > 0
-        db.commit()
-        student_exam = db.query(StudentExam).filter(StudentExam.id == request.student_exam_id).first()
+        answer.is_correct = new_is_correct
+        
+        # 2. 更新知识点掌握度
+        # 如果之前已经批改过，先撤销旧统计
+        if old_is_correct is not None and keywords:
+            for keyword in keywords:
+                undo_student_keyword_accuracy(db, student_id, keyword, score_ratio=old_score_ratio)
+        
+        # 3. 添加新统计（使用分数比例）
+        if keywords:
+            for keyword in keywords:
+                update_student_keyword_accuracy(db, student_id, keyword, score_ratio=score_ratio)
+        
+        # 4. 处理错题本
+        # 错题本判定：分数 < 满分 时添加（包括部分正确）
+        has_incomplete_answer = request.points_earned < q.points
+        
+        if has_incomplete_answer and keywords:
+            for keyword in keywords:
+                # 检查是否已经存在
+                existing_wrong = db.query(StudentWrongQuestion).filter(
+                    StudentWrongQuestion.student_id == student_id,
+                    StudentWrongQuestion.question_id == request.question_id,
+                    StudentWrongQuestion.keyword == keyword
+                ).first()
+                
+                if not existing_wrong:
+                    # 保存题目数据快照
+                    question_data = {
+                        "id": q.id,
+                        "question_text": q.question_text,
+                        "question_type": q.question_type,
+                        "correct_answer": q.correct_answer,
+                        "explanation": q.explanation,
+                        "options": q.options,
+                        "points": q.points
+                    }
+                    
+                    wrong_question = StudentWrongQuestion(
+                        student_id=student_id,
+                        question_id=request.question_id,
+                        exam_id=exam_id,  # 确保 exam_id 不为空
+                        keyword=keyword,
+                        question_data=json.dumps(question_data, ensure_ascii=False),
+                        answer=answer.answer,
+                        correct_answer=q.correct_answer,
+                        explanation=q.explanation,
+                        time=datetime.now()
+                    )
+                    db.add(wrong_question)
+        else:
+            # 如果完全正确（得满分），从错题本中移除
+            if new_is_correct and keywords:
+                for keyword in keywords:
+                    db.query(StudentWrongQuestion).filter(
+                        StudentWrongQuestion.student_id == student_id,
+                        StudentWrongQuestion.question_id == request.question_id,
+                        StudentWrongQuestion.keyword == keyword
+                    ).delete()
+        
+        # 5. 更新考试总分
         all_answers = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == request.student_exam_id).all()
         total_score = sum(a.points_earned for a in all_answers)
         student_exam.score = total_score
+        
+        # ========== 一次性提交所有更改 ==========
         db.commit()
+        
         return {"msg": "批改成功", "total_score": total_score}
+        
     except Exception as e:
         db.rollback()
+        print(f"批改失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"批改失败: {str(e)}"})
 
 @router.delete("/exam/{exam_id}")
