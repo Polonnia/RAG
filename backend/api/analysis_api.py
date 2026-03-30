@@ -21,43 +21,55 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
     ).order_by(StudentExam.start_time.asc()).all()  # 按时间升序，便于绘制曲线
     accuracy_curve = []
     for se in exams:
-        # 只统计已判分（is_correct为True或False）的题目
-        valid_answers = [ans for ans in se.answers if ans.is_correct is not None]
-        total = len(valid_answers)
-        correct = sum(1 for ans in valid_answers if ans.is_correct)
-        accuracy = round(correct / total * 100, 2) if total > 0 else None
+        # 使用分数比例计算正确率，而不是二元判定
+        valid_answers = [ans for ans in se.answers if ans.points_earned is not None]
+        
+        if not valid_answers:
+            # 如果没有已判分的题目，跳过
+            continue
+            
+        # 计算总分和得分
+        total_points = sum(q.points for q in [db.query(Question).filter(Question.id == ans.question_id).first() for ans in valid_answers] if q)
+        earned_points = sum(ans.points_earned for ans in valid_answers)
+        accuracy = round(earned_points / total_points * 100, 2) if total_points > 0 else 0
+        
         # 安全处理start_time可能为None的情况
         date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
         
-        # 统计该次考试每个知识点的正确率
+        # 统计该次考试每个知识点的正确率（使用分数比例）
         keyword_stats = {}
         for ans in valid_answers:
-            question = ans.question
+            question = db.query(Question).filter(Question.id == ans.question_id).first()
             if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
+                # 解析知识点（支持JSON数组和逗号分隔两种格式）
+                keywords = []
                 try:
-                    keywords = json.loads(question.knowledge_points) if isinstance(question.knowledge_points, str) else question.knowledge_points
-                except (json.JSONDecodeError, TypeError):
-                    keywords = [question.knowledge_points]
-                if isinstance(keywords, str):
-                    keywords = [keywords]
+                    if isinstance(question.knowledge_points, str):
+                        if question.knowledge_points.startswith('['):
+                            keywords = json.loads(question.knowledge_points)
+                        else:
+                            keywords = [kw.strip() for kw in question.knowledge_points.split(',') if kw.strip()]
+                    elif isinstance(question.knowledge_points, list):
+                        keywords = question.knowledge_points
+                except:
+                    keywords = []
                 for kw in keywords:
-                    kw = kw.strip()
+                    kw = kw.strip() if isinstance(kw, str) else str(kw)
                     if kw:
                         if kw not in keyword_stats:
-                            keyword_stats[kw] = {'total': 0, 'correct': 0}
-                        keyword_stats[kw]['total'] += 1
-                        if ans.is_correct:
-                            keyword_stats[kw]['correct'] += 1
+                            keyword_stats[kw] = {'total': 0.0, 'earned': 0.0}
+                        keyword_stats[kw]['total'] += question.points
+                        keyword_stats[kw]['earned'] += ans.points_earned
         
-        # 计算每个知识点的正确率
+        # 计算每个知识点的正确率（分数比例）
         keyword_accuracy_list = []
         for kw, stats in keyword_stats.items():
-            kw_accuracy = round(stats['correct'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
+            kw_accuracy = round(stats['earned'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
             keyword_accuracy_list.append({
                 "keyword": kw,
                 "accuracy": kw_accuracy,
                 "total": stats['total'],
-                "correct": stats['correct']
+                "earned": stats['earned']
             })
         
         accuracy_curve.append({
@@ -164,8 +176,14 @@ async def submit_practice(
                 "options": a.get('options', {})
             })
             # 新增：直接用keyword更新正确率
-            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool):
-                """更新学生-关键词的正确率统计"""
+            def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
+                """
+                更新学生-关键词的正确率统计
+                
+                参数：
+                - is_correct: 用于客观题（选择题、填空题），True/False
+                - score_ratio: 用于主观题（简答题、编程题），分数占比 (0.0 ~ 1.0)
+                """
                 try:
                     if not keyword or keyword.strip() == "":
                         return
@@ -185,8 +203,16 @@ async def submit_practice(
                         )
                         db.add(accuracy_record)
                     accuracy_record.total_count += 1
-                    if is_correct:
-                        accuracy_record.correct_count += 1
+                    
+                    # 根据参数类型计算correct_count
+                    if score_ratio is not None:
+                        # 使用分数比例贡献
+                        accuracy_record.correct_count += score_ratio
+                    else:
+                        # 使用布尔值（默认行为）
+                        if is_correct:
+                            accuracy_record.correct_count += 1
+                    
                     accuracy_record.accuracy = accuracy_record.correct_count / accuracy_record.total_count
                     accuracy_record.last_updated = datetime.now()
                 except Exception as e:
@@ -247,9 +273,10 @@ async def get_wrong_questions(keyword: str, current_user: User = Depends(get_cur
             "question_id": w.question_id,
             "exam_id": w.exam_id,
             "keyword": w.keyword,
-            "question": qdata.get("question", ""),
+            "question": qdata.get("question_text", ""),  # 从 question_text 获取，返回为 question
             "options": qdata.get("options", {}),
             "type": qdata.get("type", ""),
+            "question_type": qdata.get("type", ""),
             "knowledge_points": qdata.get("knowledge_points", ""),
             "explanation": w.explanation,
             "answer": w.answer,
