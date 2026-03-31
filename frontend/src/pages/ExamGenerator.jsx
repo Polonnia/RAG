@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, Input, Space, Spin, Select, message, Modal, Form, InputNumber, List, Tag, Progress } from 'antd';
+import { Button, Input, Space, Spin, Select, message, Modal, Form, InputNumber, List, Tag, Progress, Card, Tabs } from 'antd';
 import { FormOutlined } from '@ant-design/icons';
 import { generateExamStream, saveExamHistory, getExamHistory, deleteExamHistory, listTeacherExams, createExam } from '../services/examTeacherService';
+import PageHeader from '../components/PageHeader';
 const { TextArea } = Input;
 
 const typeMap = {
@@ -67,6 +68,12 @@ export default function ExamGenerator() {
   const [examHistory, setExamHistory] = useState([]);
   const [teacherExams, setTeacherExams] = useState([]);
   const [form] = Form.useForm();
+
+  const questionPresetMap = {
+    balanced: { choice: 5, multi: 3, fill_blank: 3, short_answer: 2, programming: 1 },
+    objective: { choice: 8, multi: 5, fill_blank: 4, short_answer: 1, programming: 0 },
+    advanced: { choice: 3, multi: 3, fill_blank: 2, short_answer: 4, programming: 2 },
+  };
 
   const allQuestions = useMemo(() => {
     if (!examContent) return [];
@@ -160,96 +167,232 @@ export default function ExamGenerator() {
     }
   };
 
+  const applyQuestionPreset = (presetKey) => {
+    const next = questionPresetMap[presetKey];
+    if (!next) return;
+    setQuestionConfig(next);
+  };
+
+  const updateQuestionCount = (key, value) => {
+    const safeValue = Number(value || 0);
+    setQuestionConfig((prev) => ({
+      ...prev,
+      [key]: Math.max(0, Math.min(20, safeValue)),
+    }));
+  };
+
   return (
     <AppLayout>
-      <h2 style={{ fontWeight: 700, marginTop: 0 }}>
-        <FormOutlined style={{ marginRight: 8, color: '#1677ff' }} />
-        考试内容生成
-      </h2>
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <TextArea rows={4} value={outline} onChange={e => setOutline(e.target.value)} placeholder="请输入课程大纲..." />
-        <Space align="center">
-          <span>难度：</span>
-          <Select value={difficulty} onChange={setDifficulty} style={{ width: 140 }}
-                  options={[{ value: 'easy', label: '简单' }, { value: 'medium', label: '中等' }, { value: 'hard', label: '困难' }]} />
-          <span>题量配置：</span>
-          <Space>
-            <InputNumber min={0} value={questionConfig.choice} onChange={(v) => setQuestionConfig(s => ({ ...s, choice: v }))} /> 单选
-            <InputNumber min={0} value={questionConfig.multi} onChange={(v) => setQuestionConfig(s => ({ ...s, multi: v }))} /> 多选
-            <InputNumber min={0} value={questionConfig.fill_blank} onChange={(v) => setQuestionConfig(s => ({ ...s, fill_blank: v }))} /> 填空
-            <InputNumber min={0} value={questionConfig.short_answer} onChange={(v) => setQuestionConfig(s => ({ ...s, short_answer: v }))} /> 简答
-            <InputNumber min={0} value={questionConfig.programming} onChange={(v) => setQuestionConfig(s => ({ ...s, programming: v }))} /> 编程
-          </Space>
-        </Space>
-        <Button type="primary" onClick={handleGenerate} loading={loading}>生成考核内容</Button>
-        {loading && (
-          <div style={{ maxWidth: 560 }}>
-            <div style={{ marginBottom: 8, color: '#666' }}>{streamStage || '生成中...'}</div>
-            <Progress percent={streamProgress} status="active" />
-          </div>
-        )}
-        <Spin spinning={loading}>
-          {allQuestions.length > 0 && (
-            <div>
-              <h3>题目预览（点击选择/取消）</h3>
-              <List
-                bordered
-                dataSource={allQuestions}
-                renderItem={(q, idx) => (
-                  <List.Item onClick={() => setSelectedQuestions(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
-                             style={{
-                               cursor: 'pointer',
-                               background: selectedQuestions.includes(idx) ? '#e6f4ff' : undefined,
-                               border: selectedQuestions.includes(idx) ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                               borderRadius: '6px',
-                               marginBottom: '8px'
-                             }}
-                  >
-                    <div style={{ width: '100%' }}>
-                      <div>
-                        <Tag color={selectedQuestions.includes(idx) ? "green" : "blue"}>
-                          {selectedQuestions.includes(idx) ? "✓ " : ""}{typeMap[q.type] || q.type}
-                        </Tag> {q.question}
-                      </div>
-                      {renderQuestionOptions(q)}
-                    </div>
-                  </List.Item>
-                )}
+      <div className="page-content-wrap page-enter">
+        <style>{`
+          .exam-generator-panel {
+            border: 1px solid #e6f0ff;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          }
+          .exam-outline-input {
+            border-radius: 10px !important;
+            border: 1px solid #d6e4ff !important;
+            transition: all 0.2s ease !important;
+          }
+          .exam-outline-input:hover {
+            border-color: #69b1ff !important;
+          }
+          .exam-outline-input:focus,
+          .exam-outline-input:focus-within {
+            border-color: #1677ff !important;
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12) !important;
+          }
+          .config-chip {
+            border-radius: 999px;
+            border: 1px solid #d6e4ff;
+            background: #f7fbff;
+            color: #1f3f75;
+          }
+          .config-chip:hover {
+            border-color: #69b1ff;
+            background: #eef6ff;
+          }
+          .exam-control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+          .exam-label {
+            min-width: 68px;
+            font-size: 13px;
+            color: #44556f;
+            font-weight: 600;
+          }
+          .exam-primary-action {
+            border-radius: 10px;
+            height: 40px;
+            font-weight: 700;
+            padding: 0 18px;
+            box-shadow: 0 8px 16px rgba(22, 119, 255, 0.18);
+          }
+          .count-item {
+            min-width: 110px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid #e6eeff;
+            background: #fff;
+          }
+          .count-label {
+            font-size: 12px;
+            color: #59708f;
+            margin-bottom: 6px;
+          }
+        `}</style>
+        <PageHeader
+          title="考试内容生成"
+          subtitle="配置题型和难度，流式生成并筛选题目后创建考试"
+          icon={<FormOutlined />}
+          variant="dashboard"
+        />
+
+        <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <Card className="page-section exam-generator-panel" style={{ borderRadius: 14 }}>
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <TextArea
+                className="exam-outline-input"
+                rows={5}
+                value={outline}
+                onChange={e => setOutline(e.target.value)}
+                placeholder="请输入课程大纲，建议包含章节结构、重点知识点、能力目标..."
+                showCount
+                maxLength={3000}
               />
-              <Button type="primary" style={{ marginTop: 12 }} onClick={() => setCreateVisible(true)} disabled={selectedQuestions.length === 0}>创建考试</Button>
-            </div>
-          )}
-        </Spin>
 
-        <div>
-          <h3>我的考试</h3>
-          <List
-            dataSource={teacherExams}
-            renderItem={(e) => (
-              <List.Item>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{e.title}</div>
-                  <div style={{ color: '#888' }}>{e.description}</div>
-                </div>
-              </List.Item>
-            )}
-          />
-        </div>
+              <div className="exam-control-group">
+                <span className="exam-label">难度设置</span>
+                <Select value={difficulty} onChange={setDifficulty} style={{ width: 140 }}
+                        options={[{ value: 'easy', label: '简单' }, { value: 'medium', label: '中等' }, { value: 'hard', label: '困难' }]} />
+                <Space size={6}>
+                  <Button size="small" className="config-chip" onClick={() => setDifficulty('easy')}>简单</Button>
+                  <Button size="small" className="config-chip" onClick={() => setDifficulty('medium')}>中等</Button>
+                  <Button size="small" className="config-chip" onClick={() => setDifficulty('hard')}>困难</Button>
+                </Space>
+              </div>
 
-        <div>
-          <h3>考核生成历史</h3>
-          <List
-            dataSource={examHistory}
-            renderItem={(h) => (
-              <List.Item actions={[<a onClick={() => deleteExamHistory(h.id).then(refreshHistory)} key="del">删除</a>]}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{h.outline?.slice(0, 50)}...</div>
+              <div className="exam-control-group">
+                <span className="exam-label">快速配置</span>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('balanced')}>均衡题组</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('objective')}>客观题优先</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('advanced')}>高阶能力</Button>
+              </div>
+
+              <div className="exam-control-group" style={{ alignItems: 'flex-start' }}>
+                <span className="exam-label" style={{ marginTop: 6 }}>题量配置</span>
+                <Space wrap>
+                  <div className="count-item">
+                    <div className="count-label">单选题</div>
+                    <InputNumber min={0} max={20} value={questionConfig.choice} onChange={(v) => updateQuestionCount('choice', v)} style={{ width: '100%' }} />
+                  </div>
+                  <div className="count-item">
+                    <div className="count-label">多选题</div>
+                    <InputNumber min={0} max={20} value={questionConfig.multi} onChange={(v) => updateQuestionCount('multi', v)} style={{ width: '100%' }} />
+                  </div>
+                  <div className="count-item">
+                    <div className="count-label">填空题</div>
+                    <InputNumber min={0} max={20} value={questionConfig.fill_blank} onChange={(v) => updateQuestionCount('fill_blank', v)} style={{ width: '100%' }} />
+                  </div>
+                  <div className="count-item">
+                    <div className="count-label">简答题</div>
+                    <InputNumber min={0} max={20} value={questionConfig.short_answer} onChange={(v) => updateQuestionCount('short_answer', v)} style={{ width: '100%' }} />
+                  </div>
+                  <div className="count-item">
+                    <div className="count-label">编程题</div>
+                    <InputNumber min={0} max={20} value={questionConfig.programming} onChange={(v) => updateQuestionCount('programming', v)} style={{ width: '100%' }} />
+                  </div>
+                </Space>
+              </div>
+              <div className="exam-control-group" style={{ justifyContent: 'space-between' }}>
+                <span style={{ color: '#73819a', fontSize: 12 }}>建议先使用“均衡题组”，再微调题量后生成。</span>
+                <Button className="exam-primary-action" type="primary" onClick={handleGenerate} loading={loading}>生成考核内容</Button>
+              </div>
+              {loading && (
+                <div style={{ maxWidth: 560 }}>
+                  <div style={{ marginBottom: 8, color: '#666' }}>{streamStage || '生成中...'}</div>
+                  <Progress percent={streamProgress} status="active" />
                 </div>
-              </List.Item>
+              )}
+            </Space>
+          </Card>
+
+          <Spin spinning={loading}>
+            {allQuestions.length > 0 && (
+              <Card className="page-section fade-in-up" title="题目预览（点击选择/取消）" style={{ borderRadius: 14 }}>
+                <List
+                  bordered
+                  dataSource={allQuestions}
+                  renderItem={(q, idx) => (
+                    <List.Item onClick={() => setSelectedQuestions(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
+                               style={{
+                                 cursor: 'pointer',
+                                 background: selectedQuestions.includes(idx) ? '#e6f4ff' : undefined,
+                                 border: selectedQuestions.includes(idx) ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                                 borderRadius: '6px',
+                                 marginBottom: '8px'
+                               }}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div>
+                          <Tag color={selectedQuestions.includes(idx) ? 'green' : 'blue'}>
+                            {selectedQuestions.includes(idx) ? '✓ ' : ''}{typeMap[q.type] || q.type}
+                          </Tag> {q.question}
+                        </div>
+                        {renderQuestionOptions(q)}
+                      </div>
+                    </List.Item>
+                  )}
+                />
+                <Button type="primary" style={{ marginTop: 12 }} onClick={() => setCreateVisible(true)} disabled={selectedQuestions.length === 0}>创建考试</Button>
+              </Card>
             )}
-          />
-        </div>
-      </Space>
+          </Spin>
+
+          <Card className="page-section" style={{ borderRadius: 14 }}>
+            <Tabs
+              items={[
+                {
+                  key: 'teacherExams',
+                  label: '我的考试',
+                  children: (
+                    <List
+                      dataSource={teacherExams}
+                      renderItem={(e) => (
+                        <List.Item>
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{e.title}</div>
+                            <div style={{ color: '#888' }}>{e.description}</div>
+                          </div>
+                        </List.Item>
+                      )}
+                    />
+                  )
+                },
+                {
+                  key: 'history',
+                  label: '生成历史',
+                  children: (
+                    <List
+                      dataSource={examHistory}
+                      renderItem={(h) => (
+                        <List.Item actions={[<a onClick={() => deleteExamHistory(h.id).then(refreshHistory)} key="del">删除</a>]}>
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{h.outline?.slice(0, 50)}...</div>
+                          </div>
+                        </List.Item>
+                      )}
+                    />
+                  )
+                }
+              ]}
+            />
+          </Card>
+        </Space>
+      </div>
 
       <Modal open={createVisible} title="创建考试" onCancel={() => setCreateVisible(false)} onOk={handleCreateExam} destroyOnClose>
         <Form form={form} layout="vertical">

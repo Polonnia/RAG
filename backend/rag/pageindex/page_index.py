@@ -394,7 +394,7 @@ async def toc_transformer(toc_content, model=None, semaphore=None):
 
         if_complete = check_if_toc_transformation_is_complete(toc_content, last_complete, model)
         
-
+    print('final toc transformation result', last_complete)
     last_complete = json.loads(last_complete)
 
     cleaned_response=convert_page_to_int(last_complete['table_of_contents'])

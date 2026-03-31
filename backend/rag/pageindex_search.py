@@ -117,29 +117,46 @@ Directly return the final JSON structure. Do not output anything else.
         """从目录加载所有JSON结构文件"""  
         if not os.path.exists(self.json_dir):  
             raise FileNotFoundError(f"目录不存在: {self.json_dir}")  
-              
+        
         json_files = [f for f in os.listdir(self.json_dir) if f.endswith('_structure.json')]  
-          
+        
         for json_file in json_files:  
             file_path = os.path.join(self.json_dir, json_file)  
             doc_name = json_file.replace('_structure.json', '')  
-              
+            
             with open(file_path, 'r', encoding='utf-8') as f:  
                 data = json.load(f)  
-              
+            
             # 生成文档ID  
             doc_id = f"doc_{len(self.documents):04d}"  
-              
+            
+            # 检查是否有对应的媒体文件或pdf文件
+            media_file = None
+            pdf_file = None
+            for ext in ['.mp3', '.mp4', '.wav', '.m4a', '.ogg', '.webm', '.mov', '.mkv']:
+                candidate = os.path.join(self.json_dir, doc_name + ext)
+                if os.path.exists(candidate):
+                    media_file = os.path.basename(candidate)
+                    break
+            pdf_candidate = os.path.join(self.json_dir, doc_name + '.pdf')
+            if os.path.exists(pdf_candidate):
+                pdf_file = os.path.basename(pdf_candidate)
+            
+            doc_type = self._detect_doc_type(data.get("structure", []), data.get("doc_name", doc_name))
+            # 优先媒体文件名，其次pdf，否则None
+            source_file = media_file if media_file else (pdf_file if doc_type == 'pdf' else None)
+            
             self.documents[doc_id] = {  
                 "tree": data["structure"],  
                 "metadata": {  
                     "name": data.get("doc_name", doc_name),  
                     "description": data.get("doc_description", ""),  
                     "file_path": file_path,
-                    "doc_type": self._detect_doc_type(data.get("structure", []), data.get("doc_name", doc_name))
+                    "doc_type": doc_type,
+                    "source": source_file
                 }  
             }  
-              
+        
         print(f"已加载 {len(self.documents)} 个文档")  
       
     async def search_documents(self, query: str, top_k: int = 5, trace_id: str = "-", max_parallel_docs: int = 3) -> List[Dict[str, Any]]:
@@ -159,6 +176,7 @@ Directly return the final JSON structure. Do not output anything else.
             async with semaphore:
                 result = await self._search_single_document(doc_id, doc_data, query, trace_id=trace_id)
             self._debug(trace_id, f"doc_search done [{index}/{total}] doc_id={doc_id}, nodes={len(result.get('nodes', []))}, elapsed={time.perf_counter() - per_doc_started:.2f}s")
+            self._debug(trace_id, f"doc_search result sample for doc_id={doc_id}: {json.dumps(result, ensure_ascii=False)[:500]}")
             return doc_id, doc_data, result
 
         tasks = [
@@ -180,6 +198,7 @@ Directly return the final JSON structure. Do not output anything else.
         all_results.sort(key=lambda x: len(x["results"]["nodes"]), reverse=True)  
           
         self._debug(trace_id, f"search finished, total_elapsed={time.perf_counter() - started_at:.2f}s")
+        self._debug(trace_id, f"all_results sample: {json.dumps(all_results, ensure_ascii=False)[:1000]}")
         return all_results[:top_k]
 
     @staticmethod
@@ -189,11 +208,11 @@ Directly return the final JSON structure. Do not output anything else.
 
         all_context = []
         for doc_result in doc_results:
-            doc_name = doc_result["doc_name"]
+            doc_id = doc_result["doc_id"]
             nodes = doc_result["results"]["nodes"]
             doc_type = doc_result.get("results", {}).get("nodes", [{}])[0].get("doc_type", "pdf") if nodes else "pdf"
 
-            context_parts = [f"\n=== 文档: {doc_name} ==="]
+            context_parts = [f"\n=== 文档: {doc_id} ==="]
             for node in nodes:
                 context_parts.append(f"章节: {node['title']}")
                 if doc_type == 'media':
@@ -212,19 +231,20 @@ Directly return the final JSON structure. Do not output anything else.
             all_context.append("\n".join(context_parts))
 
         combined_context = "\n".join(all_context)
-        return f"""  
-    基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。  
-  
-    问题: {query}  
-  
-    文档内容:  
-    {combined_context}  
-  
+        return f"""
+    基于以下多个文档的内容回答问题。请提供准确、全面的答案，并说明信息来源。
+
+    问题: {query}
+
+    文档内容:
+    {combined_context}
+
     要求：
-    1) PDF/文档类型优先引用“页码 pX”证据，格式示例：[文档名 p23]。
-    2) 媒体类型必须引用时间段，格式示例：[文档名 00:10-00:35]。
-    3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档名 12-15]。
+    1) PDF/文档类型优先引用“页码 pX”证据，格式示例：[文档ID p23]。
+    2) 媒体类型必须引用时间段，格式示例：[文档ID 00:10-00:35]。
+    3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档ID 12-15]。
     4) 引用必须使用英文方括号'[]'，不能是中文括号'【】'。
+    5) 请严格使用文档ID（如 doc_0001）作为引用，不要使用实际文件名。
     """
 
     async def stream_comprehensive_answer(self, query: str, doc_results: List[Dict], trace_id: str = "-") -> AsyncGenerator[str, None]:
@@ -234,12 +254,14 @@ Directly return the final JSON structure. Do not output anything else.
 
         answer_prompt = self._build_answer_prompt(query, doc_results)
         self._debug(trace_id, f"llm final_answer stream start, context_docs={len(doc_results)}")
+        self._debug(trace_id, f"doc_results sample for answer: {json.dumps(doc_results, ensure_ascii=False)[:1000]}")
         llm_started = time.perf_counter()
         total_chars = 0
         async for chunk in completion_stream_async(prompt=answer_prompt, model=self.model):
             total_chars += len(chunk)
             yield chunk
         self._debug(trace_id, f"llm final_answer stream done, elapsed={time.perf_counter() - llm_started:.2f}s, chars={total_chars}")
+        self._debug(trace_id, f"stream_comprehensive_answer finished for trace_id={trace_id}")
 
     async def search(self, query: str, top_k: int = 5, trace_id: str = "-", max_parallel_docs: int = 3) -> Dict[str, Any]:  
         """在所有文档中搜索查询"""  

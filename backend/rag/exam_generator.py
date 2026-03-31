@@ -9,7 +9,6 @@ from langchain.text_splitter import CharacterTextSplitter
 
 # 导入LLM调用模块
 from .llm_client import completion_text
-from .resources import get_embeddings
 from .pageindex_search import MultiDocumentSearcher
 
 DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
@@ -18,9 +17,6 @@ TREE_JSON_DIR = os.path.join(DB_DIR, 'trees')
 
 class ExamGenerator:
     """考核内容生成器"""
-    
-    def __init__(self):
-        self.embeddings = get_embeddings()
 
     @staticmethod
     def _run_coroutine_sync(coro):

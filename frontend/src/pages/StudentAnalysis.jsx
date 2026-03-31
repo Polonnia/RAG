@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, List, Empty, Spin, Tag, Button, Input, Modal, Radio, Space, Progress, Result, Checkbox } from 'antd';
-import { DeleteOutlined, BarChartOutlined } from '@ant-design/icons';
+import { Card, List, Empty, Spin, Progress, Row, Col } from 'antd';
+import { BarChartOutlined, FileTextOutlined, AlertOutlined, LineChartOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
 import ReactECharts from 'echarts-for-react';
-
-const { TextArea } = Input;
+import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
+import ChartCard from '../components/ChartCard';
 
 export default function StudentAnalysis() {
   const navigate = useNavigate();
@@ -70,70 +71,43 @@ export default function StudentAnalysis() {
 
   return (
     <AppLayout>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BarChartOutlined style={{ color: '#1677ff', marginRight: 8 }} />学情分析</span>} 
-              style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', marginBottom: 24 }}>
+      <div className="page-content-wrap page-enter">
+        <PageHeader
+          title="学情分析"
+          subtitle="追踪考试走势并定位薄弱知识点"
+          icon={<BarChartOutlined />}
+          variant="dashboard"
+        />
+        <Card style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', marginBottom: 24 }}>
           {loading ? (
             <Spin style={{ display: 'block', textAlign: 'center', padding: '48px 0' }} />
           ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
-              <div style={{
-                background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '1px solid #91d5ff',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1677ff', marginBottom: '8px' }}>
-                  {accuracyData.length}
-                </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>参加考试次数</div>
-              </div>
-              
-              <div style={{
-                background: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '1px solid #b7eb8f',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a', marginBottom: '8px' }}>
-                  {accuracyData.length > 0 ? 
-                    Math.round(accuracyData.reduce((sum, item) => sum + item.accuracy, 0) / accuracyData.length) : 
-                    0}%
-                </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>平均正确率</div>
-              </div>
-              
-              <div style={{
-                background: 'linear-gradient(135deg, #fff7e6 0%, #ffd591 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '1px solid #ffc53d',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#faad14', marginBottom: '8px' }}>
-                  {weakKeywords.length}
-                </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>薄弱知识点</div>
-              </div>
-              
-              <div style={{
-                background: 'linear-gradient(135deg, #fff1f0 0%, #ffccc7 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '1px solid #ffa39e',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f5222d', marginBottom: '8px' }}>
-                  {accuracyData.length > 0 ? 
-                    accuracyData.filter(item => item.accuracy < 60).length : 
-                    0}
-                </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>需加强考试</div>
-              </div>
-            </div>
+            <Row gutter={[16, 16]} style={{ marginBottom: 26 }}>
+              <Col xs={24} sm={12} lg={6}>
+                <StatCard title="参加考试次数" value={accuracyData.length} icon={<FileTextOutlined />} color="#1677ff" />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <StatCard
+                  title="平均正确率"
+                  value={accuracyData.length > 0 ? Math.round(accuracyData.reduce((sum, item) => sum + item.accuracy, 0) / accuracyData.length) : 0}
+                  suffix="%"
+                  icon={<LineChartOutlined />}
+                  color="#52c41a"
+                />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <StatCard title="薄弱知识点" value={weakKeywords.length} icon={<AlertOutlined />} color="#faad14" />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <StatCard
+                  title="需加强考试"
+                  value={accuracyData.length > 0 ? accuracyData.filter(item => item.accuracy < 60).length : 0}
+                  icon={<BarChartOutlined />}
+                  color="#f5222d"
+                />
+              </Col>
+            </Row>
 
             <div style={{ 
               height: '4px', 
@@ -144,8 +118,7 @@ export default function StudentAnalysis() {
 
             {accuracyData.length > 0 && (
               <div style={{ marginBottom: '32px' }}>
-                <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, textAlign: 'center' }}>历次考试正确率曲线</h4>
-                <Card style={{ borderRadius: 12 }}>
+                <ChartCard title="历次考试正确率曲线" description="悬停曲线可联动下方知识点掌握明细" style={{ borderRadius: 12 }} height={300}>
                   <ReactECharts 
                     ref={chartRef}
                     option={{
@@ -219,7 +192,7 @@ export default function StudentAnalysis() {
                     }}
                     style={{ height: '300px' }}
                   />
-                </Card>
+                </ChartCard>
               </div>
             )}
 

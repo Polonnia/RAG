@@ -7,6 +7,7 @@ import http from '../api/http';
 import getApiUrl from '../apiConfig';
 import AppLayout from '../components/layout/AppLayout';
 import MindMapViewer from '../components/MindmapViewer';
+import PageHeader from '../components/PageHeader';
 
 export default function KnowledgeManagement() {
   const [selectedUploadFiles, setSelectedUploadFiles] = useState([]);
@@ -245,8 +246,14 @@ export default function KnowledgeManagement() {
 
   return (
     <AppLayout>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><DatabaseOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识库管理</span>} 
+      <div className="page-content-wrap page-enter">
+      <PageHeader
+        title="知识库管理"
+        subtitle="上传多模态教材并管理可供学生下载的资源"
+        icon={<DatabaseOutlined />}
+        variant="dashboard"
+      />
+      <Card className="page-section fade-in-up" title="上传并入库" 
             style={{ marginBottom: 24, borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
         <div style={{ marginBottom: 16 }}>
           <Text type="secondary">
@@ -296,7 +303,7 @@ export default function KnowledgeManagement() {
 
       <Divider />
 
-      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><DatabaseOutlined style={{ color: '#1677ff', marginRight: 8 }} />知识库文件列表</span>}
+      <Card className="page-section fade-in-up" title="知识库文件列表"
             style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
         {fileLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
@@ -394,16 +401,26 @@ export default function KnowledgeManagement() {
         onCancel={handleCloseMindmap}
         footer={null}
         destroyOnClose
-        width="90%"
-        style={{ top: 20, maxWidth: 1400 }}
-        bodyStyle={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}
+        width="98vw"
+        style={{ top: 8, maxWidth: '98vw', padding: 0 }}
+        bodyStyle={{
+          minHeight: '70vh',
+          maxHeight: '92vh',
+          height: 'auto',
+          overflow: 'auto',
+          padding: 0,
+          background: '#fff',
+        }}
+        centered
       >
         {mindmapFile && (
-          <MindMapViewer
-            key={mindmapFile.filename}
-            filename={mindmapFile.filename}
-            onClose={handleCloseMindmap}
-          />
+          <div style={{ height: '85vh', minHeight: 600, overflow: 'auto', padding: 0 }}>
+            <MindMapViewer
+              key={mindmapFile.filename}
+              filename={mindmapFile.filename}
+              onClose={handleCloseMindmap}
+            />
+          </div>
         )}
       </Modal>
     </div>

@@ -864,7 +864,7 @@ async def get_exam_result(exam_id: int, current_user: User = Depends(get_current
         ai_summary = record.comment
     # 如果AI总结为空，则实时调用AI分析
     if not ai_summary:
-        from api.ai_api import ai_weakness_summary
+        from api.analysis_api import ai_weakness_summary
         ai_result = await ai_weakness_summary(answers=None, exam_id=exam_id, current_user=current_user, db=db)
         ai_summary = ai_result.get("summary", "")
         # 保存到ExamHistory

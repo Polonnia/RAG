@@ -4,6 +4,7 @@ import { Card, List, Tag, Button, Table, Typography, message, Tabs, Spin } from 
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { fetchExamDetail, fetchExamAnalysis, allowStudentRetake } from './services/examService';
 import ReactECharts from 'echarts-for-react';
+import PageHeader from './components/PageHeader';
 
 const { TabPane } = Tabs;
 const { Title, Text } = Typography;
@@ -156,20 +157,28 @@ export default function ExamDetail() {
 
   return (
     <AppLayout maxWidth={900}>
-            <Button
-              onClick={() => navigate(-1)}
-              style={{
-                marginBottom: 16,
-                background: '#1677ff',
-                color: '#fff',
-                borderRadius: 18,
-                fontWeight: 500,
-                boxShadow: '0 2px 8px #e6eaf1',
-                border: 'none'
-              }}
-            >
-              返回
-            </Button>
+            <div className="page-content-wrap page-enter">
+            <PageHeader
+              title="考试详情"
+              subtitle="查看题目质量、学生作答与学情分析"
+              icon={<InfoCircleOutlined />}
+              variant="dashboard"
+              action={
+                <Button
+                  onClick={() => navigate(-1)}
+                  style={{
+                    background: '#1677ff',
+                    color: '#fff',
+                    borderRadius: 18,
+                    fontWeight: 500,
+                    boxShadow: '0 2px 8px #e6eaf1',
+                    border: 'none'
+                  }}
+                >
+                  返回
+                </Button>
+              }
+            />
 
             <Tabs defaultActiveKey="detail" style={{ marginTop: 24 }}>
               <TabPane tab="考试详情" key="detail">
@@ -454,6 +463,7 @@ export default function ExamDetail() {
                 {renderAnalysisTab()}
               </TabPane>
             </Tabs>
+            </div>
     </AppLayout>
   );
 }

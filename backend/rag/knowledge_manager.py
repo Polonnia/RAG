@@ -17,12 +17,10 @@ from rag.ingest import ingest_file
 from rag.pageindex.page_index import page_index_main
 from rag.pageindex.page_index_md import md_to_tree
 from rag.pageindex.utils import audio_json_to_tree, ConfigLoader
-from .resources import get_vector_db
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 FILES_INFO_PATH = os.path.join(os.path.dirname(__file__), 'db', 'files_info.json')
-vector_db = get_vector_db()
 
 SUPPORTED_MARKDOWN = {'.md', '.markdown'}
 SUPPORTED_WORD = {'.doc', '.docx'}
@@ -417,33 +415,6 @@ def get_download_file_path(filename, current_user, db):
 def delete_knowledge_file(filename, db=None):
     """删除知识库中的文件"""
     try:
-        print(f"开始删除文件: {filename}")
-        
-        # 1. 从向量数据库中删除相关文档
-        collection = vector_db._collection
-        if collection:
-            # 获取所有文档
-            results = collection.get()
-            if results and results.get('documents'):
-                # 找到要删除的文档的ID
-                ids_to_delete = []
-                for i, metadata in enumerate(results.get('metadatas', [])):
-                    if metadata and metadata.get('source') == filename:
-                        doc_id = results['ids'][i]
-                        ids_to_delete.append(doc_id)
-                
-                # 删除文档
-                if ids_to_delete:
-                    print(f"找到 {len(ids_to_delete)} 个文档片段需要删除")
-                    # 使用 ID 删除文档
-                    collection.delete(ids=ids_to_delete)
-                    print(f"已从向量数据库删除 {len(ids_to_delete)} 个文档片段")
-                else:
-                    print(f"未找到文件 {filename} 的文档片段")
-            else:
-                print("向量数据库中没有文档")
-        
-        # 2. 删除物理文件
         file_path = os.path.join(UPLOAD_DIR, filename)
         if os.path.exists(file_path):
             os.remove(file_path)

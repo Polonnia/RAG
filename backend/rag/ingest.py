@@ -319,53 +319,68 @@ def process_word_with_pages(file_path: str) -> List[Document]:
         return []
 
 def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """时间戳直接对应分词结果，直接返回JSON记录"""
+    """将ASR字符时间戳按句子切分为稳定的时间区间，避免累计漂移。"""
     records = []
-    
+    sentence_endings = set("。！？；.!?;")
+
     for item in asr_data:
-        text = item.get('text', '')
-        text = text.replace(' ', '')
-        timestamps = item.get('timestamp', [])
-        
-        # 分词
-        import jieba
-        words = list(jieba.cut(text))
-        
-        # 检查词数和时间戳数是否匹配
-        if len(words) != len(timestamps):
-            print(f"警告：词数({len(words)}) 与时间戳数({len(timestamps)}) 不匹配，将进行校正处理")
-            # 如果时间戳不足，为多余的词添加假时间戳
-            while len(timestamps) < len(words):
-                if timestamps:
-                    last_end = timestamps[-1][1]
-                    timestamps.append([last_end, last_end + 100])
-                else:
-                    timestamps.append([0, 100])
-        
-        # 按标点分组
-        current_words = []
-        current_timestamps = []
-        
-        for i, word in enumerate(words):
-            current_words.append(word)
-            if i < len(timestamps):
-                current_timestamps.append(timestamps[i])
-            
-            # 如果词以标点结尾，或这是最后一个词
-            if word[-1] in "。！？；.!?;" or i == len(words) - 1:
-                if current_words and current_timestamps:
-                    sentence = "".join(current_words)
-                    start_time = current_timestamps[0][0] / 1000.0
-                    end_time = current_timestamps[-1][1] / 1000.0
-                    
-                    records.append({
-                        'sentence': sentence,
-                        'start_time': start_time,
-                        'end_time': end_time
-                    })
-                    
-                    current_words = []
-                    current_timestamps = []
+        raw_text = str(item.get('text', '') or '')
+        text = raw_text.replace(' ', '')
+        timestamps = item.get('timestamp', []) or []
+
+        if not text:
+            continue
+
+        # 无时间戳时退化为0时间，避免抛异常中断流程
+        if not timestamps:
+            records.append({
+                'sentence': text,
+                'start_time': 0.0,
+                'end_time': 0.0,
+            })
+            continue
+
+        # 句子边界：按标点切句
+        spans = []
+        seg_start = 0
+        for idx, ch in enumerate(text):
+            if ch in sentence_endings:
+                spans.append((seg_start, idx))
+                seg_start = idx + 1
+        if seg_start < len(text):
+            spans.append((seg_start, len(text) - 1))
+
+        # 使用字符位置到时间戳索引的比例映射，避免分词强配导致的累计误差
+        scale = len(timestamps) / max(len(text), 1)
+
+        for start_idx, end_idx in spans:
+            sentence = text[start_idx:end_idx + 1].strip()
+            if not sentence:
+                continue
+
+            ts_start_idx = int(start_idx * scale)
+            ts_end_idx = int((end_idx + 1) * scale) - 1
+
+            if ts_start_idx < 0:
+                ts_start_idx = 0
+            if ts_end_idx < ts_start_idx:
+                ts_end_idx = ts_start_idx
+            if ts_start_idx >= len(timestamps):
+                ts_start_idx = len(timestamps) - 1
+            if ts_end_idx >= len(timestamps):
+                ts_end_idx = len(timestamps) - 1
+
+            start_ms = timestamps[ts_start_idx][0]
+            end_ms = timestamps[ts_end_idx][1]
+            if end_ms < start_ms:
+                end_ms = start_ms
+
+            records.append({
+                'sentence': sentence,
+                'start_time': round(start_ms / 1000.0, 3),
+                'end_time': round(end_ms / 1000.0, 3),
+            })
+
     return records
 
 

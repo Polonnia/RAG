@@ -1,7 +1,20 @@
 import React from 'react';
-import { Layout, Menu, Button, Space } from 'antd';
+import { Layout, Menu, Button, Avatar, Tooltip } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOutlined, DatabaseOutlined, FileTextOutlined, FormOutlined, CheckCircleOutlined, BarChartOutlined, RobotOutlined, LogoutOutlined } from '@ant-design/icons';
+import {
+  BookOutlined,
+  DatabaseOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+  BarChartOutlined,
+  RobotOutlined,
+  LogoutOutlined,
+  SolutionOutlined,
+  FileSearchOutlined,
+  ReadOutlined,
+  UserOutlined,
+  TrophyOutlined,
+} from '@ant-design/icons';
 import { getUser } from '../../auth/authUtils';
 import { logout } from '../../services/authService';
 
@@ -10,19 +23,19 @@ const { Sider } = Layout;
 // 教师菜单
 const teacherMenuItems = [
   { key: 'knowledge', icon: <DatabaseOutlined />, label: '知识库管理', path: '/knowledge' },
-  { key: 'qa', icon: <BookOutlined />, label: '知识库问答', path: '/qa' },
-  { key: 'teaching', icon: <FileTextOutlined />, label: '教学内容设计', path: '/teaching' },
-  { key: 'exam', icon: <FormOutlined />, label: '考核内容生成', path: '/exam' },
-  { key: 'manage', icon: <FormOutlined />, label: '考试管理', path: '/manage' },
+  { key: 'qa', icon: <FileSearchOutlined />, label: '知识库问答', path: '/qa' },
+  { key: 'teaching', icon: <ReadOutlined />, label: '教学内容设计', path: '/teaching' },
+  { key: 'exam', icon: <FileTextOutlined />, label: '考核内容生成', path: '/exam' },
+  { key: 'manage', icon: <SolutionOutlined />, label: '考试管理', path: '/manage' },
   { key: 'grading', icon: <CheckCircleOutlined />, label: '试卷批改', path: '/grading' }
 ];
 
 // 学生菜单
 const studentMenuItems = [
   { key: 'qa', icon: <BookOutlined />, label: '知识库问答', path: '/qa' },
-  { key: 'student', icon: <FormOutlined />, label: '考试系统', path: '/student' },
+  { key: 'student', icon: <TrophyOutlined />, label: '考试系统', path: '/student' },
   { key: 'analysis', icon: <BarChartOutlined />, label: '学情分析', path: '/analysis' },
-  { key: 'wrongbook', icon: <BookOutlined />, label: '错题本', path: '/wrongbook' },
+  { key: 'wrongbook', icon: <FileTextOutlined />, label: '错题本', path: '/wrongbook' },
   { key: 'assistant', icon: <RobotOutlined />, label: '学习助手', path: '/assistant' }
 ];
 
@@ -64,6 +77,7 @@ export default function Sidebar() {
 
   return (
     <div
+      className="sidebar-shell"
       style={{
         position: 'fixed',
         left: 0,
@@ -79,7 +93,9 @@ export default function Sidebar() {
         overflow: 'hidden'
       }}
     >
+      <div className="sidebar-glow" aria-hidden="true" />
       <div
+        className="sidebar-brand"
         style={{
           height: 64,
           display: 'flex',
@@ -96,8 +112,15 @@ export default function Sidebar() {
           flexShrink: 0
         }}
       >
-        <BookOutlined style={{ fontSize: 28, marginRight: 8, color: '#fff' }} />
+        <Avatar
+          size={34}
+          icon={<UserOutlined />}
+          style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', marginRight: 10 }}
+        />
         <span style={{ color: '#fff' }}>{user?.role === 'student' ? '学生端' : '教师端'}</span>
+      </div>
+      <div style={{ padding: '0 12px 8px' }}>
+        <div className="sidebar-role-chip">{user?.role === 'student' ? 'Student Mode' : 'Teacher Mode'}</div>
       </div>
       <Menu
         mode="inline"
@@ -135,20 +158,22 @@ export default function Sidebar() {
           flexShrink: 0
         }}
       >
-        <Button 
-          type="primary" 
-          icon={<LogoutOutlined />} 
-          onClick={handleLogout}
-          style={{ 
-            borderRadius: 20, 
-            fontWeight: 500,
-            fontSize: 14,
-            width: '100%'
-          }}
-          size="middle"
-        >
-          退出登录
-        </Button>
+        <Tooltip title="安全退出当前账号" placement="right">
+          <Button 
+            type="primary" 
+            icon={<LogoutOutlined />} 
+            onClick={handleLogout}
+            style={{ 
+              borderRadius: 20, 
+              fontWeight: 500,
+              fontSize: 14,
+              width: '100%'
+            }}
+            size="middle"
+          >
+            退出登录
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );

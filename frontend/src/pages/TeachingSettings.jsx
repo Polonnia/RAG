@@ -5,6 +5,7 @@ import { FileTextOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getTeachingMaterials, getTeachingStructure, generateTeachingScheduleStream } from '../services/teachingService';
+import PageHeader from '../components/PageHeader';
 
 const { Text, Paragraph } = Typography;
 
@@ -92,6 +93,8 @@ export default function TeachingSettings() {
       setTreeData([]);
       setCheckedKeys([]);
       setHalfCheckedKeys([]);
+      setScheduleMarkdown('');
+      try { localStorage.removeItem('teaching_schedule_markdown'); } catch {}
       return;
     }
 
@@ -105,6 +108,7 @@ export default function TeachingSettings() {
       setHalfCheckedKeys([]);
       setExpandedKeys(allKeys);
       setScheduleMarkdown('');
+      try { localStorage.removeItem('teaching_schedule_markdown'); } catch {}
     } catch (err) {
       console.error('获取教材目录失败:', err);
       message.error(err?.response?.data?.detail || '获取教材目录失败');
@@ -112,6 +116,8 @@ export default function TeachingSettings() {
       setCheckedKeys([]);
       setHalfCheckedKeys([]);
       setExpandedKeys([]);
+      setScheduleMarkdown('');
+      try { localStorage.removeItem('teaching_schedule_markdown'); } catch {}
     }
     setStructureLoading(false);
   };
@@ -228,19 +234,70 @@ export default function TeachingSettings() {
         .teaching-panel-card {
           height: 72vh;
           min-height: 620px;
+          border: 1px solid #e5eeff;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
         }
         .teaching-toolbar {
           display: flex;
           flex-wrap: wrap;
-          gap: 6px;
+          gap: 8px;
           align-items: center;
-          height: 28px;
+          min-height: 40px;
           margin: 0;
+          padding: 2px 0;
         }
         .teaching-section-caption {
           color: #8c8c8c;
           font-size: 12px;
+          line-height: 1.5;
           margin: 8px 0 0 0;
+        }
+        .teaching-select {
+          border-radius: 10px;
+        }
+        .teaching-select .ant-select-selector {
+          border-radius: 10px !important;
+          border-color: #d6e4ff !important;
+          transition: all 0.2s ease !important;
+        }
+        .teaching-select:hover .ant-select-selector {
+          border-color: #69b1ff !important;
+        }
+        .teaching-quick-btn {
+          border-radius: 999px;
+          border: 1px solid #d6e4ff;
+          background: #f7fbff;
+          color: #1f3f75;
+        }
+        .teaching-toolbar-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .teaching-config-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-bottom: 8px;
+          padding: 10px;
+          border: 1px solid #e6eeff;
+          border-radius: 12px;
+          background: #fafdff;
+        }
+        .teaching-counter {
+          min-width: 140px;
+          padding: 8px 10px;
+          border: 1px solid #e6eeff;
+          border-radius: 10px;
+          background: #fff;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .teaching-counter-label {
+          font-size: 12px;
+          color: #59708f;
         }
         /* 左右内容容器统一尺寸，顶端对齐 */
         .teaching-tree-box, .teaching-outline-box {
@@ -291,32 +348,39 @@ export default function TeachingSettings() {
         }
       `}</style>
 
-      <div style={{ marginBottom: 12 }}>
-        <h2 style={{ fontWeight: 700, marginTop: 0, marginBottom: 2 }}>
-          <FileTextOutlined style={{ marginright: 8, color: '#1677ff' }} />
-          教学内容设计
-        </h2>
-        <Text className="teaching-section-caption">选择教材目录、取消不需要章节，生成结构化教学安排。</Text>
-      </div>
+      <div className="page-content-wrap page-enter">
+      <PageHeader
+        title="教学内容设计"
+        subtitle="选择教材目录、取消不需要章节，生成结构化教学安排"
+        icon={<FileTextOutlined />}
+        variant="dashboard"
+      />
 
       <Card style={{ marginBottom: 16, borderRadius: 12 }}>
         <div className="teaching-toolbar">
           <Text strong>教材选择</Text>
           <Select
+            className="teaching-select"
             style={{ width: 360 }}
             placeholder="请选择知识库教材"
             value={selectedFilename || undefined}
             loading={materialLoading}
+            showSearch
+            allowClear
+            optionFilterProp="label"
             options={(materials || []).map((item) => ({
               label: item.filename,
               value: item.filename,
             }))}
             onChange={(value) => {
-              setSelectedFilename(value);
-              loadStructure(value);
+              const nextValue = value || '';
+              setSelectedFilename(nextValue);
+              loadStructure(nextValue);
             }}
           />
+          <Button className="teaching-quick-btn" onClick={() => setSelectedFilename('')} disabled={!selectedFilename}>清空选择</Button>
           <Button onClick={fetchMaterials} loading={materialLoading}>刷新教材</Button>
+          {selectedFilename ? <Tag color="blue">当前教材：{selectedFilename}</Tag> : null}
           <Tag color="processing" style={{ marginInlineStart: 2 }}>已选章节/小节：{checkedCount}</Tag>
         </div>
       </Card>
@@ -387,12 +451,28 @@ export default function TeachingSettings() {
             }
           }}
         >
-          <div className="teaching-toolbar">
-            <Text strong>总课时</Text>
-            <InputNumber min={1} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} />
-            <Text strong>总课数</Text>
-            <InputNumber min={1} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} />
-            <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading}>生成教学安排表</Button>
+          <div className="teaching-config-panel">
+            <div className="teaching-toolbar-group">
+              <div className="teaching-counter">
+                <span className="teaching-counter-label">总课时</span>
+                <InputNumber min={1} max={300} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} style={{ width: '100%' }} />
+              </div>
+              <div className="teaching-counter">
+                <span className="teaching-counter-label">总课数</span>
+                <InputNumber min={1} max={100} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} style={{ width: '100%' }} />
+              </div>
+            </div>
+
+            <div className="teaching-toolbar-group">
+              <Text type="secondary" style={{ fontSize: 12 }}>预设方案：</Text>
+              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(16); setTotalLessons(8); }}>16课时 / 8课</Button>
+              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(32); setTotalLessons(16); }}>32课时 / 16课</Button>
+              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(48); setTotalLessons(24); }}>48课时 / 24课</Button>
+            </div>
+
+            <div className="teaching-toolbar-group">
+              <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading} disabled={!selectedFilename || checkedCount === 0}>生成教学安排表</Button>
+            </div>
           </div>
           {scheduleStage ? (
             <Text className="teaching-section-caption">状态：{scheduleStage}</Text>
@@ -428,7 +508,9 @@ export default function TeachingSettings() {
                     </td>
                   ),
                   p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
+                  br: () => <br />, // 支持 <br> 换行
                 }}
+                skipHtml={false} // 允许解析 HTML 标签
               >
                 {scheduleMarkdown}
               </ReactMarkdown>
@@ -438,6 +520,7 @@ export default function TeachingSettings() {
           )}
         </Spin>
       </Card>
+      </div>
     </AppLayout>
   );
 }

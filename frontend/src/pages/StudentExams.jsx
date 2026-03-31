@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, List, message, Modal, Card, Tag, Row, Col, Statistic, Divider, Empty, Space } from 'antd';
+import { Button, message, Modal, Card, Tag, Row, Col, Divider, Empty } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { listStudentExams, getStudentExam, submitExam, getLatestAnalysis, saveExamDraft } from '../services/studentExamService';
 import { CheckCircleOutlined, ClockCircleOutlined, FormOutlined, FileTextOutlined } from '@ant-design/icons';
+import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
+import { useResponsive } from '../utils/responsive';
 
 export default function StudentExams() {
   const [exams, setExams] = useState([]);
   const [current, setCurrent] = useState(null);
   const [answers, setAnswers] = useState({});
   const [open, setOpen] = useState(false);
+  const { isMobile } = useResponsive();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -45,47 +49,30 @@ export default function StudentExams() {
 
   return (
     <AppLayout>
-      {/* 页面顶部标题和统计 */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontWeight: 700, fontSize: 22, marginTop: 0, marginBottom: 24, color: '#1f1f1f' }}>
-          <FormOutlined style={{ marginRight: 8, color: '#1677ff' }} />
-          考试系统
-        </h1>
-        
-        {/* 统计卡片 */}
-        <Card style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', border: '1px solid #d9d9d9', background: '#fff' }}>
-          <Row gutter={32}>
-            <Col xs={24} sm={12} md={8}>
-              <Statistic
-                title={<span style={{ color: '#666', fontSize: 14 }}>总考试数</span>}
-                value={exams.length}
-                valueStyle={{ color: '#1f1f1f', fontSize: 28, fontWeight: 'bold' }}
-                prefix={<FileTextOutlined style={{ marginRight: 8, color: '#1890ff' }} />}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Statistic
-                title={<span style={{ color: '#666', fontSize: 14 }}>已完成</span>}
-                value={exams.filter(e => e.completed).length}
-                valueStyle={{ color: '#52c41a', fontSize: 28, fontWeight: 'bold' }}
-                prefix={<CheckCircleOutlined style={{ marginRight: 8, color: '#52c41a' }} />}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Statistic
-                title={<span style={{ color: '#666', fontSize: 14 }}>待进行</span>}
-                value={exams.filter(e => !e.completed).length}
-                valueStyle={{ color: '#faad14', fontSize: 28, fontWeight: 'bold' }}
-                prefix={<ClockCircleOutlined style={{ marginRight: 8, color: '#faad14' }} />}
-              />
-            </Col>
-          </Row>
-        </Card>
-      </div>
+      <div className="page-content-wrap page-enter">
+        <PageHeader
+          title="考试系统"
+          subtitle="查看待进行考试、续作草稿并追踪历史成绩"
+          icon={<FormOutlined />}
+          variant="dashboard"
+          decorative
+        />
+
+        <Row gutter={[16, 16]} className="page-section">
+          <Col xs={24} sm={12} md={8}>
+            <StatCard title="总考试数" value={exams.length} icon={<FileTextOutlined />} color="#1677ff" />
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <StatCard title="已完成" value={exams.filter(e => e.completed).length} icon={<CheckCircleOutlined />} color="#52c41a" />
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <StatCard title="待进行" value={exams.filter(e => !e.completed).length} icon={<ClockCircleOutlined />} color="#faad14" />
+          </Col>
+        </Row>
 
       {/* 未完成的考试 */}
       {exams.filter(e => !e.completed).length > 0 && (
-        <div style={{ marginBottom: 32 }}>
+        <div className="page-section fade-in-up" style={{ marginBottom: 32 }}>
           <h3 style={{ fontWeight: 700, fontSize: 16, color: '#1f1f1f', marginBottom: 16 }}>
             <ClockCircleOutlined style={{ marginRight: 8, color: '#faad14' }} />
             待进行的考试
@@ -95,15 +82,13 @@ export default function StudentExams() {
               <Col xs={24} sm={12} lg={8} key={exam.id}>
                 <Card
                   hoverable
+                  className="hover-lift"
                   style={{
                     borderRadius: 12,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
                     border: '1px solid #d9d9d9',
-                    transition: 'all 0.3s ease',
                     background: '#fff'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)'}
-                  onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'}
                 >
                   <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h4 style={{ fontWeight: 600, fontSize: 16, color: '#1f1f1f', margin: 0 }}>{exam.title}</h4>
@@ -130,7 +115,7 @@ export default function StudentExams() {
 
       {/* 已完成的考试 */}
       {exams.filter(e => e.completed).length > 0 && (
-        <div>
+        <div className="page-section fade-in-up">
           <h3 style={{ fontWeight: 700, fontSize: 16, color: '#1f1f1f', marginBottom: 16 }}>
             <CheckCircleOutlined style={{ marginRight: 8, color: '#52c41a' }} />
             已完成的考试
@@ -140,15 +125,13 @@ export default function StudentExams() {
               <Col xs={24} sm={12} lg={8} key={exam.id}>
                 <Card
                   hoverable
+                  className="hover-lift"
                   style={{
                     borderRadius: 12,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
                     border: '1px solid #d9d9d9',
-                    transition: 'all 0.3s ease',
                     background: '#fff'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)'}
-                  onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'}
                 >
                   <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h4 style={{ fontWeight: 600, fontSize: 16, color: '#1f1f1f', margin: 0 }}>{exam.title}</h4>
@@ -198,7 +181,7 @@ export default function StudentExams() {
           setOpen(false);
         }}
         onOk={submit} 
-        width={900} 
+        width={isMobile ? '96%' : 900} 
         destroyOnClose
         okText="提交考试"
         cancelText="取消"
@@ -333,6 +316,7 @@ export default function StudentExams() {
           </div>
         )}
       </Modal>
+      </div>
     </AppLayout>
   );
 }

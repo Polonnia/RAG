@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Spin, Result, Card, List, Tag, Divider, Typography, Button } from 'antd';
+import { Spin, Result, Card, List, Tag, Divider, Typography, Button, Row, Col, Progress } from 'antd';
 import AppLayout from '../components/layout/AppLayout';
 import { getExamResult } from '../services/studentExamService';
+import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
 
 const { Text, Title } = Typography;
 
@@ -47,14 +49,29 @@ export default function StudentExamResult() {
 
   return (
     <AppLayout>
-      <Card 
-        title={<span style={{ fontWeight: 700, fontSize: 20 }}>考试结果</span>} 
-        extra={<Button onClick={() => navigate('/student')}>返回</Button>}
-        style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
-        <div style={{ marginBottom: 24 }}>
-          <Title level={3} style={{ color: '#52c41a', marginBottom: 8 }}>总分：{result.score}</Title>
-          <Text type="secondary">用时：{minutes}分{seconds}秒</Text>
-        </div>
+      <div className="page-content-wrap page-enter">
+      <PageHeader
+        title="考试结果"
+        subtitle={`用时：${minutes}分${seconds}秒`}
+        variant="dashboard"
+        action={<Button onClick={() => navigate('/student')}>返回考试列表</Button>}
+      />
+
+      <Card style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1' }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          <Col xs={24} sm={12} md={8}>
+            <StatCard title="本次得分" value={result.score || 0} color="#52c41a" />
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <StatCard title="题目数量" value={(result.answers || []).length} color="#1677ff" />
+          </Col>
+          <Col xs={24} sm={24} md={8}>
+            <Card size="small" style={{ borderRadius: 12 }}>
+              <div style={{ marginBottom: 8, fontWeight: 600 }}>完成进度</div>
+              <Progress percent={100} status="success" />
+            </Card>
+          </Col>
+        </Row>
         <Divider />
 
         <List
@@ -181,6 +198,7 @@ export default function StudentExamResult() {
           </div>
         </div>
       </Card>
+      </div>
     </AppLayout>
   );
 }

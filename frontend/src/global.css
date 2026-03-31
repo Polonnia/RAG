@@ -9,6 +9,10 @@ body {
   font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "HarmonyOS Sans", "Segoe UI", Arial, sans-serif;
 }
 
+#root {
+  min-height: 100vh;
+}
+
 /* ==================== 色彩主题系统 ==================== */
 :root {
   /* 主色调 - 蓝绿色渐变 */
@@ -44,10 +48,249 @@ body {
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
   --shadow-primary: 0 2px 8px rgba(22, 119, 255, 0.15);
+  /* 动效 token */
+  --motion-fast: 0.2s;
+  --motion-base: 0.3s;
+  --motion-slow: 0.45s;
 }
 
 .ant-layout {
   background: var(--bg-primary) !important;
+}
+
+/* ==================== 应用壳层视觉增强 ==================== */
+.app-shell {
+  position: relative;
+}
+
+.app-bg-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(2px);
+  opacity: 0.65;
+  animation: drift 9s ease-in-out infinite;
+}
+
+.bg-orb-1 {
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(64, 169, 255, 0.32), rgba(64, 169, 255, 0));
+  top: 40px;
+  right: 8%;
+}
+
+.bg-orb-2 {
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(19, 194, 194, 0.25), rgba(19, 194, 194, 0));
+  left: 12%;
+  top: 220px;
+  animation-delay: 1.5s;
+}
+
+.bg-orb-3 {
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(82, 196, 26, 0.18), rgba(82, 196, 26, 0));
+  bottom: 8%;
+  right: 16%;
+  animation-delay: 2.4s;
+}
+
+.app-content-shell {
+  position: relative;
+  z-index: 1;
+  animation: riseIn 0.55s cubic-bezier(0.2, 0.65, 0.25, 1) both;
+}
+.page-content-wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+.page-section {
+  margin-bottom: 24px;
+}
+.page-enter {
+  animation: fadeInUp var(--motion-base) cubic-bezier(0.2, 0.65, 0.25, 1) both;
+}
+.fade-enter {
+  animation: fadeIn var(--motion-base) ease both;
+}
+.fade-in-up {
+  animation: fadeInUp var(--motion-base) cubic-bezier(0.2, 0.65, 0.25, 1) both;
+}
+.slide-in-left {
+  animation: slideInLeft var(--motion-base) cubic-bezier(0.2, 0.65, 0.25, 1) both;
+}
+.slide-in-right {
+  animation: slideInRight var(--motion-base) cubic-bezier(0.2, 0.65, 0.25, 1) both;
+}
+.scale-in {
+  animation: scaleIn var(--motion-base) ease both;
+}
+.hover-lift {
+  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.dashboard-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.page-header-breadcrumb {
+  opacity: 0.86;
+}
+.page-header-root {
+  animation: fadeIn var(--motion-base) ease both;
+}
+
+.topbar-shell {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+}
+
+/* ==================== 侧边栏设计增强 ==================== */
+.sidebar-shell {
+  background: linear-gradient(180deg, #edf4ff 0%, #f4f6fa 70%) !important;
+}
+
+.sidebar-glow {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  top: -110px;
+  left: -50px;
+  background: radial-gradient(circle, rgba(22, 119, 255, 0.2), rgba(22, 119, 255, 0));
+  pointer-events: none;
+}
+
+.sidebar-brand {
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-brand::after {
+  content: "";
+  position: absolute;
+  inset: -30% auto auto -60%;
+  width: 130%;
+  height: 130%;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
+  transform: rotate(-8deg);
+  animation: shimmer 3.6s linear infinite;
+}
+
+.sidebar-role-chip {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #1565e0;
+  background: rgba(22, 119, 255, 0.1);
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  text-align: center;
+}
+
+/* ==================== 浮动按钮强化 ==================== */
+.ant-float-btn-group .ant-float-btn-body {
+  box-shadow: 0 10px 18px rgba(13, 71, 161, 0.2) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.ant-float-btn-group .ant-float-btn:hover .ant-float-btn-body {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 14px 22px rgba(13, 71, 161, 0.24) !important;
+}
+
+/* ==================== 通用动画 ==================== */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-14px) translateX(8px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-120%) rotate(-8deg);
+  }
+  100% {
+    transform: translateX(120%) rotate(-8deg);
+  }
 }
 
 /* ==================== 卡片设计增强 ==================== */
@@ -64,6 +307,30 @@ body {
   box-shadow: var(--shadow-md) !important;
   transform: translateY(-2px);
   border-color: #cbd5e1 !important;
+}
+@media (max-width: 768px) {
+  .page-header-breadcrumb {
+    display: none;
+  }
+  .page-content-wrap {
+    max-width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .fade-enter,
+  .fade-in-up,
+  .slide-in-left,
+  .slide-in-right,
+  .scale-in,
+  .page-header-root {
+    animation: none !important;
+  }
+  .hover-lift,
+  .ant-card,
+  .ant-btn {
+    transition: none !important;
+  }
 }
 
 .ant-card-head {
@@ -543,6 +810,20 @@ body {
 
 /* ==================== 响应式设计 ==================== */
 @media (max-width: 768px) {
+  .topbar-shell {
+    padding: 8px 12px !important;
+  }
+
+  .app-content-shell {
+    padding: 18px !important;
+    border-radius: 16px !important;
+    min-height: 620px !important;
+  }
+
+  .bg-orb {
+    opacity: 0.35;
+  }
+
   .ant-card {
     border-radius: 12px !important;
   }

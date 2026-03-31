@@ -1,5 +1,6 @@
 frontend/node_modules/ 
 
+*.db
 # Python cache
 **/__pycache__/
 *.py[cod]

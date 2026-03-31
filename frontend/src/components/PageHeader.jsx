@@ -11,18 +11,40 @@ export default function PageHeader({
   subtitle = '', 
   breadcrumbs = [],
   action = null,
+  extra = null,
   icon = null,
+  variant = 'default',
+  decorative = true,
+  className = '',
   style = {}
 }) {
+  const titleSizeMap = {
+    compact: '24px',
+    default: '28px',
+    dashboard: '30px'
+  };
+
+  const subtitleSizeMap = {
+    compact: '13px',
+    default: '14px',
+    dashboard: '15px'
+  };
+
+  const headerClassName = ['page-header-root', `page-header-${variant}`, className]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div 
+      className={headerClassName}
       style={{
-        marginBottom: '32px',
+        marginBottom: variant === 'compact' ? '20px' : '32px',
         ...style
       }}
     >
       {breadcrumbs && breadcrumbs.length > 0 && (
         <Breadcrumb
+          className="page-header-breadcrumb"
           style={{ marginBottom: '16px', fontSize: '12px' }}
           items={[
             { href: '/', title: <HomeOutlined />, },
@@ -38,7 +60,7 @@ export default function PageHeader({
               <h1 
                 style={{
                   margin: 0,
-                  fontSize: '28px',
+                  fontSize: titleSizeMap[variant] || titleSizeMap.default,
                   fontWeight: 800,
                   color: '#1a1a1a',
                   letterSpacing: '0.5px'
@@ -50,7 +72,7 @@ export default function PageHeader({
                 <p 
                   style={{
                     margin: '4px 0 0 0',
-                    fontSize: '14px',
+                    fontSize: subtitleSizeMap[variant] || subtitleSizeMap.default,
                     color: '#595959',
                     fontWeight: 500
                   }}
@@ -58,6 +80,11 @@ export default function PageHeader({
                   {subtitle}
                 </p>
               )}
+              {extra ? (
+                <div style={{ marginTop: 8 }}>
+                  {extra}
+                </div>
+              ) : null}
             </div>
           </div>
         </Col>
@@ -68,15 +95,16 @@ export default function PageHeader({
         )}
       </Row>
       
-      {/* 装饰线 */}
-      <div 
-        style={{
-          height: '3px',
-          background: 'linear-gradient(90deg, #1677ff, #5b8def)',
-          borderRadius: '2px',
-          width: '60px'
-        }}
-      />
+      {decorative ? (
+        <div 
+          style={{
+            height: '3px',
+            background: 'linear-gradient(90deg, #1677ff, #5b8def)',
+            borderRadius: '2px',
+            width: variant === 'compact' ? '44px' : '60px'
+          }}
+        />
+      ) : null}
     </div>
   );
 }

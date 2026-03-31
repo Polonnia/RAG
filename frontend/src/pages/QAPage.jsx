@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, Input, List, message, Modal, Popconfirm, Progress, Space, Spin, Tag } from 'antd';
+import { Button, Input, List, message, Modal, Popconfirm, Progress, Space, Spin, Tag, Card, Tabs, Badge } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -10,6 +10,7 @@ import getApiUrl from '../apiConfig';
 import { BookOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { Document, Page, pdfjs } from 'react-pdf';
 import ReactPlayer from 'react-player';
+import PageHeader from '../components/PageHeader';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
@@ -28,6 +29,21 @@ const QA_STAGE_INDEX_MAP = QA_STAGE_CONFIG.reduce((acc, item, index) => {
 }, {});
 
 export default function QAPage() {
+    // 调试：打印qaSources和answer变化
+    useEffect(() => {
+      // eslint-disable-next-line
+      console.log('[QA调试] qaSources:', qaSources);
+    }, [qaSources]);
+
+    useEffect(() => {
+      // eslint-disable-next-line
+      console.log('[QA调试] answer:', answer);
+    }, [answer]);
+
+    useEffect(() => {
+      // eslint-disable-next-line
+      console.log('[QA调试] displaySources:', displaySources);
+    }, [displaySources]);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState(() => localStorage.getItem('qa_answer') || '');
   const [qaSources, setQaSources] = useState(() => {
@@ -244,7 +260,36 @@ export default function QAPage() {
 
   const stripFileExtension = (name) => String(name || '').replace(/\.[^./\\]+$/, '');
 
+  // 支持 doc_id -> 文件名映射，优先返回真实文件名
   const resolveCitationFileName = (citationDocName) => {
+    // 调试：打印引用解析过程
+    if (citationDocName) {
+      console.log('[QA调试] resolveCitationFileName 输入:', citationDocName, 'qaSources:', qaSources);
+    }
+    if (!citationDocName) return '';
+    // 1. 先查 doc_id -> 文件名
+    const docId = citationDocName.trim();
+    // qaSources 结构: [{metadata: {doc_id, source, ...}, ...}]
+    let matched = null;
+    if (qaSources && qaSources.length > 0) {
+      for (const item of qaSources) {
+        if (item && item.metadata) {
+          // 支持 doc_id、name、source 匹配
+          if (
+            (item.metadata.doc_id && String(item.metadata.doc_id).toLowerCase() === docId.toLowerCase()) ||
+            (item.metadata.name && String(item.metadata.name).toLowerCase() === docId.toLowerCase())
+          ) {
+            matched = item.metadata.source || item.metadata.name || item.metadata.doc_id;
+            break;
+          }
+        }
+      }
+    }
+    if (matched) {
+      console.log('[QA调试] resolveCitationFileName 命中:', matched);
+      return matched;
+    }
+    // 2. fallback: 旧逻辑
     const candidateNames = Array.from(
       new Set(
         (qaSources || [])
@@ -252,17 +297,23 @@ export default function QAPage() {
           .filter(Boolean)
       )
     );
-
     const target = normalizeDocName(citationDocName);
-    if (!target) return citationDocName;
-
+    if (!target) {
+      console.log('[QA调试] resolveCitationFileName fallback, target为空:', citationDocName);
+      return citationDocName;
+    }
     const exact = candidateNames.find(name => normalizeDocName(name) === target);
-    if (exact) return exact;
-
+    if (exact) {
+      console.log('[QA调试] resolveCitationFileName exact命中:', exact);
+      return exact;
+    }
     const targetNoExt = normalizeDocName(stripFileExtension(citationDocName));
     const byBaseName = candidateNames.find(name => normalizeDocName(stripFileExtension(name)) === targetNoExt);
-    if (byBaseName) return byBaseName;
-
+    if (byBaseName) {
+      console.log('[QA调试] resolveCitationFileName byBaseName命中:', byBaseName);
+      return byBaseName;
+    }
+    console.log('[QA调试] resolveCitationFileName 未命中，返回原始:', citationDocName);
     return citationDocName;
   };
 
@@ -482,6 +533,8 @@ export default function QAPage() {
   }, [qaSources, answer]);
 
   const getCitationRefIndex = (payload) => {
+    // 调试：打印引用索引解析
+    console.log('[QA调试] getCitationRefIndex payload:', payload);
     if (!payload?.docName) return null;
     const resolvedName = resolveCitationFileName(payload.docName);
     const target = normalizeDocName(resolvedName);
@@ -494,7 +547,13 @@ export default function QAPage() {
       return normalized === target || normalizedNoExt === targetNoExt;
     });
 
-    return index >= 0 ? index + 1 : null;
+    if (index >= 0) {
+      console.log('[QA调试] getCitationRefIndex 命中:', index + 1, 'payload:', payload);
+      return index + 1;
+    } else {
+      console.log('[QA调试] getCitationRefIndex 未命中:', payload);
+      return null;
+    }
   };
 
   const closeViewer = () => {
@@ -618,8 +677,13 @@ export default function QAPage() {
   };
 
   const handleCitationClick = async (payload) => {
-    if (!payload?.docName) return;
+    console.log('[QA调试] handleCitationClick payload:', payload);
+    if (!payload?.docName) {
+      console.log('[QA调试] handleCitationClick 无docName:', payload);
+      return;
+    }
     const fileName = resolveCitationFileName(payload.docName);
+    console.log('[QA调试] handleCitationClick 解析到 fileName:', fileName);
 
     if (payload.type === 'pdf') {
       if (!fileName.toLowerCase().endsWith('.pdf')) {
@@ -761,13 +825,20 @@ export default function QAPage() {
           100% { left: 100%; }
         }
       `}</style>
-      <h2 style={{ fontWeight: 700, fontSize: 22, marginTop: 0 }}>
-        <BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />
-        知识库问答
-      </h2>
+      <div className="page-content-wrap page-enter">
+      <PageHeader
+        title="知识库问答"
+        subtitle="输入问题后系统将分阶段检索并生成可追溯回答"
+        icon={<BookOutlined />}
+        variant="dashboard"
+      />
       <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <TextArea rows={4} value={question} onChange={e => setQuestion(e.target.value)} placeholder="请输入你的问题..." />
-        <Button type="primary" onClick={handleAsk} loading={qaLoading}>问答</Button>
+        <Card className="fade-in-up" style={{ borderRadius: 14 }}>
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <TextArea rows={4} value={question} onChange={e => setQuestion(e.target.value)} placeholder="请输入你的问题..." />
+            <Button type="primary" onClick={handleAsk} loading={qaLoading}>问答</Button>
+          </Space>
+        </Card>
         {qaLoading ? (
           <div className="qa-stage-banner">
             <div className="qa-stage-shimmer" />
@@ -782,7 +853,7 @@ export default function QAPage() {
           </div>
         ) : null}
         {answer ? (
-          <div style={{ background: '#fafafa', padding: 16, borderRadius: 8 }}>
+          <Card title="回答内容" style={{ borderRadius: 14 }}>
             <ReactMarkdown
               remarkPlugins={[remarkMath, remarkGfm]}
               rehypePlugins={[rehypeKatex]}
@@ -846,103 +917,116 @@ export default function QAPage() {
             >
               {convertAnswerCitationsToMarkdownLinks(answer)}
             </ReactMarkdown>
-          </div>
+          </Card>
         ) : null}
-        <div>
-          <h3>参考出处</h3>
-          <List
-            dataSource={displaySources}
-            renderItem={(group, groupIndex) => (
-              <List.Item>
-                <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Tag color="blue">{groupIndex + 1}</Tag>
-                    <span style={{ color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.fileName}>
-                      {group.fileName}
-                    </span>
-                  </div>
-                  <Button
-                    type="text"
-                    icon={<DownloadOutlined />}
-                    size="small"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        const token = localStorage.getItem('token');
-                        const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
-                          headers: {
-                            'Authorization': `Bearer ${token}`
-                          }
-                        });
+        <Card style={{ borderRadius: 14 }}>
+          <Tabs
+            items={[
+              {
+                key: 'sources',
+                label: <span>参考出处 <Badge count={displaySources.length} color="#1677ff" /></span>,
+                children: (
+                  <List
+                    dataSource={displaySources}
+                    renderItem={(group, groupIndex) => (
+                      <List.Item>
+                        <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tag color="blue">{groupIndex + 1}</Tag>
+                            <span style={{ color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.fileName}>
+                              {group.fileName}
+                            </span>
+                          </div>
+                          <Button
+                            type="text"
+                            icon={<DownloadOutlined />}
+                            size="small"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const token = localStorage.getItem('token');
+                                const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                });
 
-                        if (response.ok) {
-                          const blob = await response.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const link = document.createElement('a');
-                          link.href = url;
-                          link.download = group.fileName;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          window.URL.revokeObjectURL(url);
-                          message.success('文件下载成功');
-                        } else {
-                          message.error('文件下载失败');
-                        }
-                      } catch (error) {
-                        console.error('下载错误:', error);
-                        message.error('文件下载失败');
-                      }
-                    }}
-                  >
-                    下载
-                  </Button>
-                </div>
-              </List.Item>
-            )}
+                                if (response.ok) {
+                                  const blob = await response.blob();
+                                  const url = window.URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = group.fileName;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  window.URL.revokeObjectURL(url);
+                                  message.success('文件下载成功');
+                                } else {
+                                  message.error('文件下载失败');
+                                }
+                              } catch (error) {
+                                console.error('下载错误:', error);
+                                message.error('文件下载失败');
+                              }
+                            }}
+                          >
+                            下载
+                          </Button>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                )
+              },
+              {
+                key: 'history',
+                label: <span>问答历史 <Badge count={qaHistory.length} color="#52c41a" /></span>,
+                children: (
+                  <List
+                    dataSource={qaHistory}
+                    renderItem={(h) => (
+                      <List.Item
+                        onClick={() => handleHistoryClick(h)}
+                        style={{ cursor: 'pointer' }}
+                        actions={[
+                          <Popconfirm
+                            key={`delete-${h.id}`}
+                            title="确定删除这条问答历史吗？"
+                            onConfirm={(e) => {
+                              e?.stopPropagation();
+                              handleDeleteHistory(h);
+                            }}
+                            onCancel={(e) => e?.stopPropagation()}
+                            okText="删除"
+                            cancelText="取消"
+                          >
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              size="small"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              删除
+                            </Button>
+                          </Popconfirm>
+                        ]}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{h.question}</div>
+                          <div style={{ color: '#888' }}>{h.answer?.slice(0, 100)}...</div>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                )
+              }
+            ]}
           />
-        </div>
-        <div>
-          <h3>问答历史</h3>
-          <List
-            dataSource={qaHistory}
-            renderItem={(h) => (
-              <List.Item
-                onClick={() => handleHistoryClick(h)}
-                style={{ cursor: 'pointer' }}
-                actions={[
-                  <Popconfirm
-                    key={`delete-${h.id}`}
-                    title="确定删除这条问答历史吗？"
-                    onConfirm={(e) => {
-                      e?.stopPropagation();
-                      handleDeleteHistory(h);
-                    }}
-                    onCancel={(e) => e?.stopPropagation()}
-                    okText="删除"
-                    cancelText="取消"
-                  >
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      size="small"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      删除
-                    </Button>
-                  </Popconfirm>
-                ]}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{h.question}</div>
-                  <div style={{ color: '#888' }}>{h.answer?.slice(0, 100)}...</div>
-                </div>
-              </List.Item>
-            )}
-          />
-        </div>
+        </Card>
       </Space>
+      </div>
 
       <Modal
         title={viewerType === 'pdf' ? `PDF预览 - ${viewerFileName}` : `媒体预览 - ${viewerFileName}`}

@@ -32,7 +32,7 @@ export default function Login() {
         navigate(from, { replace: true });
       } else {
         const role = data?.user?.role;
-        if (role === 'teacher') navigate('/manage');
+        if (role === 'teacher') navigate('/knowledge');
         else if (role === 'student') navigate('/student');
         else navigate('/knowledge');
       }

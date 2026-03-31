@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox } from 'antd';
+import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox, Row, Col } from 'antd';
 import { BookOutlined } from '@ant-design/icons';
 import http from '../api/http';
 import AppLayout from '../components/layout/AppLayout';
 import { message } from 'antd';
+import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
 
 const { TextArea } = Input;
 
@@ -175,11 +177,31 @@ export default function StudentWrongbook() {
   };
 
   const practiceProgress = practiceQuestions.length > 0 ? Math.round(Object.keys(practiceAnswers).length / practiceQuestions.length * 100) : 0;
+  const currentAccuracy = selectedKeyword && accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] : 0;
 
   return (
     <AppLayout>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Card title={<span style={{ fontWeight: 700, fontSize: 22 }}><BookOutlined style={{ color: '#1677ff', marginRight: 8 }} />错题本</span>} 
+      <div className="page-content-wrap page-enter">
+      <PageHeader
+        title="错题本"
+        subtitle="按知识点复盘错题并进入巩固练习"
+        icon={<BookOutlined />}
+        variant="dashboard"
+      />
+
+      <Row gutter={[16, 16]} className="page-section">
+        <Col xs={24} sm={12} md={8}>
+          <StatCard title="知识点数量" value={keywords.length} color="#1677ff" />
+        </Col>
+        <Col xs={24} sm={12} md={8}>
+          <StatCard title="当前知识点错题" value={questions.length} color="#fa8c16" />
+        </Col>
+        <Col xs={24} sm={24} md={8}>
+          <StatCard title="当前知识点正确率" value={currentAccuracy} suffix="%" color="#52c41a" />
+        </Col>
+      </Row>
+
+      <Card className="page-section fade-in-up" title="知识点与错题列表" 
             style={{ borderRadius: 18, boxShadow: '0 4px 24px #e6eaf1', marginBottom: 24 }}>
         <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
           <b style={{ marginRight: 12 }}>知识点标签：</b>
@@ -209,10 +231,13 @@ export default function StudentWrongbook() {
 
         {selectedKeyword && (
           <div>
-            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
-              <span style={{ color: '#888', marginRight: 16 }}>
-                正确率：{accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] + '%' : '--'}
-              </span>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <Space wrap>
+                <Tag color="processing">已选择：{selectedKeyword}</Tag>
+                <Tag color={currentAccuracy < 60 ? 'error' : currentAccuracy < 80 ? 'warning' : 'success'}>
+                  正确率：{accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] + '%' : '--'}
+                </Tag>
+              </Space>
               <Button size="small" type="primary" ghost onClick={() => setPracticeModal(true)} style={{ borderRadius: 16, fontWeight: 600 }}>
                 巩固练习
               </Button>

@@ -54,6 +54,8 @@ def _build_qa_sources_from_doc_results(doc_results):
                             "source": doc_name,
                             "page": seg.get('page', '?'),
                             "file_path": doc_id,
+                            "doc_id": doc_id,
+                            "name": doc_name,
                             "start_time": node.get('start_time'),
                             "end_time": node.get('end_time')
                         }
@@ -72,6 +74,8 @@ def _build_qa_sources_from_doc_results(doc_results):
                         "source": doc_name,
                         "page": page_value,
                         "file_path": doc_id,
+                        "doc_id": doc_id,
+                        "name": doc_name,
                         "start_time": node.get('start_time'),
                         "end_time": node.get('end_time')
                     }
