@@ -74,7 +74,7 @@ def normalize_difficulty(difficulty: str) -> str:
 
 def undo_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
     """
-    撤销学生-关键词的正确率统计（用于重新批改场景）
+    撤销学生-关键词的正确率统计
     
     参数：
     - is_correct: 用于客观题，True/False
@@ -248,7 +248,8 @@ async def generate_exam_stream(
                 ("programming", "programming_questions", "生成编程题", exam_generator.generate_programming_questions, 92),
             ]
 
-            for cfg_key, content_key, stage_name, fn, progress in stages:
+            tasks = []
+            for cfg_key, content_key, stage_name, fn, _progress in stages:
                 cfg_item = config.get(cfg_key, {})
                 if not cfg_item.get("enabled", False):
                     continue
@@ -256,23 +257,36 @@ async def generate_exam_stream(
                 if count <= 0:
                     continue
 
-                yield _json_line({"type": "stage", "stage": stage_name, "progress": progress})
-
-                questions = await asyncio.to_thread(
-                    fn,
-                    course_outline,
-                    knowledge_docs,
-                    count,
-                    difficulty_text,
-                )
                 points = int(cfg_item.get("points", 1) or 1)
+                async def _run_one(fn_ref=fn, content_key_ref=content_key, stage_name_ref=stage_name, points_ref=points, count_ref=count):
+                    questions = await asyncio.to_thread(
+                        fn_ref,
+                        course_outline,
+                        knowledge_docs,
+                        count_ref,
+                        difficulty_text,
+                    )
+                    return content_key_ref, stage_name_ref, points_ref, questions
+
+                tasks.append(asyncio.create_task(_run_one()))
+
+            if tasks:
+                yield _json_line({"type": "stage", "stage": "并行生成各题型", "progress": 20})
+
+            completed = 0
+            total = len(tasks)
+            for finished_task in asyncio.as_completed(tasks):
+                content_key, stage_name, points, questions = await finished_task
                 for q in questions:
                     q["points"] = points
 
                 exam_content[content_key] = questions
+                completed += 1
+                progress = 20 + int((completed / total) * 75) if total > 0 else 95
+
                 yield _json_line({
                     "type": "partial",
-                    "stage": stage_name,
+                    "stage": f"{stage_name}完成",
                     "progress": progress,
                     "exam_content": exam_content,
                 })
@@ -759,26 +773,31 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
             db2 = SessionLocal()
             try:
                 user = db2.query(User).filter(User.id == user_id).first()
-                from api.ai_api import ai_weakness_summary
-                ai_result = None
-                try:
-                    # 直接调用AI薄弱点分析
-                    ai_result = await ai_weakness_summary(answers=None, exam_id=exam_id, current_user=user, db=db2)
-                except Exception as e:
-                    ai_result = {"summary": f"AI分析失败: {str(e)}"}
-                ai_summary = ai_result.get("summary", "") if ai_result else ""
-                # 收集本次考试错题的关键词
-                weak_keywords = set()
+                ai_summary = ""
                 student_exam = db2.query(StudentExam).filter(StudentExam.exam_id == exam_id, StudentExam.student_id == user_id).first()
+                wrong_answers = []
                 if student_exam:
                     wrong_answers = db2.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id, StudentAnswer.is_correct == False).all()
-                    for ans in wrong_answers:
-                        q = db2.query(Question).filter(Question.id == ans.question_id).first()
-                        if q and q.knowledge_points:
-                            # 假设knowledge_points是JSON字符串数组，收集所有知识点
-                            keywords_list = json.loads(q.knowledge_points) if isinstance(q.knowledge_points, str) else (q.knowledge_points if isinstance(q.knowledge_points, list) else [q.knowledge_points])
-                            for kw in keywords_list:
-                                weak_keywords.add(kw)
+
+                # 收集本次考试错题的关键词
+                weak_keywords = set()
+                for ans in wrong_answers:
+                    q = db2.query(Question).filter(Question.id == ans.question_id).first()
+                    if q and q.knowledge_points:
+                        # 假设knowledge_points是JSON字符串数组，收集所有知识点
+                        keywords_list = json.loads(q.knowledge_points) if isinstance(q.knowledge_points, str) else (q.knowledge_points if isinstance(q.knowledge_points, list) else [q.knowledge_points])
+                        for kw in keywords_list:
+                            weak_keywords.add(kw)
+
+                # AI总结失败不影响错题归档
+                try:
+                    from api.ai_api import ai_weakness_summary
+                    ai_result = await ai_weakness_summary(answers=None, exam_id=exam_id, current_user=user, db=db2)
+                    ai_summary = ai_result.get("summary", "") if ai_result else ""
+                except Exception as e:
+                    ai_summary = f"AI分析失败: {str(e)}"
+                    print(ai_summary)
+
                 # 保存AI分析结果到ExamHistory
                 record = db2.query(ExamHistory).filter(ExamHistory.user_id == user_id, ExamHistory.exam_id == exam_id).first()
                 if not record:
@@ -787,6 +806,7 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
                 record.comment = ai_summary
                 record.weak_keywords = ",".join(weak_keywords) if weak_keywords else ""
                 db2.commit()
+
                 # 归档错题到错题本 - 使用题目已有的knowledge_point字段
                 # 复用之前查询的错题数据
                 if student_exam:

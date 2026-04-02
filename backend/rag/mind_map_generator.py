@@ -113,13 +113,13 @@ async def generate_structure_json_async(file_path: str, model: Optional[str] = N
         
         # Check for model errors
         if "模型" in error_msg and "不存在" in error_msg:
-            print(f"❌ 模型配置错误: {error_msg}")
+            print(f"模型配置错误: {error_msg}")
             print("请检查 .env 文件中的 DEEPSEEK_MODEL 环境变量设置")
         elif "Model Not Exist" in error_msg:
-            print(f"❌ 模型不存在: {error_msg}")
+            print(f"模型不存在: {error_msg}")
             print("请确保使用的模型名称正确")
         else:
-            print(f"❌ 生成结构失败 (异步): {e}")
+            print(f"生成结构失败 (异步): {e}")
         
         import traceback
         traceback.print_exc()

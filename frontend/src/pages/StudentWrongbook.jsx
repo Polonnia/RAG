@@ -118,7 +118,8 @@ export default function StudentWrongbook() {
     try {
       console.log('[巩固练习] 开始生成习题，知识点:', selectedKeyword, '数量:', practiceCount);
       const res = await http.post('/student/generate-practice',
-        new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' })
+        new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' }),
+        { timeout: 180000 }
       );
       console.log('[巩固练习] 生成习题响应:', res);
       const questionsData = res.data?.questions || res.data || [];
@@ -206,9 +207,9 @@ export default function StudentWrongbook() {
         <div style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
           <b style={{ marginRight: 12 }}>知识点标签：</b>
           {keywords.length === 0 ? <Empty description="暂无错题" /> :
-            keywords.map(k => (
+            keywords.map((k, idx) => (
               <Tag.CheckableTag
-                key={k.keyword}
+                key={`${k.keyword}-${idx}`}
                 checked={selectedKeyword === k.keyword}
                 onChange={() => handleSelectKeyword(k.keyword)}
                 style={{
@@ -418,32 +419,50 @@ export default function StudentWrongbook() {
           open={practiceModal}
           onCancel={() => { setPracticeModal(false); setPracticeQuestions([]); setPracticeResult(null); setPracticeAnswers({}); }}
           footer={null}
-          title={<span style={{ fontWeight: 700, fontSize: 20 }}>巩固练习 - {selectedKeyword}</span>}
-          bodyStyle={{ padding: 24 }}
-          width={700}
+          title={<span style={{ fontWeight: 800, fontSize: 20, color: '#1f3f75' }}>巩固练习 - {selectedKeyword}</span>}
+          bodyStyle={{ padding: 20, background: '#f7fbff' }}
+          width={860}
+          centered
         >
-          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Button
-              type="primary"
-              onClick={handleGeneratePractice}
-              loading={practiceLoading}
-              disabled={practiceLoading || !selectedKeyword}
-            >
-              {practiceLoading ? '生成中...' : '生成巩固练习'}
-            </Button>
+          <div style={{
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: '1px solid #d6e4ff',
+            background: 'linear-gradient(90deg, #f8fbff 0%, #eef7ff 100%)'
+          }}>
+            <Space wrap>
+              <Button
+                type="primary"
+                onClick={handleGeneratePractice}
+                loading={practiceLoading}
+                disabled={practiceLoading || !selectedKeyword}
+                style={{ borderRadius: 10, fontWeight: 700, boxShadow: '0 8px 16px rgba(22,119,255,0.18)' }}
+              >
+                {practiceLoading ? '生成中...' : '生成巩固练习'}
+              </Button>
+              <Tag color="processing" style={{ borderRadius: 999 }}>知识点：{selectedKeyword || '--'}</Tag>
+              {practiceQuestions.length > 0 && (
+                <Tag color="blue" style={{ borderRadius: 999 }}>共 {practiceQuestions.length} 题</Tag>
+              )}
+            </Space>
             {practiceQuestions.length > 0 && (
-              <span style={{ color: '#888' }}>共 {practiceQuestions.length} 题</span>
-            )}
-            {practiceQuestions.length > 0 && (
-              <Progress percent={practiceProgress} size="small" style={{ width: 150 }} />
+              <div style={{ minWidth: 220 }}>
+                <div style={{ fontSize: 12, color: '#59708f', marginBottom: 4 }}>完成进度</div>
+                <Progress percent={practiceProgress} size="small" />
+              </div>
             )}
           </div>
           {practiceQuestions.length === 0 ? (
             <Empty description="暂无巩固练习题目" />
           ) : (
-            <List
-              dataSource={practiceQuestions}
-              renderItem={(q, idx) => {
+            <div style={{ maxHeight: '56vh', overflowY: 'auto', paddingRight: 4 }}>
+              {practiceQuestions.map((q, idx) => {
                 // 防御性处理 options - 如果是字符串则尝试解析
                 let displayOptions = q.options;
                 if (typeof displayOptions === 'string') {
@@ -454,9 +473,20 @@ export default function StudentWrongbook() {
                   }
                 }
                 return (
-                <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
+                <Card
+                  key={`practice-q-${idx}`}
+                  size="small"
+                  style={{
+                    marginBottom: 12,
+                    borderRadius: 12,
+                    border: '1px solid #e6eeff',
+                    background: '#fff',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+                  }}
+                  title={<span style={{ fontWeight: 700, color: '#1f3f75' }}>题目 {idx + 1}</span>}
+                >
                   <div style={{ width: '100%' }}>
-                    <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>题目{idx + 1}：{q.question}</div>
+                    <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10, lineHeight: 1.7 }}>{q.question}</div>
                     {/* 根据题目类型显示对应的输入界面 */}
                     {q.type === 'choice' ? (
                       // 单选题
@@ -520,18 +550,18 @@ export default function StudentWrongbook() {
                       />
                     )}
                   </div>
-                </List.Item>
+                </Card>
                 );
-              }}
-            />
+              })}
+            </div>
           )}
           {practiceQuestions.length > 0 && !practiceResult && (
-            <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 600 }}>
+            <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 700, height: 42 }}>
               提交练习
             </Button>
           )}
           {practiceResult && (
-            <Card title={<span>练习得分：<span style={{ color: '#52c41a' }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12 }}>
+            <Card title={<span>练习得分：<span style={{ color: '#52c41a', fontWeight: 800 }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12, border: '1px solid #d9f7be', background: '#fcfff5' }}>
               <List
                 dataSource={practiceResult.results}
                 renderItem={(r, idx) => (

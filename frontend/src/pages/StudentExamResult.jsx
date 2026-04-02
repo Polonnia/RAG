@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spin, Result, Card, List, Tag, Divider, Typography, Button, Row, Col, Progress } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import AppLayout from '../components/layout/AppLayout';
 import { getExamResult } from '../services/studentExamService';
 import PageHeader from '../components/PageHeader';
@@ -191,10 +193,29 @@ export default function StudentExamResult() {
             lineHeight: 1.6,
             color: '#333'
           }}>
-            {typeof aiSummary === 'string' && aiSummary.trim()
-              ? aiSummary
-              : <Text type="secondary">AI正在分析，请稍候...</Text>
-            }
+            {typeof aiSummary === 'string' && aiSummary.trim() ? (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
+                  h1: ({ children }) => <h1 style={{ fontSize: 20, fontWeight: 700, margin: '12px 0 8px 0' }}>{children}</h1>,
+                  h2: ({ children }) => <h2 style={{ fontSize: 16, fontWeight: 600, margin: '10px 0 6px 0' }}>{children}</h2>,
+                  h3: ({ children }) => <h3 style={{ fontSize: 14, fontWeight: 600, margin: '8px 0 4px 0' }}>{children}</h3>,
+                  ul: ({ children }) => <ul style={{ marginLeft: 20, margin: '8px 0' }}>{children}</ul>,
+                  ol: ({ children }) => <ol style={{ marginLeft: 20, margin: '8px 0' }}>{children}</ol>,
+                  li: ({ children }) => <li style={{ margin: '4px 0' }}>{children}</li>,
+                  code: ({ children }) => <code style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: 3, fontFamily: 'monospace' }}>{children}</code>,
+                  blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid #1677ff', paddingLeft: 12, margin: '8px 0', color: '#666' }}>{children}</blockquote>,
+                  table: ({ children }) => <table style={{ width: '100%', borderCollapse: 'collapse', margin: '8px 0' }}>{children}</table>,
+                  th: ({ children }) => <th style={{ border: '1px solid #d9d9d9', background: '#f5f5f5', padding: '8px', textAlign: 'left' }}>{children}</th>,
+                  td: ({ children }) => <td style={{ border: '1px solid #f0f0f0', padding: '8px' }}>{children}</td>,
+                }}
+              >
+                {aiSummary}
+              </ReactMarkdown>
+            ) : (
+              <Text type="secondary">AI正在分析，请稍候...</Text>
+            )}
           </div>
         </div>
       </Card>

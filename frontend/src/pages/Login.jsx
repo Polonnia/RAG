@@ -20,6 +20,12 @@ export default function Login() {
   const [form] = Form.useForm();
   const [regForm] = Form.useForm();
 
+  const roleOptions = [
+    { value: 'student', label: '学生' },
+    { value: 'teacher', label: '教师' },
+    { value: 'admin', label: '管理员' },
+  ];
+
   const onLogin = async (values) => {
     setLoading(true);
     try {
@@ -363,6 +369,7 @@ export default function Login() {
         open={registerVisible}
         onCancel={() => setRegisterVisible(false)}
         footer={null}
+        destroyOnClose
         centered
         width={400}
         style={{ borderRadius: '20px' }}
@@ -410,17 +417,15 @@ export default function Login() {
           >
             <Select
               placeholder="请选择角色"
+              options={roleOptions}
+              getPopupContainer={(triggerNode) => triggerNode.parentElement}
               style={{
                 height: '48px',
                 borderRadius: '10px',
                 border: '2px solid #d9d9d9',
                 background: '#ffffff'
               }}
-            >
-              <Select.Option value="student">学生</Select.Option>
-              <Select.Option value="teacher">教师</Select.Option>
-              <Select.Option value="admin">管理员</Select.Option>
-            </Select>
+            />
           </Form.Item>
           <Button
             type="primary"

@@ -1,0 +1,22 @@
+[
+  {
+    "total_page_number": 119
+  },
+  {
+    "total_token": 63157
+  },
+  {
+    "message": "Page 6 has toc"
+  },
+  {
+    "message": "Found the last page with toc: 6"
+  },
+  {
+    "toc_content": "discuss congestion control in a general setting and then discuss how TCP performs\ncongestion control. But before getting into all this good stuff, let\u2019s first look attransport-layer multiplexing and demultiplexing.\n3.2 Multiplexing and Demultiplexing\nIn this section, we discuss transport-layer multiplexing and demultiplexing, that is,extending the host-to-host delivery service provided by the network layer to aprocess-to-process delivery service for applications running on the hosts. In order tokeep the discussion concrete, we\u2019ll discuss this basic transport-layer service in thecontext of the Internet. We emphasize, however, that a multiplexing/demultiplexingservice is needed for all computer networks.\nAt the destination host, the transport layer receives segments from the network\nlayer just below. The transport layer has the responsibility of delivering the data inthese segments to the appropriate application process running in the host. Let\u2019s takea look at an example. Suppose you are sitting in front of your computer, and you aredownloading Web pages while running one FTP session and two Telnet sessions.You therefore have four network application processes running\u2014two Telnetprocesses, one FTP process, and one HTTP process. When the transport layer inyour computer receives data from the network layer below, it needs to direct thereceived data to one of these four processes. Let\u2019s now examine how this is done.\nFirst recall from Section 2.7 that a process (as part of a network application) can\nhave one or more sockets , doors through which data passes from the network to the\nprocess and through which data passes from the process to the network. Thus, asshown in Figure 3.2, the transport layer in the receiving host does not actuallydeliver data directly to a process, but instead to an intermediary socket. Because atany given time there can be more than one socket in the receiving host, each sockethas a unique identifier. The format of the identifier depends on whether the socket isa UDP or a TCP socket, as we\u2019ll discuss shortly.\nNow let\u2019s consider how a receiving host directs an incoming transport-layer seg-\nment to the appropriate socket. Each transport-layer segment has a set of fields in thesegment for this purpose. At the receiving end, the transport layer examines thesefields to identify the receiving socket and then directs the segment to that socket. Thisjob of delivering the data in a transport-layer segment to the correct socket is calleddemultiplexing . The job of gathering data chunks at the source host from different\nsockets, encapsulating each data chunk with header information (that will later beused in demultiplexing) to create segments, and passing the segments to the networklayer is called multiplexing . Note that the transport layer in the middle host in Fig-\nure 3.2 must demultiplex segments arriving from the network layer below to eitherprocess P\n1or P2above; this is done by directing the arriving segment\u2019s data to the\ncorresponding process\u2019s socket. The transport layer in the middle host must also3.2 \u2022MULTIPLEXING AND DEMULTIPLEXING 191",
+    "toc_page_list": [
+      6
+    ],
+    "page_index_given_in_toc": "yes",
+    "toc_source": "auto"
+  }
+]

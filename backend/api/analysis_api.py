@@ -73,10 +73,7 @@ async def ai_weakness_summary(
         )
 
     prompt = f"""
-你是一名{current_user.role}学科的智能助教，请根据以下学生答题详情，结合题目涉及的学科知识点，分析学生的薄弱点和改进建议。
-
-- 不要只给通用做题技巧，要结合每道题的知识点、题干、选项、正确答案，指出学生在哪些具体知识点或能力上存在不足。学生回答正确的题目不要分析。若没有错题，则输出“无”。
-- 输出内容请用markdown格式，分为"薄弱点分析"和"针对性建议"两部分。
+你是一名智能助教，请根据以下学生答题详情，结合题目涉及的学科知识点，分析学生的薄弱点和改进建议。
 
 答题详情：
 {question_details}
@@ -123,15 +120,14 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
         earned_points = sum(ans.points_earned for ans in valid_answers)
         accuracy = round(earned_points / total_points * 100, 2) if total_points > 0 else 0
         
-        # 安全处理start_time可能为None的情况
         date_str = se.start_time.strftime('%Y-%m-%d') if se.start_time else "N/A"
         
-        # 统计该次考试每个知识点的正确率（使用分数比例）
+        # 统计该次考试每个知识点的正确率
         keyword_stats = {}
         for ans in valid_answers:
             question = db.query(Question).filter(Question.id == ans.question_id).first()
             if question and hasattr(question, 'knowledge_points') and question.knowledge_points:
-                # 解析知识点（支持JSON数组和逗号分隔两种格式）
+                # 解析知识点
                 keywords = []
                 try:
                     if isinstance(question.knowledge_points, str):
@@ -152,7 +148,7 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
                         keyword_stats[kw]['total'] += question.points
                         keyword_stats[kw]['earned'] += ans.points_earned
         
-        # 计算每个知识点的正确率（分数比例）
+        # 计算每个知识点的正确率
         keyword_accuracy_list = []
         for kw, stats in keyword_stats.items():
             kw_accuracy = round(stats['earned'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
@@ -202,13 +198,14 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
 @router.post("/student/generate-practice")
 async def generate_practice(
     keyword: str = Form(...),  # 逗号分隔的知识点
-    count: int = Form(5),
+    count: int = Form(2),
     difficulty: str = Form("中等"),
     current_user: User = Depends(get_current_user)
 ):
     """根据知识点生成巩固习题"""
     try:
-        print(f"[API] 开始生成练习题，知识点={keyword}, 数量={count}, 难度={difficulty}")
+        import asyncio
+        print(f"开始生成练习题，知识点={keyword}, 数量={count}, 难度={difficulty}")
         
         # 直接用 exam_generator 生成概念题
         outline = "巩固以下知识点：" + keyword
@@ -217,17 +214,41 @@ async def generate_practice(
         choice_count = (count * 3 + 2) // 5  # 向上取整 60%
         fill_count = count - choice_count      # 剩余的全是填空题
         
-        print(f"[API] 分配题目：选择题={choice_count}, 填空题={fill_count}, 总计={choice_count + fill_count}")
+        print(f"分配题目：选择题={choice_count}, 填空题={fill_count}, 总计={choice_count + fill_count}")
         
-        print(f"[API] 生成选择题，数量={choice_count}")
-        questions = exam_generator.generate_concept_questions(outline, [], count=choice_count, difficulty=difficulty)
+        concept_task = asyncio.to_thread(
+            exam_generator.generate_concept_questions,
+            outline,
+            [],
+            choice_count,
+            difficulty,
+        ) if choice_count > 0 else None
+
+        fill_task = asyncio.to_thread(
+            exam_generator.generate_fill_blank_questions,
+            outline,
+            [],
+            fill_count,
+            difficulty,
+        ) if fill_count > 0 else None
+
+        if concept_task and fill_task:
+            questions, fill_questions = await asyncio.gather(concept_task, fill_task)
+        elif concept_task:
+            questions = await concept_task
+            fill_questions = []
+        elif fill_task:
+            questions = []
+            fill_questions = await fill_task
+        else:
+            questions = []
+            fill_questions = []
+
         # 为选择题添加 type 字段
         for q in questions:
             q["type"] = "choice"
         print(f"[API] 选择题生成完毕，数量={len(questions)}")
-        
-        print(f"[API] 生成填空题，数量={fill_count}")
-        fill_questions = exam_generator.generate_fill_blank_questions(outline, [], count=fill_count, difficulty=difficulty)
+
         # 为填空题添加 type 字段
         for q in fill_questions:
             q["type"] = "fill_blank"
@@ -249,7 +270,7 @@ async def generate_practice(
 @router.post("/student/submit-practice")
 async def submit_practice(
     answers_data: str = Form(...),  # JSON: [{question, answer, correct_answer, explanation, knowledge_points, options}]
-    keyword: str = Form(...),  # 新增：当前知识点
+    keyword: str = Form(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -272,14 +293,13 @@ async def submit_practice(
                 "knowledge_points": keyword,
                 "options": a.get('options', {})
             })
-            # 新增：直接用keyword更新正确率
             def update_student_keyword_accuracy(db: Session, student_id: int, keyword: str, is_correct: bool = None, score_ratio: float = None):
                 """
                 更新学生-关键词的正确率统计
                 
                 参数：
-                - is_correct: 用于客观题（选择题、填空题），True/False
-                - score_ratio: 用于主观题（简答题、编程题），分数占比 (0.0 ~ 1.0)
+                - is_correct: 用于客观题，True/False
+                - score_ratio: 用于主观题，分数占比 (0.0 ~ 1.0)
                 """
                 try:
                     if not keyword or keyword.strip() == "":
@@ -336,16 +356,34 @@ async def submit_practice(
 # 新增：查询巩固练习历史
 @router.get("/student/practice-records")
 def get_practice_records(keyword: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    records = db.query(StudentPracticeRecord).filter_by(student_id=current_user.id, keyword=keyword).order_by(StudentPracticeRecord.time.desc()).all()
-    return [{
-        "question": r.question,
-        "options": json.loads(r.options) if r.options else {},
-        "correct_answer": r.correct_answer,
-        "student_answer": r.student_answer,
-        "is_correct": r.is_correct,
-        "explanation": r.explanation,
-        "time": r.time.strftime('%Y-%m-%d %H:%M:%S')
-    } for r in records]
+    def normalize_keyword(text: str) -> str:
+        return str(text or "").replace("[", "").replace("]", "").replace('"', "").replace("'", "").strip()
+
+    target_keyword = normalize_keyword(keyword)
+    all_records = db.query(StudentPracticeRecord).filter(
+        StudentPracticeRecord.student_id == current_user.id
+    ).order_by(StudentPracticeRecord.time.desc()).all()
+
+    records = [r for r in all_records if normalize_keyword(getattr(r, "keyword", "")) == target_keyword]
+
+    result = []
+    for r in records:
+        try:
+            options = json.loads(r.options) if r.options else {}
+        except Exception:
+            options = {}
+
+        result.append({
+            "question": r.question,
+            "options": options,
+            "correct_answer": r.correct_answer,
+            "student_answer": r.student_answer,
+            "is_correct": r.is_correct,
+            "explanation": r.explanation,
+            "time": r.time.strftime('%Y-%m-%d %H:%M:%S') if r.time else ""
+        })
+
+    return result
 
 @router.get("/student/wrongbook/keywords")
 async def get_wrong_keywords(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Upload, List, Tag, Spin, Space, Divider, Popconfirm, Switch, Typography, message, Modal, Progress } from 'antd';
 const { Text } = Typography;
 import { UploadOutlined, DeleteOutlined, EyeOutlined, DatabaseOutlined } from '@ant-design/icons';
-import axios from 'axios';
 import http from '../api/http';
-import getApiUrl from '../apiConfig';
 import AppLayout from '../components/layout/AppLayout';
 import MindMapViewer from '../components/MindmapViewer';
 import PageHeader from '../components/PageHeader';
@@ -264,7 +262,6 @@ export default function KnowledgeManagement() {
           beforeUpload={() => false}
           fileList={selectedUploadFiles}
           onChange={handleFileChange}
-          multiple={true}
           accept=".pdf,.doc,.docx,.mp3,.wav,.m4a,.aac,.ogg,.mp4,.avi,.mov,.mkv,.flv,.wmv"
         >
           <Button icon={<UploadOutlined />}>选择文件</Button>
@@ -339,12 +336,14 @@ export default function KnowledgeManagement() {
                       checkedChildren="可下载"
                       unCheckedChildren="不可下载"
                       onChange={checked => {
-                        axios.post(`${getApiUrl()}/set-student-download`, new URLSearchParams({
+                        http.post('/set-student-download', new URLSearchParams({
                           filename: file.filename,
                           can_download: checked
                         })).then(() => {
                           message.success('设置成功');
                           fetchKnowledgeFiles();
+                        }).catch((err) => {
+                          message.error(err?.response?.data?.detail || '设置失败');
                         });
                       }}
                       style={{ marginRight: 16 }}

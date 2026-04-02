@@ -133,7 +133,7 @@ export default function Grading() {
       />
       <Card style={{ marginBottom: 16, borderRadius: 14 }}>
         <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Input.Search
+          <Input
             placeholder="按考试名或题目内容搜索"
             allowClear
             style={{ width: 320 }}

@@ -142,8 +142,13 @@ export default function StudentAnalysis() {
                               const color = kw.accuracy >= 80 ? '#52c41a' : kw.accuracy >= 60 ? '#faad14' : '#f5222d';
                               // 清理知识点名称中的特殊字符 ([], ", 等)
                               const cleanedKeyword = kw.keyword.replace(/[\[\]"']/g, '').trim();
+                              // 后端返回的字段名是 earned/total（来自accuracy_curve中的keyword_accuracy）
+                              const correct = (kw.earned !== undefined && kw.earned !== null) 
+                                ? kw.earned 
+                                : ((kw.correct !== undefined && kw.correct !== null) ? kw.correct : 0);
+                              const total = (kw.total !== undefined && kw.total !== null) ? kw.total : 0;
                               html += `<div style="margin: 4px 0;">
-                                • ${cleanedKeyword}：<span style="color: ${color}; font-weight: bold;">${kw.accuracy}%</span>（${kw.correct}/${kw.total}）
+                                • ${cleanedKeyword}：<span style="color: ${color}; font-weight: bold;">${kw.accuracy}%</span>（${correct}/${total}）
                               </div>`;
                             });
                           }

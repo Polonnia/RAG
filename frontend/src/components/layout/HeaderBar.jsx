@@ -51,9 +51,6 @@ export default function HeaderBar() {
             { title: section },
           ]}
         />
-        <Tag color="processing" style={{ width: 'fit-content', borderRadius: 999 }}>
-          当前模块: {section}
-        </Tag>
       </Space>
 
       <Space size={10}>

@@ -94,6 +94,33 @@ export default function ExamGenerator() {
   }
   useEffect(() => { refreshHistory(); refreshTeacherExams(); }, []);
 
+  const normalizeHistoryExamContent = (historyItem) => {
+    const raw = historyItem?.examContent ?? historyItem?.exam_content ?? null;
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof raw === 'object') return raw;
+    return null;
+  };
+
+  const handleHistoryPreview = (historyItem) => {
+    const parsedContent = normalizeHistoryExamContent(historyItem);
+    if (!parsedContent) {
+      message.warning('该历史记录没有可渲染的题目内容');
+      return;
+    }
+
+    setOutline(historyItem?.outline || outline);
+    setExamContent({ ...parsedContent });
+    setSelectedQuestions([]);
+    setStreamStage(loading ? '已切换为历史记录预览（当前生成仍在后台进行）' : '已加载历史记录');
+  };
+
   const handleGenerate = async () => {
     if (!outline.trim()) { message.warning('请输入课程大纲'); return; }
 
@@ -379,7 +406,21 @@ export default function ExamGenerator() {
                     <List
                       dataSource={examHistory}
                       renderItem={(h) => (
-                        <List.Item actions={[<a onClick={() => deleteExamHistory(h.id).then(refreshHistory)} key="del">删除</a>]}>
+                        <List.Item
+                          onClick={() => handleHistoryPreview(h)}
+                          style={{ cursor: 'pointer' }}
+                          actions={[
+                            <a
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteExamHistory(h.id).then(refreshHistory);
+                              }}
+                              key="del"
+                            >
+                              删除
+                            </a>
+                          ]}
+                        >
                           <div>
                             <div style={{ fontWeight: 600 }}>{h.outline?.slice(0, 50)}...</div>
                           </div>

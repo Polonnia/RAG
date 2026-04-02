@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, Input, List, message, Modal, Popconfirm, Progress, Space, Spin, Tag, Card, Tabs, Badge } from 'antd';
+import { Button, Input, List, message, Modal, Popconfirm, Progress, Space, Spin, Tag, Card, Tabs, Badge, Collapse } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -54,6 +54,8 @@ export default function QAPage() {
   const [qaStageIndex, setQaStageIndex] = useState(0);
   const [qaStageDots, setQaStageDots] = useState('');
   const [qaHistory, setQaHistory] = useState([]);
+  const [downloadableFiles, setDownloadableFiles] = useState([]);
+  const [downloadableLoading, setDownloadableLoading] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerType, setViewerType] = useState(null);
   const [viewerFileName, setViewerFileName] = useState('');
@@ -74,6 +76,40 @@ export default function QAPage() {
       const res = await http.get('/qa-history');
       setQaHistory(res.data);
     } catch {}
+  };
+
+  const fetchDownloadableFiles = async () => {
+    setDownloadableLoading(true);
+    try {
+      const res = await http.get('/knowledge-files');
+      const files = Array.isArray(res.data?.files) ? res.data.files : [];
+      setDownloadableFiles(files.filter((f) => Boolean(f?.student_can_download)));
+    } catch {
+      setDownloadableFiles([]);
+    }
+    setDownloadableLoading(false);
+  };
+
+  const handleDownloadFile = async (fileName) => {
+    if (!fileName) return;
+    try {
+      const response = await http.get(`/download/${encodeURIComponent(fileName)}`, {
+        responseType: 'blob'
+      });
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      message.success('文件下载成功');
+    } catch (error) {
+      console.error('下载错误:', error);
+      message.error(error?.response?.data?.detail || '文件下载失败');
+    }
   };
 
   const handleHistoryClick = (h) => {
@@ -106,7 +142,10 @@ export default function QAPage() {
     }
   };
 
-  useEffect(() => { fetchQaHistory(); }, []);
+  useEffect(() => {
+    fetchQaHistory();
+    fetchDownloadableFiles();
+  }, []);
 
   useEffect(() => {
     if (!qaLoading) {
@@ -833,6 +872,64 @@ export default function QAPage() {
         variant="dashboard"
       />
       <Space direction="vertical" style={{ width: '100%' }} size="large">
+        <Card className="fade-in-up" style={{ borderRadius: 14, border: '1px solid #d6e4ff', background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)' }}>
+          <Collapse
+            ghost
+            items={[
+              {
+                key: 'downloadable-files',
+                label: (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
+                    <Space size={8}>
+                      <BookOutlined style={{ color: '#1677ff' }} />
+                      <span style={{ fontWeight: 700, color: '#1f3f75' }}>可下载资料</span>
+                      <Badge count={downloadableFiles.length} color="#1677ff" />
+                    </Space>
+                    <Button
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchDownloadableFiles();
+                      }}
+                      loading={downloadableLoading}
+                    >
+                      刷新
+                    </Button>
+                  </div>
+                ),
+                children: (
+                  <List
+                    loading={downloadableLoading}
+                    locale={{ emptyText: '暂无可下载资料（教师尚未开放）' }}
+                    dataSource={downloadableFiles}
+                    renderItem={(item) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            key={`dl-${item.filename}`}
+                            type="primary"
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => handleDownloadFile(item.filename)}
+                            style={{ borderRadius: 10 }}
+                          >
+                            下载
+                          </Button>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={<span style={{ fontWeight: 600 }}>{item.filename}</span>}
+                          description={item.upload_time ? `上传时间：${item.upload_time}` : ''}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )
+              }
+            ]}
+          />
+        </Card>
+
         <Card className="fade-in-up" style={{ borderRadius: 14 }}>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
             <TextArea rows={4} value={question} onChange={e => setQuestion(e.target.value)} placeholder="请输入你的问题..." />
@@ -943,32 +1040,7 @@ export default function QAPage() {
                             size="small"
                             onClick={async (e) => {
                               e.stopPropagation();
-                              try {
-                                const token = localStorage.getItem('token');
-                                const response = await fetch(`/download/${encodeURIComponent(group.fileName)}?from_qa=true`, {
-                                  headers: {
-                                    'Authorization': `Bearer ${token}`
-                                  }
-                                });
-
-                                if (response.ok) {
-                                  const blob = await response.blob();
-                                  const url = window.URL.createObjectURL(blob);
-                                  const link = document.createElement('a');
-                                  link.href = url;
-                                  link.download = group.fileName;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  window.URL.revokeObjectURL(url);
-                                  message.success('文件下载成功');
-                                } else {
-                                  message.error('文件下载失败');
-                                }
-                              } catch (error) {
-                                console.error('下载错误:', error);
-                                message.error('文件下载失败');
-                              }
+                              handleDownloadFile(group.fileName);
                             }}
                           >
                             下载

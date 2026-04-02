@@ -293,15 +293,15 @@ async def delete_knowledge_file_api(filename: str, current_user: User = Depends(
 async def qa(question: str = Form(...)):
     trace_id = uuid.uuid4().hex[:8]
     started_at = time.perf_counter()
-    print(f"[QA-DEBUG][{trace_id}] /qa start, question_len={len(str(question or ''))}")
+    print(f"[{trace_id}] /qa start, question_len={len(str(question or ''))}")
     try:
         stage_started = time.perf_counter()
         searcher = MultiDocumentSearcher(json_dir=TREE_JSON_DIR)
         searcher.load_documents()
-        print(f"[QA-DEBUG][{trace_id}] load_documents done, count={len(searcher.documents)}, elapsed={time.perf_counter() - stage_started:.2f}s")
+        print(f"[{trace_id}] load_documents done, count={len(searcher.documents)}, elapsed={time.perf_counter() - stage_started:.2f}s")
 
         if not searcher.documents:
-            print(f"[QA-DEBUG][{trace_id}] no documents available")
+            print(f"[{trace_id}] no documents available")
             return {
                 "answer": "当前没有可检索的结构化文档，请先上传并处理文件。",
                 "sources": []
@@ -309,20 +309,20 @@ async def qa(question: str = Form(...)):
 
         stage_started = time.perf_counter()
         result = await searcher.search(question, trace_id=trace_id)
-        print(f"[QA-DEBUG][{trace_id}] search done, elapsed={time.perf_counter() - stage_started:.2f}s, doc_hits={len(result.get('documents', []))}")
+        print(f"[{trace_id}] search done, elapsed={time.perf_counter() - stage_started:.2f}s, doc_hits={len(result.get('documents', []))}")
 
         stage_started = time.perf_counter()
         sources = _build_qa_sources_from_doc_results(result.get('documents', []))
 
-        print(f"[QA-DEBUG][{trace_id}] build sources done, count={len(sources)}, elapsed={time.perf_counter() - stage_started:.2f}s")
-        print(f"[QA-DEBUG][{trace_id}] /qa finished, total_elapsed={time.perf_counter() - started_at:.2f}s")
+        print(f"[{trace_id}] build sources done, count={len(sources)}, elapsed={time.perf_counter() - stage_started:.2f}s")
+        print(f"[{trace_id}] /qa finished, total_elapsed={time.perf_counter() - started_at:.2f}s")
 
         return {
             "answer": result.get('answer', ''),
             "sources": sources
         }
     except Exception as e:
-        print(f"[QA-DEBUG][{trace_id}] /qa failed after {time.perf_counter() - started_at:.2f}s, error={str(e)}")
+        print(f"[{trace_id}] /qa failed after {time.perf_counter() - started_at:.2f}s, error={str(e)}")
         return JSONResponse(status_code=500, content={"error": f"问答失败: {str(e)}"})
 
 

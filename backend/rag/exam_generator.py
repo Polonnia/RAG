@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Dict, Any, Union
 from langchain.schema import Document
@@ -97,22 +97,29 @@ class ExamGenerator:
         """生成概念题，支持难度选择"""
         try:
             # 构建提示词
-            knowledge_text = "\n".join([doc.page_content for doc in knowledge_docs])
+            knowledge_text = "\n".join([doc.page_content for doc in knowledge_docs]) if knowledge_docs else ""
+            
+            # 构建知识部分的提示
+            if knowledge_text.strip():
+                knowledge_section = f"""
+相关知识：
+{knowledge_text}"""
+            else:
+                knowledge_section = "（注：基于大纲内容自动生成，无额外知识库）"
             
             prompt = f"""
-基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的概念题：
+基于以下课程大纲生成{count}道{difficulty}难度的概念题（单选题）：
 
 课程大纲：
 {outline}
 
-相关知识：
-{knowledge_text}
+{knowledge_section}
 
 要求：
-1. 每道题包含题目、选项A-D、正确答案、解析、1-3个知识点
+1. 每道题包含题目、选项A-D、正确答案、解析、题目覆盖的核心知识点
 2. 题目要覆盖大纲中的主要概念
-3. 选项要合理，避免明显错误
-4. 解析要详细说明为什么选择该答案
+3. 知识点不要过于具体，尽量保持概括性和简洁
+4. 解析要简短（不超过200字），清晰说明为什么选择答案
 5. 难度要求：{difficulty}难度
 
 请严格按照以下JSON格式返回，不要添加任何其他内容：
@@ -135,23 +142,51 @@ class ExamGenerator:
 """
             
             response = completion_text(prompt=prompt)
-            print(f"LLM响应: {response}")  # 打印前200个字符用于调试
+            print(f"LLM响应: {response[:500]}")  # 打印前500个字符用于调试
             
-            # 尝试解析JSON响应
+            # 尝试解析JSON响应 - 使用更稳健的方法
             try:
                 import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group()
-                    result = json.loads(json_str)
-                    questions = result.get("questions", [])
-                    print(f"成功解析JSON，找到 {len(questions)} 道概念题")
-                    return questions
-                else:
-                    print("未找到JSON格式，尝试手动解析")
-                    questions = self._parse_questions_manually(response)
-                    return questions
-            except json.JSONDecodeError as e:
+                # 查找"questions"数组部分
+                match = re.search(r'"questions"\s*:\s*\[', response)
+                if match:
+                    start_bracket = match.end() - 1
+                    bracket_count = 0
+                    end_bracket = -1
+                    for i in range(start_bracket, len(response)):
+                        if response[i] == '[':
+                            bracket_count += 1
+                        elif response[i] == ']':
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                end_bracket = i + 1
+                                break
+                    
+                    if end_bracket > 0:
+                        json_str = "{" + response[match.start() - 1:end_bracket] + "}"
+                        result = json.loads(json_str)
+                        questions = result.get("questions", [])
+                        print(f"成功解析JSON，找到 {len(questions)} 道概念题")
+                        return questions
+                
+                # 备选方案：尝试从响应中查找最外层的完整JSON对象
+                start_idx = response.find('{')
+                if start_idx >= 0:
+                    for end_idx in range(len(response), start_idx, -1):
+                        try:
+                            json_str = response[start_idx:end_idx]
+                            result = json.loads(json_str)
+                            if "questions" in result:
+                                questions = result.get("questions", [])
+                                print(f"成功解析JSON，找到 {len(questions)} 道概念题")
+                                return questions
+                        except:
+                            continue
+                
+                print("未找到有效JSON格式，尝试手动解析")
+                questions = self._parse_questions_manually(response)
+                return questions
+            except Exception as e:
                 print(f"JSON解析失败: {str(e)}")
                 print("尝试手动解析")
                 questions = self._parse_questions_manually(response)
@@ -166,21 +201,28 @@ class ExamGenerator:
         if count < 1:
             return []
         try:
-            knowledge_text = "\n".join([doc.page_content for doc in knowledge_docs])
+            knowledge_text = "\n".join([doc.page_content for doc in knowledge_docs]) if knowledge_docs else ""
+            
+            # 构建知识部分的提示
+            if knowledge_text.strip():
+                knowledge_section = f"""
+相关知识：
+{knowledge_text}"""
+            else:
+                knowledge_section = "（注：基于大纲内容自动生成，无额外知识库）"
             
             prompt = f"""
-基于以下课程大纲和知识库内容，生成{count}道{difficulty}难度的填空题：
+基于以下课程大纲生成{count}道{difficulty}难度的填空题：
 
 教学内容：
 {outline}
 
-相关知识：
-{knowledge_text}
+{knowledge_section}
 
 要求：
 1. 每道题包含题目（用_____表示空白）、答案、解析
 2. 题目要覆盖大纲中的重要概念和术语
-3. 答案要准确，解析要详细
+3. 答案要准确，解析要简洁（不超过150字）
 4. 填空题要考察核心知识点，1-3个知识点
 5. 难度要求：{difficulty}难度
 6. 如果有多个空，答案用空格分隔，如："答案1 答案2 答案3"
@@ -199,22 +241,50 @@ class ExamGenerator:
 """
             
             response = completion_text(prompt=prompt)
-            print(f"填空题LLM响应: {response}")
+            print(f"填空题LLM响应: {response[:500]}")  # 打印前500个字符
             
             try:
                 import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group()
-                    result = json.loads(json_str)
-                    questions = result.get("questions", [])
-                    print(f"成功解析JSON，找到 {len(questions)} 道填空题")
-                    return questions
-                else:
-                    print("未找到JSON格式，尝试手动解析")
-                    questions = self._parse_fill_questions_manually(response)
-                    return questions
-            except json.JSONDecodeError as e:
+                # 查找"questions"数组部分
+                match = re.search(r'"questions"\s*:\s*\[', response)
+                if match:
+                    start_bracket = match.end() - 1
+                    bracket_count = 0
+                    end_bracket = -1
+                    for i in range(start_bracket, len(response)):
+                        if response[i] == '[':
+                            bracket_count += 1
+                        elif response[i] == ']':
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                end_bracket = i + 1
+                                break
+                    
+                    if end_bracket > 0:
+                        json_str = "{" + response[match.start() - 1:end_bracket] + "}"
+                        result = json.loads(json_str)
+                        questions = result.get("questions", [])
+                        print(f"成功解析JSON，找到 {len(questions)} 道填空题")
+                        return questions
+                
+                # 备选方案：尝试从响应中查找最外层的完整JSON对象
+                start_idx = response.find('{')
+                if start_idx >= 0:
+                    for end_idx in range(len(response), start_idx, -1):
+                        try:
+                            json_str = response[start_idx:end_idx]
+                            result = json.loads(json_str)
+                            if "questions" in result:
+                                questions = result.get("questions", [])
+                                print(f"成功解析JSON，找到 {len(questions)} 道填空题")
+                                return questions
+                        except:
+                            continue
+                
+                print("未找到有效JSON格式，尝试手动解析")
+                questions = self._parse_fill_questions_manually(response)
+                return questions
+            except Exception as e:
                 print(f"JSON解析失败: {str(e)}")
                 questions = self._parse_fill_questions_manually(response)
                 return questions
@@ -468,8 +538,20 @@ class ExamGenerator:
                     current_question['knowledge_points'] = points if points else []
             
             if current_question and 'question' in current_question:
-                questions.append(current_question)
-                question_count += 1
+                # 验证问题是否完整，为缺失字段填充默认值
+                if 'correct_answer' not in current_question:
+                    current_question['correct_answer'] = 'A'  # 默认答案
+                if 'explanation' not in current_question:
+                    current_question['explanation'] = '暂无解析'
+                if 'knowledge_points' not in current_question:
+                    current_question['knowledge_points'] = []
+                if 'options' not in current_question:
+                    current_question['options'] = {'A': '', 'B': '', 'C': '', 'D': ''}
+                
+                # 只添加有答案和选项的问题
+                if current_question.get('options', {}) and current_question.get('correct_answer'):
+                    questions.append(current_question)
+                    question_count += 1
             
             print(f"手动解析完成，找到 {question_count} 道概念题")
             return questions
@@ -523,8 +605,18 @@ class ExamGenerator:
                     current_question['knowledge_points'] = points if points else []
             
             if current_question and 'question' in current_question:
-                questions.append(current_question)
-                question_count += 1
+                # 验证问题是否完整，为缺失字段填充默认值
+                if 'correct_answer' not in current_question:
+                    current_question['correct_answer'] = '答案'
+                if 'explanation' not in current_question:
+                    current_question['explanation'] = '暂无解析'
+                if 'knowledge_points' not in current_question:
+                    current_question['knowledge_points'] = []
+                
+                # 只添加有答案的问题
+                if current_question.get('correct_answer'):
+                    questions.append(current_question)
+                    question_count += 1
             
             print(f"手动解析完成，找到 {question_count} 道填空题")
             return questions
@@ -668,53 +760,51 @@ class ExamGenerator:
                 "programming_questions": []
             }
             qc = question_config or {}
-            # 概念题（单选）
-            if qc.get('choice', {}).get('enabled', True):
-                count = qc.get('choice', {}).get('count', 5)
-                points = qc.get('choice', {}).get('points', 2)
-                print(f"生成{count}道单选题，每题{points}分，难度：{difficulty}")
-                questions = self.generate_concept_questions(outline, knowledge_docs, count, difficulty)
+            stage_specs = [
+                ('choice', 'concept_questions', '单选题', self.generate_concept_questions, True, 5, 2),
+                ('multi', 'multi_questions', '多选题', self.generate_multi_questions, False, 0, 3),
+                ('fill_blank', 'fill_blank_questions', '填空题', self.generate_fill_blank_questions, True, 2, 4),
+                ('short_answer', 'short_answer_questions', '简答题', self.generate_short_answer_questions, True, 2, 5),
+                ('programming', 'programming_questions', '编程题', self.generate_programming_questions, False, 1, 10),
+            ]
+
+            jobs = []
+            for cfg_key, content_key, stage_name, fn, default_enabled, default_count, default_points in stage_specs:
+                cfg_item = qc.get(cfg_key, {})
+                enabled = cfg_item.get('enabled', default_enabled)
+                if not enabled:
+                    if cfg_key == 'programming':
+                        print("未勾选编程题或大纲不适合，不生成编程题。")
+                    continue
+
+                count = int(cfg_item.get('count', default_count) or 0)
+                if count <= 0:
+                    continue
+
+                points = int(cfg_item.get('points', default_points) or default_points)
+                print(f"并行生成{count}道{stage_name}，每题{points}分，难度：{difficulty}")
+                jobs.append((content_key, stage_name, fn, count, points))
+
+            def _run_job(job):
+                content_key, stage_name, fn, count, points = job
+                try:
+                    questions = fn(outline, knowledge_docs, count, difficulty)
+                except Exception as job_error:
+                    print(f"{stage_name}生成失败: {str(job_error)}")
+                    questions = []
+
                 for q in questions:
                     q['points'] = points
-                exam_content["concept_questions"] = questions
-            # 多选题
-            if qc.get('multi', {}).get('enabled', False):
-                count = qc.get('multi', {}).get('count', 0)
-                points = qc.get('multi', {}).get('points', 3)
-                print(f"生成{count}道多选题，每题{points}分，难度：{difficulty}")
-                questions = self.generate_multi_questions(outline, knowledge_docs, count, difficulty)
-                for q in questions:
-                    q['points'] = points
-                exam_content["multi_questions"] = questions
-            # 填空题
-            if qc.get('fill_blank', {}).get('enabled', True):
-                count = qc.get('fill_blank', {}).get('count', 2)
-                points = qc.get('fill_blank', {}).get('points', 4)
-                print(f"生成{count}道填空题，每题{points}分，难度：{difficulty}")
-                questions = self.generate_fill_blank_questions(outline, knowledge_docs, count, difficulty)
-                for q in questions:
-                    q['points'] = points
-                exam_content["fill_blank_questions"] = questions
-            # 简答题
-            if qc.get('short_answer', {}).get('enabled', True):
-                count = qc.get('short_answer', {}).get('count', 2)
-                points = qc.get('short_answer', {}).get('points', 5)
-                print(f"生成{count}道简答题，每题{points}分，难度：{difficulty}")
-                questions = self.generate_short_answer_questions(outline, knowledge_docs, count, difficulty)
-                for q in questions:
-                    q['points'] = points
-                exam_content["short_answer_questions"] = questions
-            # 编程题：只有勾选时才生成
-            if qc.get('programming', {}).get('enabled', False):
-                count = qc.get('programming', {}).get('count', 1)
-                points = qc.get('programming', {}).get('points', 10)
-                print(f"生成{count}道编程题，每题{points}分，难度：{difficulty}")
-                questions = self.generate_programming_questions(outline, knowledge_docs, count, difficulty)
-                for q in questions:
-                    q['points'] = points
-                exam_content["programming_questions"] = questions
-            else:
-                print("未勾选编程题或大纲不适合，不生成编程题。")
+                return content_key, stage_name, questions
+
+            if jobs:
+                with ThreadPoolExecutor(max_workers=min(5, len(jobs))) as executor:
+                    futures = [executor.submit(_run_job, job) for job in jobs]
+                    for future in as_completed(futures):
+                        content_key, stage_name, questions = future.result()
+                        exam_content[content_key] = questions
+                        print(f"{stage_name}生成完成，数量={len(questions)}")
+
             print("考核内容生成完成")
             return exam_content
         except Exception as e:

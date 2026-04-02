@@ -244,7 +244,7 @@ Directly return the final JSON structure. Do not output anything else.
     2) 媒体类型必须引用时间段，格式示例：[文档ID 00:10-00:35]。
     3) 如果PDF只能定位到范围而无页级标签，才可使用范围引用：[文档ID 12-15]。
     4) 引用必须使用英文方括号'[]'，不能是中文括号'【】'。
-    5) 请严格使用文档ID（如 doc_0001）作为引用，不要使用实际文件名。
+    5) 不用在答案最后列出引用来源，直接在相关内容后面标注即可。
     """
 
     async def stream_comprehensive_answer(self, query: str, doc_results: List[Dict], trace_id: str = "-") -> AsyncGenerator[str, None]:

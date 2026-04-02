@@ -425,9 +425,11 @@ export default function TeachingSettings() {
                   expandedKeys={expandedKeys}
                   treeData={treeData}
                   onExpand={(keys) => setExpandedKeys(keys)}
-                  onCheck={(nextChecked) => {
+                  onCheck={(nextChecked, info) => {
                     const checked = Array.isArray(nextChecked) ? nextChecked : (nextChecked?.checked || []);
-                    const halfChecked = Array.isArray(nextChecked) ? [] : (nextChecked?.halfChecked || []);
+                    const halfChecked = Array.isArray(nextChecked)
+                      ? (info?.halfCheckedKeys || [])
+                      : (nextChecked?.halfChecked || []);
                     setCheckedKeys(checked);
                     setHalfCheckedKeys(halfChecked);
                   }}
