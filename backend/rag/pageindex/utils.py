@@ -658,7 +658,7 @@ def add_node_text_with_labels(node, pdf_pages):
 
 
 async def generate_node_summary(node, model=None):
-    prompt = f"""You are given a part of a document, your task is to generate a concise description of the partial document about what are main points covered. The description should be concise. Directly return the description, do not include any other text.
+    prompt = f"""You are given a part of a document, your task is to generate a concise description of the partial document about what are main points covered. Directly return the description that starts with "This section..." or "这个章节...". Do not include any other text.
 
     Partial Document Text: {node['text']}
     

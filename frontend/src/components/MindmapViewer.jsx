@@ -624,7 +624,7 @@ export default function MindMapViewer({ filename, onClose }) {
   // 渲染思维导图
   return (
     <Card
-      title={`思维导图 - ${filename}`}
+      title={`智能分节 - ${filename}`}
       style={{ height: '100%' }}
       extra={
         <Space>
@@ -677,7 +677,7 @@ export default function MindMapViewer({ filename, onClose }) {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <Spin size="large" />
-          <div style={{ marginTop: '16px' }}>正在生成思维导图，请稍候...</div>
+          <div style={{ marginTop: '16px' }}>正在生成结构信息，请稍候...</div>
         </div>
       ) : mindmapData ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 40%) 1fr', gap: 16, minHeight: '70vh' }}>

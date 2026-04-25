@@ -1,0 +1,155 @@
+[
+  {
+    "total_page_number": 119
+  },
+  {
+    "total_token": 63157
+  },
+  {
+    "message": "Page 2 has toc"
+  },
+  {
+    "message": "Found the last page with toc: 2"
+  },
+  {
+    "toc_content": "3.1 \u2022INTRODUCTION AND TRANSPORT-LAYER SERVICES 187\nMobile NetworkNational or\nGlobal ISP\nLocal or\nRegional ISP\nEnterprise NetworkHome Network Network\nData link\nPhysicalApplication\nTransport\nNetwork\nData link\nPhysicalApplication\nTransportNetwork\nData link\nPhysicalNetwork\nData link\nPhysical\nNetwork\nData link\nPhysical\nNetwork\nData link\nPhysicalNetwork\nData link\nPhysicalLogical end-to-end transport\nFigure 3.1 /lozenge6The transport layer provides logical rather than physical \ncommunication between application processes",
+    "toc_page_list": [
+      2
+    ],
+    "page_index_given_in_toc": "yes",
+    "toc_source": "auto"
+  },
+  {
+    "message": "toc_with_page_number: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'page': 187}]"
+  },
+  {
+    "message": "toc_with_physical_index: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': '<physical_index_4>'}]"
+  },
+  {
+    "message": "toc_with_physical_index: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': 4}]"
+  },
+  {
+    "message": "matching_pairs: [{'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'page': 187, 'physical_index': 4}]"
+  },
+  {
+    "message": "offset: -183"
+  },
+  {
+    "message": "toc_with_page_number: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': 4}]"
+  },
+  {
+    "message": "toc_with_page_number: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': 4}]"
+  },
+  {
+    "mode": "process_toc_with_page_numbers",
+    "accuracy": 0,
+    "incorrect_results": []
+  },
+  {
+    "message": "toc_transformer: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'page': 187}]"
+  },
+  {
+    "message": "len(group_texts): 4"
+  },
+  {
+    "message": "add_page_number_to_toc: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': '<physical_index_2>'}, {'structure': '3.4', 'title': 'PRINCIPLES OF RELIABLE DATA TRANSFER', 'physical_index': '<physical_index_33>'}, {'structure': '3.5', 'title': 'CONNECTION-ORIENTED TRANSPORT: TCP', 'physical_index': '<physical_index_66>'}]"
+  },
+  {
+    "message": "convert_physical_index_to_int: [{'structure': '3.1', 'title': 'INTRODUCTION AND TRANSPORT-LAYER SERVICES', 'physical_index': 2}, {'structure': '3.4', 'title': 'PRINCIPLES OF RELIABLE DATA TRANSFER', 'physical_index': 33}, {'structure': '3.5', 'title': 'CONNECTION-ORIENTED TRANSPORT: TCP', 'physical_index': 66}]"
+  },
+  {
+    "mode": "process_toc_with_page_numbers",
+    "accuracy": 0.6666666666666666,
+    "incorrect_results": [
+      {
+        "list_index": 2,
+        "answer": "no",
+        "title": "CONNECTION-ORIENTED TRANSPORT: TCP",
+        "page_number": 66
+      }
+    ]
+  },
+  {
+    "message": "incorrect_results_and_range_logs: [{'list_index': 2, 'title': 'CONNECTION-ORIENTED TRANSPORT: TCP', 'prev_correct': 33, 'next_correct': 119}]"
+  },
+  {
+    "message": "invalid_results: []"
+  },
+  {
+    "message": "Checking title appearance in start concurrently"
+  },
+  {
+    "message": "Response: {'thinking': \"The section title 'PRINCIPLES OF RELIABLE DATA TRANSFER' appears at the end of the given page_text, after a large amount of other content. The page_text begins with '(8,000 bits) per packet...', so the section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text begins with 'recover from, congestion within the network...' which is not the section title 'INTRODUCTION AND TRANSPORT-LAYER SERVICES'. The section title appears later in the text as '3.1 Introduction and Transport-Layer Services', so there is content before it.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '230 CHAPTER 3 \u2022 TRANSPORT LAYER' and then continues with a table and other content before the section title '3.5 Connection-Oriented Transport: TCP' appears. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The given section title is 'Preface', but the page_text starts with 'CHAPTER 3'. There is no mention of 'Preface' at the beginning of the page_text; the first content is 'CHAPTER 3'. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "len(group_texts): 3"
+  },
+  {
+    "message": "generate_toc: [{'structure': '3.5', 'title': 'Connection-Oriented Transport: TCP', 'physical_index': '<physical_index_46>'}, {'structure': '3.5.1', 'title': 'The TCP Connection', 'physical_index': '<physical_index_47>'}, {'structure': '3.5.2', 'title': 'TCP Segment Structure', 'physical_index': '<physical_index_49>'}, {'structure': '3.5.3', 'title': 'Round-Trip Time Estimation and Timeout', 'physical_index': '<physical_index_54>'}, {'structure': '3.5.4', 'title': 'Reliable Data Transfer', 'physical_index': '<physical_index_58>'}, {'structure': '3.5.5', 'title': 'Flow Control', 'physical_index': '<physical_index_66>'}, {'structure': '3.5.6', 'title': 'TCP Connection Management', 'physical_index': '<physical_index_68>'}, {'structure': '3.6', 'title': 'Principles of Congestion Control', 'physical_index': '<physical_index_75>'}, {'structure': '3.6.1', 'title': 'The Causes and the Costs of Congestion', 'physical_index': '<physical_index_75>'}, {'structure': '3.6.2', 'title': 'Approaches to Congestion Control', 'physical_index': '<physical_index_81>'}, {'structure': '3.6.3', 'title': 'Network-Assisted Congestion-Control Example: ATM ABR Congestion Control', 'physical_index': '<physical_index_82>'}, {'structure': '3.7', 'title': 'TCP Congestion Control', 'physical_index': '<physical_index_85>'}, {'structure': '3.7.1', 'title': 'Fairness', 'physical_index': '<physical_index_95>'}, {'structure': '3.8', 'title': 'Summary', 'physical_index': '<physical_index_99>'}, {'structure': '3.9', 'title': 'Problems', 'physical_index': '<physical_index_105>'}]"
+  },
+  {
+    "message": "convert_physical_index_to_int: [{'structure': '3.5', 'title': 'Connection-Oriented Transport: TCP', 'physical_index': 46}, {'structure': '3.5.1', 'title': 'The TCP Connection', 'physical_index': 47}, {'structure': '3.5.2', 'title': 'TCP Segment Structure', 'physical_index': 49}, {'structure': '3.5.3', 'title': 'Round-Trip Time Estimation and Timeout', 'physical_index': 54}, {'structure': '3.5.4', 'title': 'Reliable Data Transfer', 'physical_index': 58}, {'structure': '3.5.5', 'title': 'Flow Control', 'physical_index': 66}, {'structure': '3.5.6', 'title': 'TCP Connection Management', 'physical_index': 68}, {'structure': '3.6', 'title': 'Principles of Congestion Control', 'physical_index': 75}, {'structure': '3.6.1', 'title': 'The Causes and the Costs of Congestion', 'physical_index': 75}, {'structure': '3.6.2', 'title': 'Approaches to Congestion Control', 'physical_index': 81}, {'structure': '3.6.3', 'title': 'Network-Assisted Congestion-Control Example: ATM ABR Congestion Control', 'physical_index': 82}, {'structure': '3.7', 'title': 'TCP Congestion Control', 'physical_index': 85}, {'structure': '3.7.1', 'title': 'Fairness', 'physical_index': 95}, {'structure': '3.8', 'title': 'Summary', 'physical_index': 99}, {'structure': '3.9', 'title': 'Problems', 'physical_index': 105}]"
+  },
+  {
+    "mode": "process_toc_with_page_numbers",
+    "accuracy": 1.0,
+    "incorrect_results": []
+  },
+  {
+    "message": "Checking title appearance in start concurrently"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with 'congested network switch...' which is clearly not the section title 'TCP Congestion Control'. The section title appears later in the text, after several paragraphs about ATM ABR and other topics. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The section title 'TCP Connection Management' appears after several paragraphs of text about flow control and other topics. The page_text begins with 'There is one minor technical problem with this scheme...', not with the section title. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The section title 'Flow Control' appears after a significant amount of preceding text, including a discussion about TCP modifications and selective acknowledgment, as well as a subsection header '3.5.5 Flow Control'. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '3.6 \u2022PRINCIPLES OF CONGESTION CONTROL 259' which is a variation of the given section title 'Principles of Congestion Control'. There is no content before this title, so the section starts at the beginning of the page_text.\", 'start_begin': 'yes'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '3.5 \u2022CONNECTION-ORIENTED TRANSPORT: TCP 233', which is a different section title. The current section title 'TCP Segment Structure' appears later in the text, after other content. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text begins with 'and header fields for sequence and acknowledgment numbers. TCP is defined in...' which is not the section title 'The TCP Connection'. The section title appears later in the text, after other content. Therefore, the section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text begins with '230 CHAPTER 3 \u2022 TRANSPORT LAYER' and a table, followed by other content before the section title '3.5 Connection-Oriented Transport: TCP' appears. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with 'PROBLEMS 289' which is a variation of the section title 'Problems'. After ignoring case and space inconsistencies, the first content in the page_text is the section title itself, with no other content before it.\", 'start_begin': 'yes'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '242 CHAPTER 3 \u2022 TRANSPORT LAYER' before the section title '3.5.4 Reliable Data Transfer' appears. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '266 CHAPTER 3 \u2022 TRANSPORT LAYER' and then continues with other content before the section title '3.6.3 Network-Assisted Congestion-Control Example: ATM ABR Congestion Control' appears later in the text. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The section title 'Fairness' appears after a significant amount of preceding text, including the heading '3.7 \u2022TCP CONGESTION CONTROL 279' and multiple paragraphs. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '3.6 \u2022PRINCIPLES OF CONGESTION CONTROL 265' and other content before the section title 'Approaches to Congestion Control' appears later in the text. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '238 CHAPTER 3 \u2022 TRANSPORT LAYER' and other content before the section title '3.5.3 Round-Trip Time Estimation and Timeout' appears later in the text. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The given section title is 'The Causes and the Costs of Congestion', which appears as '3.6.1 The Causes and the Costs of Congestion' in the page_text. However, before this title, there is other content: '3.6 \u2022PRINCIPLES OF CONGESTION CONTROL 259' and '3.6 Principles of Congestion Control' and several paragraphs. Therefore, the current section does not start at the beginning of the page_text.\", 'start_begin': 'no'}"
+  },
+  {
+    "message": "Response: {'thinking': \"The page_text starts with '3.8 \u2022SUMMARY 283' followed by '3.8 Summary'. The given section title is 'Summary'. The first content in the page_text is '3.8 \u2022SUMMARY 283', which is a variation of the section title. After fuzzy matching and ignoring space inconsistencies, this is essentially the same as the section title 'Summary'. Therefore, the section starts at the beginning of the page_text.\", 'start_begin': 'yes'}"
+  }
+]

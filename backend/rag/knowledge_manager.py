@@ -60,6 +60,27 @@ def format_file_size(size_bytes):
     return f"{size_bytes:.1f} TB"
 
 
+def _parse_file_index(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text.isdigit():
+        return None
+    parsed = int(text)
+    return parsed if parsed > 0 else None
+
+
+def _next_file_index(files_info):
+    max_index = 0
+    for item in files_info.values():
+        if not isinstance(item, dict):
+            continue
+        parsed = _parse_file_index(item.get('file_index'))
+        if parsed and parsed > max_index:
+            max_index = parsed
+    return f"{max_index + 1:03d}"
+
+
 def _save_tree_result(source_file_path, tree_result):
     os.makedirs(TREES_DIR, exist_ok=True)
     output_name = f"{Path(source_file_path).stem}_structure.json"
@@ -236,7 +257,9 @@ async def upload_knowledge_files(files, current_user, db, max_concurrency=3, pro
                 raise FileNotFoundError(f"文件保存失败: {file_path}")
 
             stat = os.stat(file_path)
+            file_index = _next_file_index(files_info)
             files_info[safe_filename] = {
+                'file_index': file_index,
                 'filename': safe_filename,
                 'original_filename': file.filename,
                 'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -337,6 +360,7 @@ def get_knowledge_files(db):
 
         if filename not in files_info:
             files_info[filename] = {
+                'file_index': _next_file_index(files_info),
                 'filename': filename,
                 'original_filename': filename,
                 'upload_time': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
@@ -351,6 +375,9 @@ def get_knowledge_files(db):
         else:
             # 兼容旧记录缺字段的情况
             item = files_info[filename]
+            if not item.get('file_index'):
+                item['file_index'] = _next_file_index(files_info)
+                info_updated = True
             if 'file_size' not in item:
                 item['file_size'] = stat.st_size
                 info_updated = True

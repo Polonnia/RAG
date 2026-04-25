@@ -1,5 +1,6 @@
 {
   "计算机网络自顶向下第八版英文PDF.pdf": {
+    "file_index": "001",
     "filename": "计算机网络自顶向下第八版英文PDF.pdf",
     "original_filename": "计算机网络自顶向下第八版英文PDF.pdf",
     "upload_time": "2026-03-29 06:51:29",
@@ -11,6 +12,7 @@
     "status": "completed"
   },
   "【硬核科普】IP地址是什么东西？IPV6和IPV4有什么区别？公网IP和私有IP又是什么？.mp4": {
+    "file_index": "002",
     "filename": "【硬核科普】IP地址是什么东西？IPV6和IPV4有什么区别？公网IP和私有IP又是什么？.mp4",
     "original_filename": "【硬核科普】IP地址是什么东西？IPV6和IPV4有什么区别？公网IP和私有IP又是什么？.mp4",
     "upload_time": "2026-03-29 07:42:39",
@@ -22,6 +24,7 @@
     "status": "completed"
   },
   "NAT是什么？它是怎么拯救IP地址的！[网络科普].mp4": {
+    "file_index": "003",
     "filename": "NAT是什么？它是怎么拯救IP地址的！[网络科普].mp4",
     "original_filename": "NAT是什么？它是怎么拯救IP地址的！[网络科普].mp4",
     "upload_time": "2026-03-31 16:13:58",
@@ -31,16 +34,5 @@
     "uploaded_by": "laoshi",
     "student_can_download": false,
     "status": "completed"
-  },
-  "Chapter 3 Transport Layer.pdf": {
-    "filename": "Chapter 3 Transport Layer.pdf",
-    "original_filename": "Chapter 3 Transport Layer.pdf",
-    "upload_time": "2026-04-03 04:48:17",
-    "file_size": 1665090,
-    "file_size_display": "1.6 MB",
-    "file_type": ".pdf",
-    "uploaded_by": "laoshi",
-    "student_can_download": false,
-    "status": "uploaded"
   }
 }

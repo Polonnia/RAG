@@ -81,6 +81,8 @@ export default function KnowledgeManagement() {
     setFileLoading(false);
   };
 
+  const getDisplayFileName = (file) => String(file?.original_filename || file?.filename || '');
+
   const handleUpload = async () => {
     if (selectedUploadFiles.length === 0) {
       message.warning('请先选择文件');
@@ -217,6 +219,8 @@ export default function KnowledgeManagement() {
       'pdf': { color: 'red', text: 'PDF' },
       'doc': { color: 'blue', text: 'Word' },
       'docx': { color: 'blue', text: 'Word' },
+      'ppt': { color: 'orange', text: 'PPT' },
+      'pptx': { color: 'orange', text: 'PPTX' },
       'mp3': { color: 'green', text: '音频' },
       'wav': { color: 'green', text: '音频' },
       'm4a': { color: 'green', text: '音频' },
@@ -277,8 +281,8 @@ export default function KnowledgeManagement() {
                 {uploadFileStatuses.map((item, index) => (
                   <div key={`${item.filename}-${index}`} style={{ marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 28, marginBottom: 4 }}>
-                      <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.filename}>
-                        {item.filename}
+                      <Text style={{ maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={getDisplayFileName(item)}>
+                        {getDisplayFileName(item)}
                       </Text>
                       <Text type="secondary" style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }} title={item.step || '处理中'}>
                         {item.step || '处理中'}
@@ -316,6 +320,7 @@ export default function KnowledgeManagement() {
             dataSource={knowledgeFiles}
             renderItem={(file) => {
               const fileType = getFileTypeTag(file.filename);
+              const displayFileName = getDisplayFileName(file);
               return (
                 <List.Item
                   actions={[
@@ -369,13 +374,16 @@ export default function KnowledgeManagement() {
                   <List.Item.Meta
                     title={
                       <Space>
-                        <span>{file.filename}</span>
+                        <span>{displayFileName}</span>
                         <Tag color={fileType.color}>{fileType.text}</Tag>
                       </Space>
                     }
                     description={
                       <Space direction="vertical" size="small">
                         <Text type="secondary">上传时间: {file.upload_time}</Text>
+                        {displayFileName !== file.filename ? (
+                          <Text type="secondary">系统文件: {file.filename}</Text>
+                        ) : null}
                       </Space>
                     }
                   />

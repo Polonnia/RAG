@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form, Query
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from models import get_db, User, QAHistory, TeachingPlanHistory, ExamHistory, SessionLocal
 from rag.pageindex_search import MultiDocumentSearcher
@@ -9,7 +9,7 @@ from rag.teaching_design import (
     generate_teaching_schedule_markdown,
     generate_teaching_schedule_markdown_stream,
 )
-from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR
+from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR, load_files_info
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
 from typing import Any
@@ -21,6 +21,7 @@ import asyncio
 import threading
 import json
 import re
+import mimetypes
 from auth import get_current_user
 
 router = APIRouter()
@@ -40,9 +41,41 @@ async def _resolve_maybe_async(value: Any):
 
 
 def _build_qa_sources_from_doc_results(doc_results):
+    files_info = load_files_info()
+
+    def _resolve_original_filename(doc_name: str) -> str:
+        candidate = str(doc_name or '').strip()
+        if not candidate:
+            return '未知来源'
+
+        candidate_lower = candidate.lower()
+        candidate_stem = os.path.splitext(candidate_lower)[0]
+
+        for item in files_info.values():
+            if not isinstance(item, dict):
+                continue
+            stored_name = str(item.get('filename') or '').strip()
+            original_name = str(item.get('original_filename') or stored_name or '').strip()
+            if not stored_name and not original_name:
+                continue
+
+            stored_lower = stored_name.lower()
+            original_lower = original_name.lower()
+            stored_stem = os.path.splitext(stored_lower)[0]
+            original_stem = os.path.splitext(original_lower)[0]
+
+            if candidate_lower in {stored_lower, original_lower}:
+                return original_name or stored_name or candidate
+            if candidate_stem and candidate_stem in {stored_stem, original_stem}:
+                return original_name or stored_name or candidate
+            if candidate_lower.endswith('.pdf') and original_stem == candidate_stem:
+                return original_name or stored_name or candidate
+
+        return candidate
+
     sources = []
     for doc_result in doc_results:
-        doc_name = doc_result.get('doc_name', '未知来源')
+        doc_name = _resolve_original_filename(doc_result.get('doc_name', '未知来源'))
         doc_id = doc_result.get('doc_id')
         for node in doc_result.get('results', {}).get('nodes', []):
             page_segments = node.get('page_segments') or []
@@ -691,6 +724,20 @@ async def view_pdf_file(filename: str, current_user: User = Depends(get_current_
             raise HTTPException(status_code=400, detail="仅支持PDF文件预览")
         # 以内联方式返回PDF，使浏览器显示而不是下载
         return FileResponse(file_path, media_type='application/pdf', headers={"Content-Disposition": "inline"})
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/view-media")
+async def view_media_file(filename: str = Query(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """在浏览器中预览媒体文件（使用 query 参数避免长文件名路径兼容问题）。"""
+    try:
+        file_path = get_download_file_path(filename=filename, current_user=current_user, db=db)
+        guessed_type, _ = mimetypes.guess_type(filename)
+        media_type = guessed_type or 'application/octet-stream'
+        # 仅预览，不强制下载，避免文件名编码导致的响应头兼容问题
+        return FileResponse(file_path, media_type=media_type)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError as e:

@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
-import { Button, Input, List, message, Modal, Popconfirm, Progress, Space, Spin, Tag, Card, Tabs, Badge, Collapse } from 'antd';
+import { Button, Input, List, message, Popconfirm, Progress, Space, Spin, Tag, Card, Tabs, Badge, Collapse } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import http from '../api/http';
 import getApiUrl from '../apiConfig';
-import { BookOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { BookOutlined, DeleteOutlined, DownloadOutlined, CloseOutlined } from '@ant-design/icons';
 import { Document, Page, pdfjs } from 'react-pdf';
 import ReactPlayer from 'react-player';
 import PageHeader from '../components/PageHeader';
@@ -61,6 +61,9 @@ export default function QAPage() {
   const [viewerFileName, setViewerFileName] = useState('');
   const [viewerBlobUrl, setViewerBlobUrl] = useState('');
   const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerAspectRatio, setViewerAspectRatio] = useState(null);
+  const [viewerPanelWidth, setViewerPanelWidth] = useState(720);
+  const [sourcePositions, setSourcePositions] = useState({});
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
   const [pdfPage, setPdfPage] = useState(1);
   const [mediaStartSec, setMediaStartSec] = useState(null);
@@ -68,8 +71,11 @@ export default function QAPage() {
   const [mediaContentType, setMediaContentType] = useState('');
   const [isMediaPlaying, setIsMediaPlaying] = useState(true);
   const [mediaReady, setMediaReady] = useState(false);
+  const [activeSourceIndex, setActiveSourceIndex] = useState(null);
+  const [activeSourceFileName, setActiveSourceFileName] = useState('');
   const mediaPlayerRef = useRef(null);
   const qaStageTimerRef = useRef(null);
+  const viewerResizeRef = useRef(null);
 
   const fetchQaHistory = async () => {
     try {
@@ -445,17 +451,33 @@ export default function QAPage() {
   };
 
   const tryFetchMediaBlob = async (name) => {
-    const response = await http.get(`/download/${encodeURIComponent(name)}`, {
-      responseType: 'blob'
-    });
-    const contentType = response.headers?.['content-type'] || response.data?.type || '';
-    const isMediaType = String(contentType).startsWith('audio/') || String(contentType).startsWith('video/');
-    return {
-      fileName: name,
-      blob: response.data,
-      contentType,
-      isMediaType,
-    };
+    try {
+      const response = await http.get('/view-media', {
+        params: { filename: name },
+        responseType: 'blob'
+      });
+      const contentType = response.headers?.['content-type'] || response.data?.type || '';
+      const isMediaType = String(contentType).startsWith('audio/') || String(contentType).startsWith('video/');
+      return {
+        fileName: name,
+        blob: response.data,
+        contentType,
+        isMediaType,
+      };
+    } catch (primaryError) {
+      // 兼容旧接口作为兜底
+      const response = await http.get(`/download/${encodeURIComponent(name)}`, {
+        responseType: 'blob'
+      });
+      const contentType = response.headers?.['content-type'] || response.data?.type || '';
+      const isMediaType = String(contentType).startsWith('audio/') || String(contentType).startsWith('video/');
+      return {
+        fileName: name,
+        blob: response.data,
+        contentType,
+        isMediaType,
+      };
+    }
   };
 
   const resolveMediaBlobForPlayback = async (rawFileName) => {
@@ -538,7 +560,15 @@ export default function QAPage() {
         const metadata = source.metadata || {};
         const fileName = metadata.source || '未知来源';
         if (!grouped[fileName]) {
-          grouped[fileName] = { fileName };
+          const pageNum = metadata.page ? Number(metadata.page) : 1;
+          const startTime = metadata.start_time;
+          const endTime = metadata.end_time;
+          grouped[fileName] = {
+            fileName,
+            page: pageNum,
+            start_time: startTime,
+            end_time: endTime,
+          };
         }
       }
     });
@@ -571,6 +601,16 @@ export default function QAPage() {
     return getLiveSourcesFromAnswer(answer);
   }, [qaSources, answer]);
 
+  const viewerPreviewSize = useMemo(() => {
+    const availableWidth = Math.max(320, viewerPanelWidth - 48);
+    const availableHeight = Math.max(240, Math.floor((window.innerHeight || 900) * 0.72) - 120);
+
+    return {
+      width: Math.max(280, Math.round(availableWidth)),
+      height: Math.max(200, Math.round(availableHeight)),
+    };
+  }, [viewerPanelWidth]);
+
   const getCitationRefIndex = (payload) => {
     // 调试：打印引用索引解析
     console.log('[QA调试] getCitationRefIndex payload:', payload);
@@ -599,9 +639,121 @@ export default function QAPage() {
     if (viewerBlobUrl) {
       window.URL.revokeObjectURL(viewerBlobUrl);
     }
+    const resizeHandlers = viewerResizeRef.current;
+    if (resizeHandlers) {
+      window.removeEventListener('mousemove', resizeHandlers.handleMouseMove);
+      window.removeEventListener('mouseup', resizeHandlers.handleMouseUp);
+      viewerResizeRef.current = null;
+    }
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
     setViewerOpen(false);
     setViewerType(null);
     setViewerFileName('');
+    setViewerBlobUrl('');
+    setViewerAspectRatio(null);
+    setPdfTotalPages(0);
+    setPdfPage(1);
+    setMediaStartSec(null);
+    setMediaEndSec(null);
+    setMediaContentType('');
+    setIsMediaPlaying(false);
+    setMediaReady(false);
+    setActiveSourceIndex(null);
+    setActiveSourceFileName('');
+  };
+
+  const clampViewerPanelWidth = (width) => {
+    const minWidth = 420;
+    const maxWidth = Math.max(minWidth, window.innerWidth - 120);
+    return Math.min(Math.max(width, minWidth), maxWidth);
+  };
+
+  const handleViewerResizeStart = (event) => {
+    if (!viewerOpen) return;
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = viewerPanelWidth;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const nextWidth = clampViewerPanelWidth(startWidth + delta);
+      setViewerPanelWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      viewerResizeRef.current = null;
+    };
+
+    viewerResizeRef.current = { handleMouseMove, handleMouseUp };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  useEffect(() => {
+    return () => {
+      const resizeHandlers = viewerResizeRef.current;
+      if (resizeHandlers) {
+        window.removeEventListener('mousemove', resizeHandlers.handleMouseMove);
+        window.removeEventListener('mouseup', resizeHandlers.handleMouseUp);
+      }
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
+  const inferSourceTypeFromFileName = (fileName) => {
+    const lower = String(fileName || '').toLowerCase();
+    if (lower.endsWith('.pdf')) return 'pdf';
+    if (lower.match(/\.(ppt|pptx|doc|docx)$/)) return 'pdf';
+    if (lower.match(/\.(mp4|webm|mov|mkv|mp3|wav|m4a|ogg)$/)) return 'media';
+    return null;
+  };
+
+  const resolvePreviewFileName = (fileName) => {
+    const resolvedName = String(fileName || '').trim();
+    const lower = resolvedName.toLowerCase();
+    if (lower.endsWith('.ppt') || lower.endsWith('.pptx') || lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      return resolvedName.replace(/\.[^./\\]+$/, '.pdf');
+    }
+    return resolvedName;
+  };
+
+  const openSourceByFileName = async (fileName, options = {}) => {
+    const resolvedFileName = resolveCitationFileName(fileName);
+    const inferredType = options.type || inferSourceTypeFromFileName(resolvedFileName);
+    const previewFileName = resolvePreviewFileName(resolvedFileName);
+
+    setViewerOpen(true);
+    setActiveSourceFileName(resolvedFileName);
+    setActiveSourceIndex(options.index ?? null);
+
+    const pageNum = options.page ?? sourcePositions[resolvedFileName]?.page ?? 1;
+    const startText = options.start ?? sourcePositions[resolvedFileName]?.start ?? null;
+    const endText = options.end ?? sourcePositions[resolvedFileName]?.end ?? null;
+
+    if (inferredType === 'pdf') {
+      await handleViewPdf(previewFileName, pageNum, resolvedFileName);
+      return;
+    }
+
+    if (inferredType === 'media') {
+      await handleOpenMediaWithTime(resolvedFileName, startText, endText);
+      return;
+    }
+
+    setViewerType(null);
+    setViewerFileName(resolvedFileName);
     setViewerBlobUrl('');
     setPdfTotalPages(0);
     setPdfPage(1);
@@ -610,15 +762,17 @@ export default function QAPage() {
     setMediaContentType('');
     setIsMediaPlaying(false);
     setMediaReady(false);
+    message.info('当前文件类型暂不支持内嵌预览，可使用下载按钮获取文件');
   };
 
-  const handleViewPdf = async (fileName, pageNumber) => {
+  const handleViewPdf = async (fileName, pageNumber, displayFileName = fileName) => {
     try {
-      if (!fileName.toLowerCase().endsWith('.pdf')) {
+      if (!String(fileName || '').toLowerCase().endsWith('.pdf')) {
         message.error('仅支持PDF文件在浏览器中预览');
         return;
       }
 
+      setViewerAspectRatio(null);
       message.loading({ content: '正在加载PDF...', duration: 0 });
       setViewerLoading(true);
       
@@ -639,7 +793,7 @@ export default function QAPage() {
         }
 
         setViewerType('pdf');
-        setViewerFileName(fileName);
+        setViewerFileName(displayFileName);
         setViewerBlobUrl(blobUrl);
         setPdfPage(Number(pageNumber) > 0 ? Number(pageNumber) : 1);
         setViewerOpen(true);
@@ -667,6 +821,7 @@ export default function QAPage() {
 
   const handleOpenMediaWithTime = async (fileName, startText, endText) => {
     try {
+      setViewerAspectRatio(null);
       message.loading({ content: '正在加载媒体文件...', duration: 0 });
       setViewerLoading(true);
       const mediaData = await resolveMediaBlobForPlayback(fileName);
@@ -723,23 +878,31 @@ export default function QAPage() {
     }
     const fileName = resolveCitationFileName(payload.docName);
     console.log('[QA调试] handleCitationClick 解析到 fileName:', fileName);
-
-    if (payload.type === 'pdf') {
-      if (!fileName.toLowerCase().endsWith('.pdf')) {
-        message.warning('该引用对应文件不是PDF，无法按页跳转');
-        return;
-      }
-      await handleViewPdf(fileName, payload.page || 1);
-      return;
-    }
-
-    if (payload.type === 'media') {
-      await handleOpenMediaWithTime(fileName, payload.start, payload.end);
-    }
+    setActiveSourceFileName(fileName);
+    setActiveSourceIndex(getCitationRefIndex(payload));
+    
+    // 记录该文件的位置信息
+    setSourcePositions(prev => ({
+      ...prev,
+      [fileName]: {
+        page: payload.page,
+        start: payload.start,
+        end: payload.end,
+      },
+    }));
+    
+    await openSourceByFileName(fileName, {
+      type: payload.type,
+      page: payload.page,
+      start: payload.start,
+      end: payload.end,
+      index: getCitationRefIndex(payload),
+    });
   };
 
   const handleAsk = async () => {
     if (!question) { message.warning('请输入问题'); return; }
+    closeViewer();
     setQaStageIndex(0);
     setQaStageDots('');
     setAnswer('');
@@ -859,15 +1022,100 @@ export default function QAPage() {
           animation: qaShimmerMove 1.6s linear infinite;
           pointer-events: none;
         }
+        .qa-question-card {
+          border-radius: 16px;
+          border: 1px solid #d5e7ff;
+          background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+          box-shadow: 0 10px 22px rgba(22, 119, 255, 0.08);
+        }
+        .qa-question-input {
+          border-radius: 12px;
+          border: 1px solid #b8d5ff;
+          background: #fafdff;
+          font-size: 18px;
+          font-weight: 500;
+          letter-spacing: 0.02em;
+          font-family: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
+          line-height: 1.85;
+          padding: 14px 16px;
+          transition: all 0.2s ease;
+        }
+        .qa-question-input::placeholder {
+          color: #8da7c5;
+          font-size: 16px;
+          font-weight: 400;
+        }
+        .qa-question-input:focus,
+        .qa-question-input:hover {
+          border-color: #1677ff;
+          box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.14);
+          background: #ffffff;
+        }
+        .qa-answer-card {
+          border-radius: 16px;
+          border: 1px solid #d9e6ff;
+          background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+        }
+        .qa-answer-card .ant-card-head {
+          border-bottom: 1px solid #e6eefc;
+          min-height: 58px;
+        }
+        .qa-answer-card .ant-card-head-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: #173a67;
+        }
+        .qa-answer-card .ant-card-body {
+          padding: 22px;
+        }
+        .qa-answer-markdown {
+          font-size: 17px;
+          line-height: 1.95;
+          color: #1f2f45;
+          word-break: break-word;
+        }
+        .qa-answer-markdown h1,
+        .qa-answer-markdown h2,
+        .qa-answer-markdown h3 {
+          color: #173a67;
+          font-weight: 700;
+          margin-top: 1.1em;
+          margin-bottom: 0.45em;
+          line-height: 1.45;
+        }
+        .qa-answer-markdown p,
+        .qa-answer-markdown li {
+          font-size: 17px;
+        }
+        .qa-answer-markdown ul,
+        .qa-answer-markdown ol {
+          padding-left: 1.4em;
+        }
+        .qa-answer-markdown blockquote {
+          margin: 12px 0;
+          padding: 10px 14px;
+          border-left: 4px solid #8bb8ff;
+          background: #f5f9ff;
+          color: #355580;
+          border-radius: 0 10px 10px 0;
+        }
+        .qa-answer-markdown code {
+          font-size: 15px;
+          background: #f3f6fb;
+          border-radius: 6px;
+          padding: 2px 6px;
+        }
         @keyframes qaShimmerMove {
           0% { left: -42%; }
           100% { left: 100%; }
         }
       `}</style>
-      <div className="page-content-wrap page-enter">
+      <div style={{ display: 'flex', height: '100%', gap: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'auto', transition: 'flex 0.3s ease' }}>
+          <div className="page-content-wrap page-enter">
       <PageHeader
         title="知识库问答"
-        subtitle="输入问题后系统将分阶段检索并生成可追溯回答"
+        subtitle="输入问题后系统将分阶段检索并生成可溯源回答"
         icon={<BookOutlined />}
         variant="dashboard"
       />
@@ -930,10 +1178,30 @@ export default function QAPage() {
           />
         </Card>
 
-        <Card className="fade-in-up" style={{ borderRadius: 14 }}>
+        <Card className="fade-in-up qa-question-card">
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <TextArea rows={4} value={question} onChange={e => setQuestion(e.target.value)} placeholder="请输入你的问题..." />
-            <Button type="primary" onClick={handleAsk} loading={qaLoading}>问答</Button>
+            <TextArea
+              className="qa-question-input"
+              rows={5}
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              onPressEnter={(e) => {
+                if (e?.shiftKey || e?.nativeEvent?.isComposing) return;
+                e.preventDefault();
+                if (!qaLoading) {
+                  handleAsk();
+                }
+              }}
+              placeholder="请输入问题"
+            />
+            <Button
+              type="primary"
+              onClick={handleAsk}
+              loading={qaLoading}
+              style={{ height: 42, fontSize: 16, fontWeight: 600, borderRadius: 10, width: 120 }}
+            >
+              问答
+            </Button>
           </Space>
         </Card>
         {qaLoading ? (
@@ -950,7 +1218,8 @@ export default function QAPage() {
           </div>
         ) : null}
         {answer ? (
-          <Card title="回答内容" style={{ borderRadius: 14 }}>
+          <Card title="回答内容" className="qa-answer-card">
+            <div className="qa-answer-markdown">
             <ReactMarkdown
               remarkPlugins={[remarkMath, remarkGfm]}
               rehypePlugins={[rehypeKatex]}
@@ -1014,6 +1283,7 @@ export default function QAPage() {
             >
               {convertAnswerCitationsToMarkdownLinks(answer)}
             </ReactMarkdown>
+            </div>
           </Card>
         ) : null}
         <Card style={{ borderRadius: 14 }}>
@@ -1099,88 +1369,223 @@ export default function QAPage() {
         </Card>
       </Space>
       </div>
+        </div>
 
-      <Modal
-        title={viewerType === 'pdf' ? `PDF预览 - ${viewerFileName}` : `媒体预览 - ${viewerFileName}`}
-        open={viewerOpen}
-        onCancel={closeViewer}
-        footer={null}
-        width={1000}
-        destroyOnClose
-      >
-        <Spin spinning={viewerLoading}>
-          {viewerType === 'pdf' && viewerBlobUrl ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Space>
-                <Button onClick={() => setPdfPage(prev => Math.max(prev - 1, 1))} disabled={pdfPage <= 1}>上一页</Button>
-                <span>第 {pdfPage} / {pdfTotalPages || '-'} 页</span>
-                <Button onClick={() => setPdfPage(prev => Math.min(prev + 1, pdfTotalPages || 1))} disabled={pdfTotalPages ? pdfPage >= pdfTotalPages : true}>下一页</Button>
-              </Space>
-              <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 8, maxHeight: '70vh', overflow: 'auto' }}>
-                <Document
-                  file={viewerBlobUrl}
-                  loading="正在解析PDF..."
-                  onLoadSuccess={({ numPages }) => {
-                    setPdfTotalPages(numPages);
-                    setPdfPage(prev => Math.min(Math.max(prev, 1), numPages));
-                  }}
-                >
-                  <Page pageNumber={pdfPage} width={920} />
-                </Document>
-              </div>
-            </div>
-          ) : null}
+        {viewerOpen && (
+          <div
+            style={{
+              flex: `0 0 ${viewerPanelWidth}px`,
+              width: viewerPanelWidth,
+              borderLeft: '1px solid #d9d9d9',
+              backgroundColor: '#fff',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-2px 0 8px rgba(0,0,0,0.08)',
+              zIndex: 10,
+            }}
+          >
+            <div
+              onMouseDown={handleViewerResizeStart}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 10,
+                cursor: 'col-resize',
+                zIndex: 5,
+                background: 'transparent',
+              }}
+            />
 
-          {viewerType === 'media' && viewerBlobUrl ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(mediaStartSec !== null || mediaEndSec !== null) ? (
-                <div style={{ color: '#666' }}>
-                  播放区间：
-                  {mediaStartSec !== null ? parseSecondsToTimeText(mediaStartSec) : '起点'}
-                  {' - '}
-                  {mediaEndSec !== null ? parseSecondsToTimeText(mediaEndSec) : '结尾'}
+            <div style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 12, padding: 16, paddingLeft: 14, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 4 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#1f1f1f' }}>答案来源标签</div>
+                  <div style={{ color: '#888', fontSize: 12 }}>点击标签查看对应文件内容</div>
                 </div>
-              ) : null}
-              <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
-                <ReactPlayer
-                  key={`media-${viewerBlobUrl}`}
-                  ref={mediaPlayerRef}
-                  src={viewerBlobUrl}
-                  controls
-                  width="100%"
-                  height="70vh"
-                  playing={mediaReady && isMediaPlaying}
-                  config={{
-                    file: {
-                      forceVideo: String(mediaContentType).startsWith('video/'),
-                      forceAudio: String(mediaContentType).startsWith('audio/'),
-                      attributes: { preload: 'metadata', playsInline: true }
-                    }
-                  }}
-                  onReady={() => {
-                    setMediaReady(true);
-                    if (mediaStartSec !== null) {
-                      seekMediaToSeconds(mediaStartSec);
-                    }
-                    setTimeout(() => {
-                      setIsMediaPlaying(true);
-                    }, 80);
-                  }}
-                  onError={(error) => {
-                    console.error('[媒体预览] 播放失败:', error, { viewerFileName, mediaContentType });
-                    message.error(`媒体无法播放：${viewerFileName}`);
-                  }}
-                  onProgress={({ playedSeconds }) => {
-                    if (isMediaPlaying && mediaEndSec !== null && playedSeconds >= mediaEndSec) {
-                      setIsMediaPlaying(false);
-                    }
-                  }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+                    {displaySources.length} 个来源
+                  </Tag>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CloseOutlined />}
+                    onClick={closeViewer}
+                    style={{ minWidth: 32 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 4 }}>
+                {displaySources.length > 0 ? displaySources.map((group, groupIndex) => {
+                  const isActive = normalizeDocName(group.fileName) === normalizeDocName(activeSourceFileName)
+                    || activeSourceIndex === groupIndex + 1;
+                  return (
+                    <Tag
+                      key={`${group.fileName}-${groupIndex}`}
+                      color={isActive ? 'blue' : 'default'}
+                      onClick={() => openSourceByFileName(group.fileName, {
+                        index: groupIndex + 1,
+                        type: inferSourceTypeFromFileName(group.fileName),
+                        page: group.page,
+                        start: group.start_time ? parseSecondsToTimeText(group.start_time) : undefined,
+                        end: group.end_time ? parseSecondsToTimeText(group.end_time) : undefined,
+                      })}
+                      style={{ cursor: 'pointer', marginInlineEnd: 0, padding: '4px 10px', borderRadius: 999 }}
+                    >
+                      {groupIndex + 1}. {group.fileName}
+                    </Tag>
+                  );
+                }) : (
+                  <span style={{ color: '#999', paddingLeft: 4 }}>当前回答未提取到来源文件</span>
+                )}
+              </div>
+
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', borderTop: '1px solid #f0f0f0', paddingTop: 12, display: 'flex' }}>
+                <Spin spinning={viewerLoading}>
+                  {viewerType === 'pdf' && viewerBlobUrl ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', minHeight: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                        <Space>
+                          <Button onClick={() => setPdfPage(prev => Math.max(prev - 1, 1))} disabled={pdfPage <= 1}>上一页</Button>
+                          <span>第 {pdfPage} / {pdfTotalPages || '-'} 页</span>
+                          <Button onClick={() => setPdfPage(prev => Math.min(prev + 1, pdfTotalPages || 1))} disabled={pdfTotalPages ? pdfPage >= pdfTotalPages : true}>下一页</Button>
+                        </Space>
+                        <Tag color="geekblue" style={{ marginInlineEnd: 0, maxWidth: '100%' }} title={viewerFileName}>
+                          {viewerFileName}
+                        </Tag>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: viewerPreviewSize.height,
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'stretch',
+                          border: '1px solid #f0f0f0',
+                          borderRadius: 8,
+                          padding: 8,
+                          background: '#fff',
+                          overflow: 'auto',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <Document
+                          file={viewerBlobUrl}
+                          loading="正在解析PDF..."
+                          onLoadSuccess={({ numPages }) => {
+                            setPdfTotalPages(numPages);
+                            setPdfPage(prev => Math.min(Math.max(prev, 1), numPages));
+                          }}
+                        >
+                          <Page
+                            pageNumber={pdfPage}
+                            width={viewerPreviewSize.width - 32}
+                            onLoadSuccess={(page) => {
+                              try {
+                                const viewport = page.getViewport({ scale: 1 });
+                                if (viewport?.width && viewport?.height) {
+                                  setViewerAspectRatio(viewport.width / viewport.height);
+                                }
+                              } catch (error) {
+                                console.warn('[PDF预览] 获取页面比例失败:', error);
+                              }
+                            }}
+                          />
+                        </Document>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {viewerType === 'media' && viewerBlobUrl ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', minHeight: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ color: '#666' }}>
+                          播放区间：
+                          {mediaStartSec !== null ? parseSecondsToTimeText(mediaStartSec) : '起点'}
+                          {' - '}
+                          {mediaEndSec !== null ? parseSecondsToTimeText(mediaEndSec) : '结尾'}
+                        </div>
+                        <Tag color="geekblue" style={{ marginInlineEnd: 0, maxWidth: '100%' }} title={viewerFileName}>
+                          {viewerFileName}
+                        </Tag>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: viewerPreviewSize.height,
+                          border: '1px solid #f0f0f0',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          background: '#fff',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <ReactPlayer
+                          key={`media-${viewerBlobUrl}`}
+                          ref={mediaPlayerRef}
+                          src={viewerBlobUrl}
+                          controls
+                          width="100%"
+                          height="100%"
+                          playing={mediaReady && isMediaPlaying}
+                          config={{
+                            file: {
+                              forceVideo: String(mediaContentType).startsWith('video/'),
+                              forceAudio: String(mediaContentType).startsWith('audio/'),
+                              attributes: { preload: 'metadata', playsInline: true }
+                            }
+                          }}
+                          onReady={() => {
+                            setMediaReady(true);
+                            try {
+                              const internalPlayer = mediaPlayerRef.current?.getInternalPlayer?.();
+                              const naturalWidth = internalPlayer?.videoWidth || internalPlayer?.width || internalPlayer?.clientWidth;
+                              const naturalHeight = internalPlayer?.videoHeight || internalPlayer?.height || internalPlayer?.clientHeight;
+                              if (naturalWidth && naturalHeight) {
+                                setViewerAspectRatio(Number(naturalWidth) / Number(naturalHeight));
+                              }
+                            } catch (error) {
+                              console.warn('[媒体预览] 获取视频比例失败:', error);
+                            }
+                            if (mediaStartSec !== null) {
+                              seekMediaToSeconds(mediaStartSec);
+                            }
+                            setTimeout(() => {
+                              setIsMediaPlaying(true);
+                            }, 80);
+                          }}
+                          onError={(error) => {
+                            console.error('[媒体预览] 播放失败:', error, { viewerFileName, mediaContentType });
+                            message.error(`媒体无法播放：${viewerFileName}`);
+                          }}
+                          onProgress={({ playedSeconds }) => {
+                            if (isMediaPlaying && mediaEndSec !== null && playedSeconds >= mediaEndSec) {
+                              setIsMediaPlaying(false);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!viewerType || !viewerBlobUrl ? (
+                    <div style={{ minHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', textAlign: 'center', padding: 24 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#666', marginBottom: 6 }}>点击上方标签或回答中的引用按钮查看内容</div>
+                        <div>支持 PDF 和音视频文件的内联预览</div>
+                      </div>
+                    </div>
+                  ) : null}
+                </Spin>
               </div>
             </div>
-          ) : null}
-        </Spin>
-      </Modal>
+          </div>
+        )}
+      </div>
     </AppLayout>
   );
 }

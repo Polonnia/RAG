@@ -6,7 +6,6 @@ from typing import List
 from pathlib import Path
 from typing import List, Dict, Any
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 
 # 添加项目根目录到Python路径
@@ -14,10 +13,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # backend目录
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-# 现在可以统一使用绝对导入
-from rag.resources import get_vector_db
 from rag.utils.video2audio import AudioConverter
+from rag.utils.audio2text import extract_sentence_timestamps
 
 # 导入OCR处理器
 # from .ocr_processor import get_ocr_processor
@@ -61,7 +58,6 @@ DB_DIR = os.path.join(os.path.dirname(__file__), 'db')
 os.makedirs(DB_DIR, exist_ok=True)
 AUDIO_TEXT_DIR = os.path.join(DB_DIR, 'audio_text')
 os.makedirs(AUDIO_TEXT_DIR, exist_ok=True)
-vector_db = get_vector_db()
 
 # 全局ASR模型（单例）
 _asr_model = None
@@ -145,7 +141,7 @@ def process_media_file(file_path: str) -> List[Dict[str, Any]]:
         model = get_asr_model()
         results = model.generate(
             input=audio_path,
-            )
+        )
         
         print(f"识别完成，获得 {len(results)} 个结果")
         print(results)
@@ -319,66 +315,35 @@ def process_word_with_pages(file_path: str) -> List[Document]:
         return []
 
 def process_asr_result(asr_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """将ASR字符时间戳按句子切分为稳定的时间区间，避免累计漂移。"""
+    """复用 audio2text 的分句时间戳算法，输出保持 sentence/start_time/end_time 不变。"""
     records = []
-    sentence_endings = set("。！？；.!?;")
 
     for item in asr_data:
-        raw_text = str(item.get('text', '') or '')
-        text = raw_text.replace(' ', '')
-        timestamps = item.get('timestamp', []) or []
+        raw_text = str(item.get('text', '') or '').replace(' ', '').strip()
+        sentence_items = extract_sentence_timestamps(item)
 
-        if not text:
+        # 无时间戳或切句失败时，保持兼容输出
+        if not sentence_items:
+            if raw_text:
+                records.append({
+                    'sentence': raw_text,
+                    'start_time': 0.0,
+                    'end_time': 0.0,
+                })
             continue
 
-        # 无时间戳时退化为0时间，避免抛异常中断流程
-        if not timestamps:
-            records.append({
-                'sentence': text,
-                'start_time': 0.0,
-                'end_time': 0.0,
-            })
-            continue
-
-        # 句子边界：按标点切句
-        spans = []
-        seg_start = 0
-        for idx, ch in enumerate(text):
-            if ch in sentence_endings:
-                spans.append((seg_start, idx))
-                seg_start = idx + 1
-        if seg_start < len(text):
-            spans.append((seg_start, len(text) - 1))
-
-        # 使用字符位置到时间戳索引的比例映射，避免分词强配导致的累计误差
-        scale = len(timestamps) / max(len(text), 1)
-
-        for start_idx, end_idx in spans:
-            sentence = text[start_idx:end_idx + 1].strip()
+        for row in sentence_items:
+            sentence = str(row.get('sentence', '')).strip()
             if not sentence:
                 continue
 
-            ts_start_idx = int(start_idx * scale)
-            ts_end_idx = int((end_idx + 1) * scale) - 1
-
-            if ts_start_idx < 0:
-                ts_start_idx = 0
-            if ts_end_idx < ts_start_idx:
-                ts_end_idx = ts_start_idx
-            if ts_start_idx >= len(timestamps):
-                ts_start_idx = len(timestamps) - 1
-            if ts_end_idx >= len(timestamps):
-                ts_end_idx = len(timestamps) - 1
-
-            start_ms = timestamps[ts_start_idx][0]
-            end_ms = timestamps[ts_end_idx][1]
-            if end_ms < start_ms:
-                end_ms = start_ms
+            start_ms = row.get('start_ms', 0)
+            end_ms = row.get('end_ms', 0)
 
             records.append({
                 'sentence': sentence,
-                'start_time': round(start_ms / 1000.0, 3),
-                'end_time': round(end_ms / 1000.0, 3),
+                'start_time': round(float(start_ms) / 1000.0, 3),
+                'end_time': round(float(end_ms) / 1000.0, 3),
             })
 
     return records
