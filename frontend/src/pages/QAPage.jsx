@@ -1262,7 +1262,7 @@ export default function QAPage() {
           <div className="page-content-wrap page-enter">
       <PageHeader
         title="知识库问答"
-        subtitle="输入问题后系统将分阶段检索并生成可溯源回答"
+        subtitle="系统将进行GraphRAG检索并生成可溯源回答"
         icon={<BookOutlined />}
         variant="dashboard"
       />

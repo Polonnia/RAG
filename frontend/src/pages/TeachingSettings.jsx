@@ -351,7 +351,7 @@ export default function TeachingSettings() {
       <div className="page-content-wrap page-enter">
       <PageHeader
         title="教学内容设计"
-        subtitle="选择教材目录、取消不需要章节，生成结构化教学安排"
+        subtitle="选择教材目录，生成结构化教学安排"
         icon={<FileTextOutlined />}
         variant="dashboard"
       />

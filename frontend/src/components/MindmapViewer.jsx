@@ -251,9 +251,9 @@ export default function MindMapViewer({ filename, onClose }) {
 
   const parsePageFromRange = (rangeText) => {
     if (!rangeText) return 1;
-    const onePageMatch = String(rangeText).match(/第\s*(\d+)\s*页/);
+    const onePageMatch = String(rangeText).match(/p\s*(\d+)\s*/);
     if (onePageMatch) return Number(onePageMatch[1]);
-    const rangeMatch = String(rangeText).match(/第\s*(\d+)\s*-\s*(\d+)\s*页/);
+    const rangeMatch = String(rangeText).match(/p\s*(\d+)\s*-\s*(\d+)\s*/);
     if (rangeMatch) return Number(rangeMatch[1]);
     return 1;
   };
@@ -1029,7 +1029,7 @@ export default function MindMapViewer({ filename, onClose }) {
           <div style={{ marginTop: '16px' }}>正在生成结构信息，请稍候...</div>
         </div>
       ) : mindmapData ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 30%) 1fr', gap: 16, minHeight: 0, height: 'calc(85vh - 140px)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 30%) 1fr', gap: 16, minHeight: 0, height: 'calc(85vh - 100px)' }}>
           <div style={{ border: '1px solid #e6edf8', borderRadius: 12, padding: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg, #ffffff 0%, #f9fbff 100%)', minHeight: 0 }}>
             <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Tag color="blue">文档结构</Tag>
@@ -1039,7 +1039,7 @@ export default function MindMapViewer({ filename, onClose }) {
               <div style={{ marginBottom: 10, maxHeight: 132, overflowY: 'auto', border: '1px solid #edf2fc', borderRadius: 10, background: '#fff', padding: 6 }}>
                 {searchResults.map((item, index) => {
                   const label = item?.title || item?.name || item?.id || `结果 ${index + 1}`;
-                  const hint = item?.position || (item?.page ? `第${item.page}页` : '') || item?.timestamp || item?.pageRange || item?.timeRange || item?.path || '';
+                  const hint = item?.position || (item?.page ? `p${item.page}` : '') || item?.timestamp || item?.pageRange || item?.timeRange || item?.path || '';
                   return (
                     <div
                       key={`${item?.id || 'result'}-${index}`}
@@ -1087,7 +1087,7 @@ export default function MindMapViewer({ filename, onClose }) {
             ) : !previewType ? (
               <Empty description="当前文件暂不支持预览" />
             ) : viewerType === 'pdf' && viewerBlobUrl ? (
-              <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 440px', gap: 12, minHeight: 0, height: '100%', paddingTop: 8, paddingBottom: 8, boxSizing: 'border-box' }}>
+              <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 440px', gap: 12, minHeight: 0, height: '100%', paddingTop: 8, paddingBottom: 0, boxSizing: 'border-box' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, minHeight: 0, height: '100%' }}>
                   <div style={{ border: '1px solid #edf2fc', borderRadius: 10, padding: '8px 10px', background: '#fff' }}>
                     <Space style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
@@ -1171,7 +1171,7 @@ export default function MindMapViewer({ filename, onClose }) {
                 </div>
               </div>
             ) : viewerType === 'media' && viewerBlobUrl ? (
-              <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 440px', gap: 12, minHeight: 0, height: '100%', paddingTop: 8, paddingBottom: 8, boxSizing: 'border-box' }}>
+              <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 440px', gap: 12, minHeight: 0, height: '100%', paddingTop: 8, paddingBottom: 0, boxSizing: 'border-box' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, minHeight: 0, height: '100%' }}>
                   <div ref={mediaContainerRef} style={{ border: '1px solid #edf2fc', borderRadius: 10, background: '#fff', padding: 10 }}>
                     <ReactPlayer

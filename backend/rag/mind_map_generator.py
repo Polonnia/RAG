@@ -190,9 +190,9 @@ def convert_structure_to_mindmap(structure: Any) -> Dict[str, Any]:
         page_range = ""
         if start_index and end_index:
             if start_index == end_index:
-                page_range = f"第{start_index}页"
+                page_range = f"p{start_index}"
             else:
-                page_range = f"第{start_index}-{end_index}页"
+                page_range = f"p{start_index}-{end_index}"
 
         # 媒体类结构使用时间范围（例如 00:15-01:23）
         time_range = _build_time_range(node)

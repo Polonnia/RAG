@@ -251,7 +251,7 @@ export default function KnowledgeManagement() {
       <div className="page-content-wrap page-enter">
       <PageHeader
         title="知识库管理"
-        subtitle="上传多模态教材并管理可供学生下载的资源"
+        subtitle="上传多模态教学资料并管理可供学生下载的资源"
         icon={<DatabaseOutlined />}
         variant="dashboard"
       />
