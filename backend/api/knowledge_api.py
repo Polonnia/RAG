@@ -12,7 +12,7 @@ from rag.teaching_design import (
 from rag.knowledge_manager import delete_knowledge_file, upload_knowledge_files, get_knowledge_files, set_student_download_permission, get_download_file_path, UPLOAD_DIR, load_files_info
 from rag.mind_map_generator import get_mindmap_data_async, search_in_mindmap
 from sqlalchemy.orm import Session
-from typing import Any
+from typing import Any, Optional
 import os
 import io
 import uuid
@@ -23,6 +23,7 @@ import json
 import re
 import mimetypes
 from auth import get_current_user
+from rag.llm_client import completion_stream_async, get_default_model
 
 router = APIRouter()
 
@@ -395,6 +396,78 @@ async def qa_stream(question: str = Form(...)):
             yield _json_line({"type": "done", "answer": answer_text, "sources": sources})
         except Exception as e:
             print(f"[QA-DEBUG][{trace_id}] /qa-stream failed after {time.perf_counter() - started_at:.2f}s, error={str(e)}")
+            yield _json_line({"type": "error", "message": f"问答失败: {str(e)}"})
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+@router.post("/selection-qa")
+@router.post("/pdf-selection-qa-stream")
+async def selection_qa_stream(
+    filename: str = Form(...),
+    question: str = Form(...),
+    selected_text: str = Form(...),
+    page: Optional[int] = Form(default=None),
+    time_range: Optional[str] = Form(default=None),
+    context_type: Optional[str] = Form(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    trace_id = uuid.uuid4().hex[:8]
+
+    async def event_generator():
+        started_at = time.perf_counter()
+        answer_parts = []
+        try:
+            question_text = str(question or '').strip()
+            selected = str(selected_text or '').strip()
+            content_type = str(context_type or '').strip().lower()
+            if not question_text:
+                yield _json_line({"type": "error", "message": "问题不能为空"})
+                return
+            if not selected:
+                yield _json_line({"type": "error", "message": "请先选择要提问的文本"})
+                return
+
+            # 复用文件权限检查，避免对无权限文件进行问答
+            get_download_file_path(filename=filename, current_user=current_user, db=db)
+
+            selected = selected[:6000]
+
+            prompt = f"""
+文件名: {filename}
+
+用户选中文本:
+{selected}
+
+用户问题:
+{question_text}
+
+你是一个文档问答助手，请根据以上选中文本回答问题。
+"""
+
+            yield _json_line({"type": "stage", "stage": "分析选中文本", "progress": 30})
+            yield _json_line({"type": "stage", "stage": "生成回答", "progress": 75})
+
+            async for chunk in completion_stream_async(
+                prompt=prompt,
+                model=get_default_model(),
+                temperature=0.2,
+            ):
+                answer_parts.append(chunk)
+                yield _json_line({"type": "token", "content": chunk})
+
+            answer_text = "".join(answer_parts)
+            yield _json_line({"type": "done", "answer": answer_text})
+        except PermissionError as e:
+            yield _json_line({"type": "error", "message": str(e)})
+        except FileNotFoundError as e:
+            yield _json_line({"type": "error", "message": str(e)})
+        except Exception as e:
+            print(
+                f"[QA-DEBUG][{trace_id}] /selection-qa failed after "
+                f"{time.perf_counter() - started_at:.2f}s, error={str(e)}"
+            )
             yield _json_line({"type": "error", "message": f"问答失败: {str(e)}"})
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")

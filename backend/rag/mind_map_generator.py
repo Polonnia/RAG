@@ -203,8 +203,13 @@ def convert_structure_to_mindmap(structure: Any) -> Dict[str, Any]:
             'name': node.get('title', '未命名'),
             'data': {
                 'summary': node.get('summary', ''),
+                'text': node.get('text', ''),
                 'pageRange': display_range,
                 'timeRange': time_range,
+                'startTime': node.get('start_time'),
+                'endTime': node.get('end_time'),
+                'startIndex': start_index,
+                'endIndex': end_index,
                 'nodeId': node_id
             }
         }
@@ -284,28 +289,87 @@ def search_in_mindmap(mindmap: Dict, keyword: str) -> List[Dict]:
     在思维导图中搜索关键词
     """
     results = []
+    seen = set()
+
+    def _format_seconds(seconds: float) -> str:
+        total = int(round(max(0.0, float(seconds))))
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+        secs = total % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    def _extract_precise_position(data: Dict) -> Dict:
+        start_index = data.get('startIndex')
+        start_time = data.get('startTime')
+
+        precise_page = None
+        if isinstance(start_index, int) and start_index > 0:
+            precise_page = start_index
+
+        precise_timestamp = None
+        try:
+            if start_time is not None:
+                precise_timestamp = _format_seconds(float(start_time))
+        except (TypeError, ValueError):
+            precise_timestamp = None
+
+        position_label = ''
+        if precise_page is not None:
+            position_label = f"第{precise_page}页"
+        elif precise_timestamp:
+            position_label = precise_timestamp
+
+        return {
+            'page': precise_page,
+            'timestamp': precise_timestamp,
+            'position': position_label,
+        }
+
+    def add_result(node: Dict, match_type: str):
+        node_id = node.get('id')
+        if not node_id:
+            return
+        if node_id in seen:
+            return
+        seen.add(node_id)
+
+        data = node.get('data') or {}
+        precise = _extract_precise_position(data)
+        results.append({
+            'id': node_id,
+            'name': node.get('name', ''),
+            'type': match_type,
+            'pageRange': data.get('pageRange', ''),
+            'timeRange': data.get('timeRange', ''),
+            'page': precise['page'],
+            'timestamp': precise['timestamp'],
+            'position': precise['position'],
+        })
     
     def search_node(node: Dict):
-        # 检查当前节点
+        children = node.get('children') or []
+        is_leaf = not isinstance(children, list) or len(children) == 0
+
+        # 只在叶子节点中搜索，避免父节点重复命中
+        if not is_leaf:
+            for child in children:
+                search_node(child)
+            return
+
+        # 检查当前叶子节点
         if keyword.lower() in node['name'].lower():
-            results.append({
-                'id': node['id'],
-                'name': node['name'],
-                'type': 'title'
-            })
+            add_result(node, 'title')
         
         # 检查摘要
         if 'data' in node and keyword.lower() in node['data'].get('summary', '').lower():
-            results.append({
-                'id': node['id'],
-                'name': node['name'],
-                'type': 'summary'
-            })
+            add_result(node, 'summary')
+
+        if 'data' in node and keyword.lower() in node['data'].get('text', '').lower():
+            add_result(node, 'text')
         
-        # 递归搜索子节点
-        if 'children' in node:
-            for child in node['children']:
-                search_node(child)
+        # 叶子节点到此结束
     
     if 'children' in mindmap:
         for child in mindmap['children']:

@@ -115,7 +115,7 @@ class ExamHistory(Base):
     subject_type = Column(String(50))
     exam_content = Column(Text)
     comment = Column(Text)  # AI总结
-    weak_keywords = Column(Text, default="")  # 新增：AI提取的薄弱知识点关键词
+    weak_keywords = Column(Text, default="")  # AI提取的薄弱知识点关键词
     time = Column(DateTime, default=datetime.now)
 
 class StudentWrongQuestion(Base):

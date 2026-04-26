@@ -71,9 +71,14 @@ export default function QAPage() {
   const [mediaContentType, setMediaContentType] = useState('');
   const [isMediaPlaying, setIsMediaPlaying] = useState(true);
   const [mediaReady, setMediaReady] = useState(false);
+  const [viewerMediaPlayedSec, setViewerMediaPlayedSec] = useState(0);
+  const [viewerSubtitles, setViewerSubtitles] = useState([]);
+  const [viewerSubtitleLoading, setViewerSubtitleLoading] = useState(false);
   const [activeSourceIndex, setActiveSourceIndex] = useState(null);
   const [activeSourceFileName, setActiveSourceFileName] = useState('');
   const mediaPlayerRef = useRef(null);
+  const viewerSubtitleContainerRef = useRef(null);
+  const viewerSubtitleItemRefs = useRef({});
   const qaStageTimerRef = useRef(null);
   const viewerResizeRef = useRef(null);
 
@@ -548,6 +553,66 @@ export default function QAPage() {
     }
   };
 
+  const findActiveViewerSubtitleIndex = (list, playedSec) => {
+    if (!Array.isArray(list) || list.length === 0) return -1;
+    const current = Number(playedSec);
+    if (Number.isNaN(current)) return -1;
+
+    let left = 0;
+    let right = list.length - 1;
+    let candidate = -1;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const start = Number(list[mid].start_time || 0);
+      if (start <= current) {
+        candidate = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    if (candidate < 0) return -1;
+    const item = list[candidate];
+    const start = Number(item.start_time || 0);
+    const end = Number(item.end_time || start);
+    if (current >= start && current <= end) return candidate;
+
+    if (candidate + 1 < list.length) {
+      const next = list[candidate + 1];
+      const nextStart = Number(next.start_time || 0);
+      const nextEnd = Number(next.end_time || nextStart);
+      if (current >= nextStart && current <= nextEnd) return candidate + 1;
+    }
+    return -1;
+  };
+
+  const activeViewerSubtitleIndex = useMemo(
+    () => findActiveViewerSubtitleIndex(viewerSubtitles, viewerMediaPlayedSec),
+    [viewerSubtitles, viewerMediaPlayedSec]
+  );
+
+  const loadViewerSubtitles = async (fileName) => {
+    const name = String(fileName || '').trim();
+    if (!name) {
+      setViewerSubtitles([]);
+      return;
+    }
+
+    try {
+      setViewerSubtitleLoading(true);
+      const response = await http.get(`/media-subtitles/${encodeURIComponent(name)}`);
+      const list = Array.isArray(response.data?.subtitles) ? response.data.subtitles : [];
+      setViewerSubtitles(list);
+    } catch (error) {
+      console.error('[引用预览] 加载字幕失败:', error);
+      setViewerSubtitles([]);
+    } finally {
+      setViewerSubtitleLoading(false);
+    }
+  };
+
   // 将source按文件名去重分组，仅用于展示文件名
   const groupSourcesByFile = (sources) => {
     const grouped = {};
@@ -659,6 +724,10 @@ export default function QAPage() {
     setMediaContentType('');
     setIsMediaPlaying(false);
     setMediaReady(false);
+    setViewerMediaPlayedSec(0);
+    setViewerSubtitles([]);
+    setViewerSubtitleLoading(false);
+    viewerSubtitleItemRefs.current = {};
     setActiveSourceIndex(null);
     setActiveSourceFileName('');
   };
@@ -699,6 +768,29 @@ export default function QAPage() {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
+
+  useEffect(() => {
+    if (activeViewerSubtitleIndex < 0) return;
+    const container = viewerSubtitleContainerRef.current;
+    if (!container) return;
+    const activeNode = viewerSubtitleItemRefs.current[activeViewerSubtitleIndex];
+    if (!activeNode) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = activeNode.getBoundingClientRect();
+    const nodeTop = nodeRect.top - containerRect.top + container.scrollTop;
+    const nodeBottom = nodeTop + nodeRect.height;
+    const visibleTop = container.scrollTop;
+    const visibleBottom = visibleTop + container.clientHeight;
+
+    if (nodeTop < visibleTop || nodeBottom > visibleBottom) {
+      const nodeCenter = nodeTop + nodeRect.height / 2;
+      const desiredTop = nodeCenter - container.clientHeight / 2;
+      const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      const targetTop = Math.min(maxTop, Math.max(0, desiredTop));
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }
+  }, [activeViewerSubtitleIndex]);
 
   useEffect(() => {
     return () => {
@@ -848,7 +940,10 @@ export default function QAPage() {
       setMediaContentType(mediaBlob.type || resolvedType);
       setMediaReady(false);
       setIsMediaPlaying(false);
+      setViewerMediaPlayedSec(startSec ?? 0);
       setViewerOpen(true);
+
+      await loadViewerSubtitles(mediaData.fileName || fileName);
 
       if (mediaData.fallbackFromJson && mediaData.fileName && mediaData.fileName !== fileName) {
         message.info(`已从引用 ${fileName} 自动匹配媒体文件 ${mediaData.fileName}`);
@@ -1104,6 +1199,58 @@ export default function QAPage() {
           background: #f3f6fb;
           border-radius: 6px;
           padding: 2px 6px;
+        }
+
+        .qa-media-subtitle-panel {
+          border: 1px solid #e6edf8;
+          border-radius: 10px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          padding: 8px;
+        }
+
+        .qa-media-subtitle-head {
+          font-size: 12px;
+          color: #4f6f99;
+          font-weight: 600;
+          margin-bottom: 6px;
+        }
+
+        .qa-media-subtitle-scroll {
+          max-height: 156px;
+          overflow-y: auto;
+          border: 1px solid #edf2fc;
+          border-radius: 8px;
+          background: #f8fbff;
+          padding: 6px;
+        }
+
+        .qa-media-subtitle-item {
+          padding: 8px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 13px;
+          line-height: 1.6;
+          color: #2d3b50;
+          border: 1px solid transparent;
+          margin-bottom: 6px;
+          background: #fff;
+          transition: all 0.2s ease;
+        }
+
+        .qa-media-subtitle-item:last-child {
+          margin-bottom: 0;
+        }
+
+        .qa-media-subtitle-item.active {
+          border-color: #8cb6ff;
+          background: #eaf3ff;
+          box-shadow: 0 4px 12px rgba(26, 101, 201, 0.15);
+        }
+
+        .qa-media-subtitle-time {
+          font-size: 11px;
+          color: #7c8fa8;
+          margin-bottom: 4px;
         }
         @keyframes qaShimmerMove {
           0% { left: -42%; }
@@ -1516,7 +1663,7 @@ export default function QAPage() {
                       <div
                         style={{
                           width: '100%',
-                          height: viewerPreviewSize.height,
+                          height: Math.max(220, viewerPreviewSize.height - 190),
                           border: '1px solid #f0f0f0',
                           borderRadius: 8,
                           overflow: 'hidden',
@@ -1553,6 +1700,7 @@ export default function QAPage() {
                             }
                             if (mediaStartSec !== null) {
                               seekMediaToSeconds(mediaStartSec);
+                              setViewerMediaPlayedSec(mediaStartSec);
                             }
                             setTimeout(() => {
                               setIsMediaPlaying(true);
@@ -1563,11 +1711,50 @@ export default function QAPage() {
                             message.error(`媒体无法播放：${viewerFileName}`);
                           }}
                           onProgress={({ playedSeconds }) => {
+                            setViewerMediaPlayedSec(playedSeconds);
                             if (isMediaPlaying && mediaEndSec !== null && playedSeconds >= mediaEndSec) {
                               setIsMediaPlaying(false);
                             }
                           }}
                         />
+                      </div>
+
+                      <div className="qa-media-subtitle-panel">
+                        <div className="qa-media-subtitle-head">滚动字幕</div>
+                        {viewerSubtitleLoading ? (
+                          <div style={{ textAlign: 'center', padding: '12px 0', color: '#8c8c8c' }}>
+                            <Spin size="small" />
+                            <div style={{ marginTop: 8 }}>字幕加载中...</div>
+                          </div>
+                        ) : viewerSubtitles.length === 0 ? (
+                          <div style={{ padding: '10px 0', color: '#999' }}>未找到字幕文件</div>
+                        ) : (
+                          <div ref={viewerSubtitleContainerRef} className="qa-media-subtitle-scroll">
+                            {viewerSubtitles.map((item, index) => {
+                              const isActive = index === activeViewerSubtitleIndex;
+                              return (
+                                <div
+                                  key={`${index}-${item.start_time}`}
+                                  ref={(el) => {
+                                    if (el) viewerSubtitleItemRefs.current[index] = el;
+                                    else delete viewerSubtitleItemRefs.current[index];
+                                  }}
+                                  className={`qa-media-subtitle-item ${isActive ? 'active' : ''}`}
+                                  onClick={() => {
+                                    seekMediaToSeconds(item.start_time);
+                                    setViewerMediaPlayedSec(Number(item.start_time) || 0);
+                                    setIsMediaPlaying(true);
+                                  }}
+                                >
+                                  <div className="qa-media-subtitle-time">
+                                    {parseSecondsToTimeText(item.start_time)} - {parseSecondsToTimeText(item.end_time)}
+                                  </div>
+                                  <div>{item.sentence}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null}
