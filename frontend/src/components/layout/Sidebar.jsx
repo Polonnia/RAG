@@ -120,7 +120,7 @@ export default function Sidebar() {
         <span style={{ color: '#fff' }}>{user?.role === 'student' ? '学生端' : '教师端'}</span>
       </div>
       <div style={{ padding: '0 12px 8px' }}>
-        <div className="sidebar-role-chip">{user?.role === 'student' ? 'Student Mode' : 'Teacher Mode'}</div>
+        <div className="sidebar-role-chip" style={{ fontSize: 16 }}>{user?.role === 'student' ? 'Student Mode' : 'Teacher Mode'}</div>
       </div>
       <Menu
         mode="inline"
@@ -159,15 +159,16 @@ export default function Sidebar() {
         }}
       >
         <Tooltip title="安全退出当前账号" placement="right">
-          <Button 
-            type="primary" 
-            icon={<LogoutOutlined />} 
+          <Button
+            type="primary"
+            icon={<LogoutOutlined />}
             onClick={handleLogout}
-            style={{ 
-              borderRadius: 20, 
+            style={{
+              borderRadius: 20,
               fontWeight: 500,
               fontSize: 14,
-              width: '100%'
+              width: '100%',
+              height: 40
             }}
             size="middle"
           >
