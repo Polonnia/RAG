@@ -16,17 +16,17 @@ const typeMap = {
 
 const renderQuestionOptions = (q) => {
   if (!q.type) return null;
-  
+
   // 单选/多选题显示选项
   if ((q.type === 'choice' || q.type === 'multi') && q.options) {
     let options = q.options;
     if (typeof options === 'string') {
       try { options = JSON.parse(options); } catch { return null; }
     }
-    
+
     if (Array.isArray(options)) {
       return (
-        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#666' }}>
+        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 13, color: '#666' }}>
           {options.map((opt, i) => (
             <div key={i}>{String.fromCharCode(65 + i)}. {opt}</div>
           ))}
@@ -34,7 +34,7 @@ const renderQuestionOptions = (q) => {
       );
     } else if (typeof options === 'object') {
       return (
-        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#666' }}>
+        <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 13, color: '#666' }}>
           {Object.entries(options).map(([k, v]) => (
             <div key={k}>{k}. {v}</div>
           ))}
@@ -42,17 +42,38 @@ const renderQuestionOptions = (q) => {
       );
     }
   }
-  
-  // 简答题/编程题显示答案提示
-  if ((q.type === 'short_answer' || q.type === 'programming') && q.explanation) {
-    return (
-      <div style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#999', maxWidth: 300 }}>
-        <strong>参考答案：</strong> {q.explanation.slice(0, 100)}{q.explanation.length > 100 ? '...' : ''}
-      </div>
-    );
-  }
-  
+
+
   return null;
+};
+
+// 渲染：正确答案 + 题目解析
+const renderAnswerAndExplanation = (q) => {
+  // 只有 单选/多选/填空 显示正确答案
+  const showAnswer = ['choice', 'multi', 'fill_blank'].includes(q.type);
+  const hasAnswer = showAnswer && q.correct_answer != null && q.correct_answer !== '';
+  const hasExplain = q.explanation != null && q.explanation !== '';
+
+  if (!hasAnswer && !hasExplain) return null;
+
+  return (
+    <div style={{ marginTop: 10, padding: '10px 14px', background: '#f9fbff', borderRadius: 6, border: '1px solid #e6efff' }}>
+      {/* 正确答案：只在单选、多选、填空显示 */}
+      {hasAnswer && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1677ff', marginBottom: 6 }}>
+          正确答案：{q.correct_answer}
+        </div>
+      )}
+
+      {/* 解析：所有题型都显示 */}
+      {hasExplain && (
+        <div style={{ fontSize: 13, color: '#444', lineHeight: 1.6 }}>
+          <span style={{ fontWeight: 600 }}>题目解析：</span>
+          {q.explanation}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function ExamGenerator() {
@@ -73,6 +94,9 @@ export default function ExamGenerator() {
     balanced: { choice: 5, multi: 3, fill_blank: 3, short_answer: 2, programming: 1 },
     objective: { choice: 8, multi: 5, fill_blank: 4, short_answer: 1, programming: 0 },
     advanced: { choice: 3, multi: 3, fill_blank: 2, short_answer: 4, programming: 2 },
+  miniTest: { choice: 3, multi: 2, fill_blank: 2, short_answer: 1, programming: 0 },
+  fullChoice: { choice: 10, multi: 6, fill_blank: 0, short_answer: 0, programming: 0 },
+  subjective: { choice: 0, multi: 0, fill_blank: 0, short_answer: 5, programming: 3 },
   };
 
   const allQuestions = useMemo(() => {
@@ -307,6 +331,9 @@ export default function ExamGenerator() {
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('balanced')}>均衡题组</Button>
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('objective')}>客观题优先</Button>
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('advanced')}>高阶能力</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('miniTest')}>随堂小测</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('fullChoice')}>纯客观题</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('subjective')}>纯主观题</Button>
               </div>
 
               <div className="exam-control-group" style={{ alignItems: 'flex-start' }}>
@@ -370,6 +397,7 @@ export default function ExamGenerator() {
                           </Tag> {q.question}
                         </div>
                         {renderQuestionOptions(q)}
+                        {renderAnswerAndExplanation(q)}
                       </div>
                     </List.Item>
                   )}

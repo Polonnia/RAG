@@ -174,20 +174,38 @@ export default function Grading() {
             setGradingForm({ score: 0, comment: '' });
           }}
           footer={null}
-          title={<span>批改试题</span>}
-          width={600}
+          title={<span style={{ fontSize: 16, fontWeight: 600 }}>批改试题</span>}
+          width="90%"
+          style={{ maxWidth: '1200px' }}
+          destroyOnClose
         >
           {gradingModalQuestion && gradingModalStudentAnswers.length > 0 ? (
-            <div>
-              <div style={{ marginBottom: 16 }}>
-                <b>题目：</b>{gradingModalQuestion.question}
-                <br /><b>题型：</b>{gradingModalQuestion.type === 'short_answer' ? '简答题' : '编程题'}
-                <br /><b>分值：</b>{gradingModalQuestion.points}
+            <div style={{ padding: '8px 0' }}>
+              {/* 题目区域 */}
+              <div style={{
+                marginBottom: 28,
+                padding: '16px 20px',
+                background: '#f7f8fa',
+                borderRadius: 10,
+                border: '1px solid #e8e8e8'
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>题目</div>
+                <div style={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                  {gradingModalQuestion.question}
+                </div>
+                <div style={{ marginTop: 12, display: 'flex', gap: '24px' }}>
+                  <span>题型：{gradingModalQuestion.type === 'short_answer' ? '简答题' : '编程题'}</span>
+                  <span style={{ color: '#1677ff', fontWeight: 600 }}>
+                    满分：{gradingModalQuestion.points} 分
+                  </span>
+                </div>
               </div>
-              <div style={{ marginBottom: 12 }}>
-                <b>选择学生：</b>
+
+              {/* 选择学生 */}
+              <div style={{ marginBottom: 24 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, marginRight: 12 }}>选择学生</span>
                 <Select
-                  style={{ width: 200 }}
+                  style={{ width: 240 }}
                   value={gradingModalSelectedStudent}
                   onChange={sid => {
                     setGradingModalSelectedStudent(sid);
@@ -203,36 +221,64 @@ export default function Grading() {
                   ))}
                 </Select>
               </div>
+
+              {/* 学生答案 + 批改 */}
               {gradingModalStudentAnswers.filter(stu => stu.studentId === gradingModalSelectedStudent).map(stu => (
-                <div key={stu.studentId} style={{ marginBottom: 16 }}>
-                  <div style={{ marginBottom: 8 }}><b>学生：</b>{stu.studentName}</div>
-                  <div style={{ marginBottom: 8 }}>
-                    <b>学生答案：</b>
-                    <Card size="small" style={{ marginTop: 8, background: '#fafafa', borderRadius: 8 }}>{stu.answer || '--'}</Card>
+                <div key={stu.key}>
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>学生答案</div>
+                    <Card
+                      size="small"
+                      style={{
+                        background: '#fafafa',
+                        borderRadius: 8,
+                        maxHeight: 320,
+                        overflow: 'auto',
+                        padding: 12
+                      }}
+                    >
+                      {stu.answer || '--'}
+                    </Card>
                   </div>
-                  <Space align="center" style={{ marginBottom: 8 }}>
-                    <Tag color="blue">满分 {gradingModalQuestion.points}</Tag>
+
+                  {/* 给分区域（突出） */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    marginBottom: 24,
+                    padding: '12px 16px',
+                    background: '#e6f4ff',
+                    borderRadius: 8
+                  }}>
+                    <span style={{ fontWeight: 600 }}>评分</span>
                     <InputNumber
                       min={0}
                       max={gradingModalQuestion.points}
-                      style={{ width: 120 }}
-                      placeholder="分数"
+                      style={{ width: 140 }}
+                      placeholder="请输入分数"
                       value={gradingForm.score}
                       onChange={(value) => setGradingForm((prev) => ({ ...prev, score: Number(value || 0) }))}
                     />
-                  </Space>
-                  <div style={{ marginBottom: 8 }}>
+                    <Tag color="blue">满分 {gradingModalQuestion.points}</Tag>
+                  </div>
+
+                  {/* 评语 */}
+                  <div style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>批改评语</div>
                     <Input.TextArea
-                      rows={3}
-                      style={{ minWidth: 100 }}
-                      placeholder="可填写评语"
+                      rows={4}
+                      placeholder="可填写评语、扣分说明等"
                       value={gradingForm.comment}
                       onChange={(e) => setGradingForm((prev) => ({ ...prev, comment: e.target.value }))}
                     />
                   </div>
+
+                  {/* 提交按钮 */}
                   <Button
                     type="primary"
-                    size="small"
+                    size="large"
+                    style={{ width: '100%', height: 44, fontSize: 15, fontWeight: 500 }}
                     onClick={() => handleModalGrade(stu.studentExamId, gradingModalQuestion.questionId, gradingForm.score, gradingForm.comment)}
                   >
                     提交批改
@@ -240,7 +286,11 @@ export default function Grading() {
                 </div>
               ))}
             </div>
-          ) : <div>暂无待批改学生</div>}
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#999' }}>
+              暂无待批改学生
+            </div>
+          )}
         </Modal>
       </Card>
       </div>
