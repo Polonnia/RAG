@@ -14,6 +14,7 @@ const routeNameMap = {
   '/analysis': '学情分析',
   '/wrongbook': '错题本',
   '/assistant': '学习助手',
+  '/knowledge-graph': '知识图谱',
 };
 
 export default function HeaderBar() {

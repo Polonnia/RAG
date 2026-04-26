@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOutlined,
   DatabaseOutlined,
+  NodeIndexOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
   BarChartOutlined,
@@ -33,6 +34,7 @@ const teacherMenuItems = [
 // 学生菜单
 const studentMenuItems = [
   { key: 'qa', icon: <BookOutlined />, label: '知识库问答', path: '/qa' },
+  { key: 'knowledge-graph', icon: <NodeIndexOutlined />, label: '知识图谱', path: '/knowledge-graph' },
   { key: 'student', icon: <TrophyOutlined />, label: '考试系统', path: '/student' },
   { key: 'analysis', icon: <BarChartOutlined />, label: '学情分析', path: '/analysis' },
   { key: 'wrongbook', icon: <FileTextOutlined />, label: '错题本', path: '/wrongbook' },
@@ -50,6 +52,7 @@ function getSelectedKey(pathname) {
   if (pathname.startsWith('/analysis')) return 'analysis';
   if (pathname.startsWith('/wrongbook')) return 'wrongbook';
   if (pathname.startsWith('/assistant')) return 'assistant';
+  if (pathname.startsWith('/knowledge-graph')) return 'knowledge-graph';
   if (pathname.startsWith('/knowledge')) return 'knowledge';
   return 'qa';
 }

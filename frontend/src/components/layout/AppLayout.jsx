@@ -8,11 +8,12 @@ import { getUser } from '../../auth/authUtils';
 
 const { Content, Footer } = Layout;
 
-export default function AppLayout({ children, maxWidth = 1000 }) {
+export default function AppLayout({ children, maxWidth = 1000, immersive = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getUser();
   const isStudent = user?.role === 'student';
+  const contentHeight = 'calc(100vh - 64px)';
 
   const quickActions = isStudent
     ? [
@@ -34,49 +35,59 @@ export default function AppLayout({ children, maxWidth = 1000 }) {
         <Content
           style={{
             padding: '0',
-            background: '#f4f6fa',
-            minHeight: 800,
+            background: immersive ? '#0b121d' : '#f4f6fa',
+            minHeight: immersive ? contentHeight : 800,
+            height: immersive ? contentHeight : undefined,
+            overflow: immersive ? 'hidden' : 'visible',
             fontFamily: 'Noto Sans SC, Microsoft YaHei, PingFang SC, HarmonyOS Sans, Segoe UI, Arial, sans-serif'
           }}
         >
-          <div className="app-bg-layer" aria-hidden="true">
-            <span className="bg-orb bg-orb-1" />
-            <span className="bg-orb bg-orb-2" />
-            <span className="bg-orb bg-orb-3" />
-          </div>
+          {!immersive ? (
+            <div className="app-bg-layer" aria-hidden="true">
+              <span className="bg-orb bg-orb-1" />
+              <span className="bg-orb bg-orb-2" />
+              <span className="bg-orb bg-orb-3" />
+            </div>
+          ) : null}
           <div
             className="app-content-shell"
             style={{
-              maxWidth: maxWidth * 1.5,
-              margin: '0 auto',
-              padding: 48,
-              background: '#fff',
-              borderRadius: 27,
-              boxShadow: '0 6px 36px #e6eaf1',
-              minHeight: 900
+              maxWidth: immersive ? '100%' : maxWidth * 1.5,
+              margin: immersive ? '0' : '0 auto',
+              padding: immersive ? 0 : 48,
+              background: immersive ? 'transparent' : '#fff',
+              borderRadius: immersive ? 0 : 27,
+              boxShadow: immersive ? 'none' : '0 6px 36px #e6eaf1',
+              minHeight: immersive ? contentHeight : 900,
+              height: immersive ? contentHeight : undefined,
+              overflow: immersive ? 'hidden' : 'visible'
             }}
           >
             {children}
           </div>
         </Content>
-        <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>
-          教学AI助手 ©2025
-        </Footer>
+        {!immersive ? (
+          <Footer style={{ textAlign: 'center', background: '#f4f6fa', color: '#888', fontWeight: 500, letterSpacing: 1 }}>
+            教学AI助手 ©2025
+          </Footer>
+        ) : null}
       </Layout>
-      <FloatButton.Group shape="circle" style={{ right: 28, bottom: 28 }} trigger="hover" icon={<RocketOutlined />}>
-        {quickActions.map((item) => (
-          <Tooltip title={item.tip} key={item.key} placement="left">
-            <FloatButton
-              icon={item.icon}
-              onClick={() => {
-                if (location.pathname !== item.path) {
-                  navigate(item.path);
-                }
-              }}
-            />
-          </Tooltip>
-        ))}
-      </FloatButton.Group>
+      {!immersive ? (
+        <FloatButton.Group shape="circle" style={{ right: 28, bottom: 28 }} trigger="hover" icon={<RocketOutlined />}>
+          {quickActions.map((item) => (
+            <Tooltip title={item.tip} key={item.key} placement="left">
+              <FloatButton
+                icon={item.icon}
+                onClick={() => {
+                  if (location.pathname !== item.path) {
+                    navigate(item.path);
+                  }
+                }}
+              />
+            </Tooltip>
+          ))}
+        </FloatButton.Group>
+      ) : null}
     </Layout>
   );
 }

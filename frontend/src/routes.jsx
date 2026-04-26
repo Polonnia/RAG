@@ -11,6 +11,7 @@ import StudentExamResult from './pages/StudentExamResult';
 import StudentAnalysis from './pages/StudentAnalysis';
 import StudentWrongbook from './pages/StudentWrongbook';
 import StudentAssistant from './pages/StudentAssistant';
+import StudentKnowledgeGraph from './pages/StudentKnowledgeGraph';
 import KnowledgeManagement from './pages/KnowledgeManagement';
 import Login from './pages/Login';
 import RequireAuth from './auth/RequireAuth';
@@ -43,6 +44,7 @@ export default function AppRoutes() {
         <Route path="/analysis" element={<RequireAuth roles={["student"]}><StudentAnalysis /></RequireAuth>} />
         <Route path="/wrongbook" element={<RequireAuth roles={["student"]}><StudentWrongbook /></RequireAuth>} />
         <Route path="/assistant" element={<RequireAuth roles={["student"]}><StudentAssistant /></RequireAuth>} />
+        <Route path="/knowledge-graph" element={<RequireAuth roles={["student"]}><StudentKnowledgeGraph /></RequireAuth>} />
         
         <Route path="/exam/:examId" element={<RequireAuth roles={["teacher","admin"]}><ExamDetail /></RequireAuth>} />
         <Route path="*" element={<HomeRoute />} />

@@ -313,6 +313,105 @@ async def get_knowledge_files_api(current_user: User = Depends(get_current_user)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"获取文件列表失败: {str(e)}"})
 
+
+@router.get("/knowledge-graph/files")
+async def get_knowledge_graph_files(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """返回可展示知识图谱的文件列表。"""
+    try:
+        files_list = get_knowledge_files(db)
+        kg_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'KGs')
+
+        available = []
+        for item in files_list if isinstance(files_list, list) else []:
+            if not isinstance(item, dict):
+                continue
+
+            doc_id = str(item.get('file_index') or item.get('doc_id') or '').strip()
+            if not doc_id:
+                continue
+
+            entities_path = os.path.join(kg_root, doc_id, 'entities.json')
+            relationships_path = os.path.join(kg_root, doc_id, 'relationships.json')
+            if not (os.path.exists(entities_path) and os.path.exists(relationships_path)):
+                continue
+
+            available.append({
+                'filename': item.get('filename'),
+                'original_filename': item.get('original_filename') or item.get('filename'),
+                'doc_id': doc_id,
+            })
+
+        return {'files': available}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取知识图谱文件失败: {str(e)}")
+
+
+@router.get("/knowledge-graph/{filename}")
+async def get_knowledge_graph_by_filename(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """按文件名读取实体与关系数据，并附带结构树信息。"""
+    try:
+        files_list = get_knowledge_files(db)
+        target = None
+        for item in files_list if isinstance(files_list, list) else []:
+            if not isinstance(item, dict):
+                continue
+            if item.get('filename') == filename or item.get('original_filename') == filename:
+                target = item
+                break
+
+        if not target:
+            raise HTTPException(status_code=404, detail="未找到对应文件")
+
+        doc_id = str(target.get('file_index') or target.get('doc_id') or '').strip()
+        if not doc_id:
+            raise HTTPException(status_code=404, detail="该文件未关联知识图谱目录")
+
+        kg_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'rag', 'db', 'KGs')
+        entities_path = os.path.join(kg_root, doc_id, 'entities.json')
+        relationships_path = os.path.join(kg_root, doc_id, 'relationships.json')
+
+        if not os.path.exists(entities_path) or not os.path.exists(relationships_path):
+            raise HTTPException(status_code=404, detail="知识图谱文件不存在")
+
+        with open(entities_path, 'r', encoding='utf-8') as f:
+            entities = json.load(f)
+        with open(relationships_path, 'r', encoding='utf-8') as f:
+            relationships = json.load(f)
+
+        structure = []
+        doc_name = target.get('original_filename') or target.get('filename') or filename
+        doc_description = ''
+        structure_filename = f"{os.path.splitext(str(target.get('filename') or filename))[0]}_structure.json"
+        structure_file_path = os.path.join(TREE_JSON_DIR, structure_filename)
+        if os.path.exists(structure_file_path):
+            try:
+                with open(structure_file_path, 'r', encoding='utf-8') as f:
+                    structure_data = json.load(f)
+                structure = structure_data.get('structure', []) if isinstance(structure_data, dict) else []
+                doc_name = structure_data.get('doc_name', doc_name) if isinstance(structure_data, dict) else doc_name
+                doc_description = structure_data.get('doc_description', '') if isinstance(structure_data, dict) else ''
+            except Exception:
+                structure = []
+
+        return {
+            'filename': target.get('filename') or filename,
+            'original_filename': target.get('original_filename') or target.get('filename') or filename,
+            'doc_id': doc_id,
+            'doc_name': doc_name,
+            'doc_description': doc_description,
+            'structure': structure,
+            'entities': entities if isinstance(entities, list) else [],
+            'relationships': relationships if isinstance(relationships, list) else [],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"加载知识图谱失败: {str(e)}")
+
 @router.delete("/delete-file/{filename}")
 async def delete_knowledge_file_api(filename: str, current_user: User = Depends(get_current_user)):
     try:
