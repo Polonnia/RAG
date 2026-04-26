@@ -48,6 +48,41 @@ const renderQuestionOptions = (q) => {
 };
 
 // 渲染：正确答案 + 题目解析
+// 格式化解析文本，处理选项解析的换行
+const FormatExplanation = ({ explanation }) => {
+  if (!explanation) return null;
+
+  // 检查是否已经是新格式（包含换行符和"选项A"、"选项B"等）
+  if (explanation.includes('\n') && explanation.includes('选项A') && explanation.includes('选项B')) {
+    // 已经是新格式，直接显示
+    return explanation.split('\n').map((line, index) => (
+      <div key={index} style={{ marginBottom: index > 0 ? 4 : 0 }}>
+        {line}
+      </div>
+    ));
+  }
+
+  // 检查是否是老格式的选项解析（包含"选项A"、"选项B"但没有换行）
+  if (explanation.includes('选项A') && explanation.includes('选项B')) {
+    // 在老格式的"选项X"前添加换行
+    let formatted = explanation
+      .replace(/选项B/g, '\n选项B')
+      .replace(/选项C/g, '\n选项C')
+      .replace(/选项D/g, '\n选项D')
+      .replace(/选项E/g, '\n选项E')
+      .replace(/选项F/g, '\n选项F');
+
+    return formatted.split('\n').map((line, index) => (
+      <div key={index} style={{ marginBottom: index > 0 ? 4 : 0 }}>
+        {line}
+      </div>
+    ));
+  }
+
+  // 不包含选项解析，直接返回原文本
+  return explanation;
+};
+
 const renderAnswerAndExplanation = (q) => {
   // 只有 单选/多选/填空 显示正确答案
   const showAnswer = ['choice', 'multi', 'fill_blank'].includes(q.type);
@@ -69,7 +104,7 @@ const renderAnswerAndExplanation = (q) => {
       {hasExplain && (
         <div style={{ fontSize: 13, color: '#444', lineHeight: 1.6 }}>
           <span style={{ fontWeight: 600 }}>题目解析：</span>
-          {q.explanation}
+          <FormatExplanation explanation={q.explanation} />
         </div>
       )}
     </div>

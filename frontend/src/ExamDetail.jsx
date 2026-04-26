@@ -43,7 +43,7 @@ function formatAnswer(ans) {
   return ans ?? '--';
 }
 
-// 尝试把可能是数组/JSON字符串/普通字符串的知识点渲染成“、”分隔
+// 尝试把可能是数组/JSON字符串/普通字符串的知识点渲染成”、”分隔
 function renderKnowledge(v) {
   if (Array.isArray(v)) return v.join('、');
   if (typeof v === 'string') {
@@ -58,6 +58,45 @@ function renderKnowledge(v) {
     return s;
   }
   return v;
+}
+
+// 格式化解析文本，处理选项解析的换行（考试详情页用）
+function FormatExplanationDetail({ explanation }) {
+  if (!explanation) return '解析：无解析';
+
+  // 检查是否已经是新格式（包含换行符和”选项A”、”选项B”等）
+  if (explanation.includes('\n') && explanation.includes('选项A') && explanation.includes('选项B')) {
+    // 已经是新格式，直接显示
+    return explanation.split('\n').map((line, index) => (
+      <div key={index} style={{ marginBottom: index > 0 ? 4 : 0 }}>
+        {line}
+      </div>
+    ));
+  }
+
+  // 检查是否是老格式的选项解析（包含”选项A”、”选项B”但没有换行）
+  if (explanation.includes('选项A') && explanation.includes('选项B')) {
+    // 在老格式的”选项X”前添加换行
+    let formatted = explanation
+      .replace(/选项B/g, '\n选项B')
+      .replace(/选项C/g, '\n选项C')
+      .replace(/选项D/g, '\n选项D')
+      .replace(/选项E/g, '\n选项E')
+      .replace(/选项F/g, '\n选项F');
+
+    return formatted.split('\n').map((line, index) => (
+      <div key={index} style={{ marginBottom: index > 0 ? 4 : 0 }}>
+        {line}
+      </div>
+    ));
+  }
+
+  // 不包含选项解析，检查是否需要添加”解析：”前缀
+  if (explanation.startsWith('解析：')) {
+    return explanation;
+  } else {
+    return `解析：${explanation}`;
+  }
 }
 
 import AppLayout from './components/layout/AppLayout';
@@ -291,7 +330,7 @@ export default function ExamDetail() {
                               )}
 
                               <div style={{ color: '#8c8c8c', marginBottom: 4, background: '#f6f6f6', padding: 6, borderRadius: 6 }}>
-                                解析：{q.explanation ? q.explanation : '无解析'}
+                                <FormatExplanationDetail explanation={q.explanation} />
                               </div>
 
                               <div>
