@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, List, Tag, Button, Table, Typography, message, Tabs, Spin } from 'antd';
+import { Card, List, Tag, Button, Table, Typography, message, Tabs, Spin, Progress } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { fetchExamDetail, fetchExamAnalysis, allowStudentRetake } from './services/examService';
 import ReactECharts from 'echarts-for-react';
@@ -147,7 +147,51 @@ export default function ExamDetail() {
       ) : analysis ? (
         <>
           <Title level={5}>AI教学建议</Title>
-          <div style={{ marginBottom: 16 }}>{analysis.ai_suggestion}</div>
+          <div style={{ marginBottom: 16 }}>
+            {analysis.ai_suggestion && (() => {
+              // 解析AI建议，提取需要重点讲解的知识点
+              const suggestion = analysis.ai_suggestion;
+              const prefix = "根据统计，建议重点讲解以下知识点：";
+
+              if (suggestion.startsWith(prefix)) {
+                const knowledgePart = suggestion.substring(prefix.length);
+                if (knowledgePart === "无明显薄弱点") {
+                  return <div>{suggestion}</div>;
+                }
+
+                const weakKnowledge = knowledgePart.split("，").filter(k => k.trim());
+
+                return (
+                  <div>
+                    <div>根据统计，建议重点讲解以下知识点：</div>
+                    {weakKnowledge.length > 0 && (
+                      <div style={{ marginTop: 8, marginLeft: 16 }}>
+                        {weakKnowledge.map((knowledge, index) => (
+                          <span
+                            key={index}
+                            style={{
+                              display: 'inline-block',
+                              background: '#fff2e8',
+                              color: '#d4380d',
+                              padding: '4px 12px',
+                              borderRadius: '6px',
+                              margin: '4px 8px 4px 0',
+                              fontWeight: 600,
+                              border: '1px solid #ffbb96'
+                            }}
+                          >
+                            {knowledge.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return <div>{suggestion}</div>;
+            })()}
+          </div>
 
           <Title level={5}>知识点掌握情况</Title>
           <Table
@@ -169,6 +213,69 @@ export default function ExamDetail() {
             style={{ marginBottom: 24 }}
           />
 
+          {/* 知识点掌握情况可视化图表 */}
+          {Object.keys(analysis.knowledge_stats).length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <div style={{ background: '#eefcff', padding: '24px', borderRadius: '12px', marginBottom: 32 }}>
+                <div style={{
+                  height: '4px',
+                  background: 'linear-gradient(to right, #8fc0d2, #77d2d9, #70e2ce, #8aefb3, #bcf790, #f9f871)',
+                  marginBottom: '24px',
+                  borderRadius: '2px'
+                }} />
+
+                {Object.entries(analysis.knowledge_stats).length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#999' }}>暂无知识点数据</div>
+                ) : (
+                  <List
+                    dataSource={Object.entries(analysis.knowledge_stats)}
+                    renderItem={([knowledge, stats]) => {
+                      const accuracy = stats.total > 0 ? parseFloat(((stats.total - stats.wrong) / stats.total * 100).toFixed(1)) : 0;
+                      const cleanedKnowledge = renderKnowledge(knowledge).replace(/[\[\]"']/g, '').trim();
+
+                      return (
+                        <List.Item
+                          style={{
+                            padding: '16px 0',
+                            borderBottom: '1px solid #e8e8e8',
+                            transition: 'background-color 0.3s'
+                          }}
+                        >
+                          <div style={{ width: '100%' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                              <span style={{ fontWeight: 600, color: '#1677ff', fontSize: 15 }}>
+                                {cleanedKnowledge}
+                              </span>
+                              <span style={{
+                                color: accuracy < 60 ? '#f5222d' : accuracy < 80 ? '#faad14' : '#52c41a',
+                                fontWeight: 600,
+                                fontSize: 15
+                              }}>
+                                {accuracy}%
+                              </span>
+                            </div>
+                            <Progress
+                              percent={accuracy}
+                              strokeColor={{
+                                '0%': '#8fc0d2',
+                                '16.67%': '#77d2d9',
+                                '33.33%': '#70e2ce',
+                                '50%': '#8aefb3',
+                                '66.67%': '#bcf790',
+                                '100%': '#f9f871',
+                              }}
+                              style={{ marginBottom: 4 }}
+                            />
+                          </div>
+                        </List.Item>
+                      );
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
           <Title level={5}>题目错误统计</Title>
           <Table
             dataSource={Object.entries(analysis.question_stats).map(([k, v]) => ({
@@ -179,10 +286,10 @@ export default function ExamDetail() {
               knowledge: v.knowledge_points
             }))}
             columns={[
-              { title: '题目', dataIndex: 'question', key: 'question', width: 300 },
-              { title: '答题数', dataIndex: 'total', key: 'total' },
-              { title: '错误数', dataIndex: 'wrong', key: 'wrong' },
-              { title: '知识点', dataIndex: 'knowledge', key: 'knowledge', render: renderKnowledge }
+              { title: '题目', dataIndex: 'question', key: 'question', width: '50%' },
+              { title: '答题数', dataIndex: 'total', key: 'total', width: 80 },
+              { title: '错误数', dataIndex: 'wrong', key: 'wrong', width: 80 },
+              { title: '知识点', dataIndex: 'knowledge', key: 'knowledge', render: renderKnowledge, width: '20%' }
             ]}
             pagination={false}
             size="small"
