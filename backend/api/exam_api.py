@@ -1108,25 +1108,65 @@ def reset_student_exam(exam_id: int, student_id: int, current_user: User = Depen
 
 @router.get("/student/keyword-accuracy")
 async def get_student_keyword_accuracy(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """获取学生的关键词正确率统计"""
+    """获取学生的关键词正确率统计（基于实际答题数据，而非仅从StudentKeywordAccuracy表）"""
     if current_user.role != "student":
         raise HTTPException(status_code=403, detail="只有学生可以查看关键词正确率")
     
     try:
-        # 获取学生的所有关键词正确率记录
-        accuracy_records = db.query(StudentKeywordAccuracy).filter(
-            StudentKeywordAccuracy.student_id == current_user.id
-        ).order_by(StudentKeywordAccuracy.accuracy.asc()).all()  # 按正确率升序排列，薄弱点在前
+        # 方案：从已完成的考试答题中实时计算每个知识点的正确率
+        # 这样既保证了与学情分析一致，又能反映最新的错题情况
         
+        completed_exams = db.query(StudentExam).filter(
+            StudentExam.student_id == current_user.id,
+            StudentExam.end_time.isnot(None)
+        ).all()
+        
+        keyword_stats = {}  # {keyword: {'total': 0, 'earned': 0}}
+        
+        for se in completed_exams:
+            for ans in se.answers:
+                if ans.points_earned is None:
+                    continue  # 跳过未判分的题目
+                    
+                question = db.query(Question).filter(Question.id == ans.question_id).first()
+                if not question or not question.knowledge_points:
+                    continue
+                
+                # 解析知识点
+                keywords = []
+                try:
+                    if isinstance(question.knowledge_points, str):
+                        if question.knowledge_points.startswith('['):
+                            keywords = json.loads(question.knowledge_points)
+                        else:
+                            keywords = [kw.strip() for kw in question.knowledge_points.split(',') if kw.strip()]
+                    elif isinstance(question.knowledge_points, list):
+                        keywords = question.knowledge_points
+                except:
+                    keywords = []
+                
+                for kw in keywords:
+                    kw = kw.strip() if isinstance(kw, str) else str(kw)
+                    if kw:
+                        if kw not in keyword_stats:
+                            keyword_stats[kw] = {'total': 0.0, 'earned': 0.0}
+                        keyword_stats[kw]['total'] += question.points
+                        keyword_stats[kw]['earned'] += ans.points_earned
+        
+        # 格式化结果
         result = []
-        for record in accuracy_records:
+        for kw, stats in keyword_stats.items():
+            accuracy = round(stats['earned'] / stats['total'] * 100, 2) if stats['total'] > 0 else 0
             result.append({
-                "keyword": record.keyword,
-                "total_count": record.total_count,
-                "correct_count": record.correct_count,
-                "accuracy": round(record.accuracy * 100, 2),  # 转换为百分比
-                "last_updated": record.last_updated.strftime('%Y-%m-%d %H:%M:%S')
+                "keyword": kw,
+                "total_count": int(stats['total'] // 10) if stats['total'] > 0 else 0,  # 粗略转换为题数
+                "correct_count": int(stats['earned'] // 10) if stats['earned'] > 0 else 0,
+                "accuracy": accuracy,
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
+        
+        # 按正确率升序排列，薄弱点在前
+        result.sort(key=lambda x: x['accuracy'])
         
         return {"keyword_accuracy": result}
         

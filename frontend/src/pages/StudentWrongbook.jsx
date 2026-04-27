@@ -215,12 +215,17 @@ export default function StudentWrongbook() {
                 style={{
                   fontSize: 16,
                   margin: 6,
+                  padding: '8px 16px',
                   background: selectedKeyword === k.keyword ? '#e6f7ff' : '#f5f5f5',
-                  border: selectedKeyword === k.keyword ? '1.5px solid #1890ff' : '1px solid #eee',
+                  border: selectedKeyword === k.keyword ? '2px solid #1890ff' : '1px solid #eee',
                   color: accuracyMap[k.keyword] < 60 ? '#f5222d' : accuracyMap[k.keyword] < 80 ? '#faad14' : '#52c41a',
-                  transition: 'all 0.2s',
+                  transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transform: selectedKeyword === k.keyword ? 'scale(1.08)' : 'scale(1)',
+                  boxShadow: selectedKeyword === k.keyword ? '0 4px 16px rgba(24, 144, 255, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.05)',
+                  borderRadius: '20px',
                   cursor: 'pointer',
-                  boxShadow: selectedKeyword === k.keyword ? '0 2px 8px #bae7ff' : 'none'
+                  fontWeight: selectedKeyword === k.keyword ? 600 : 500,
+                  letterSpacing: selectedKeyword === k.keyword ? '0.5px' : '0px'
                 }}
                 title={`正确率：${accuracyMap[k.keyword] !== undefined ? accuracyMap[k.keyword] + '%' : '--'}`}
               >
