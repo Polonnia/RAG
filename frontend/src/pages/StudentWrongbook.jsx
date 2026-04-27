@@ -25,6 +25,13 @@ export default function StudentWrongbook() {
   const [practiceResult, setPracticeResult] = useState(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceHistory, setPracticeHistory] = useState([]);
+  
+  // 重做功能相关状态
+  const [retakingQuestionId, setRetakingQuestionId] = useState(null);
+  const [retakingAnswer, setRetakingAnswer] = useState('');
+  const [retakingResult, setRetakingResult] = useState(null);
+  const [retakingLoading, setRetakingLoading] = useState(false);
+  const [hoveredRetakingOption, setHoveredRetakingOption] = useState('');
 
   useEffect(() => {
     // 自动修复错题本数据（为多知识点的错题补充缺失记录）
@@ -107,6 +114,20 @@ export default function StudentWrongbook() {
       message.error('提交失败');
     }
     setLoading(false);
+  };
+
+  const handleRetakeSubmit = async () => {
+    if (!retakingQuestionId) return;
+    setRetakingLoading(true);
+    try {
+      const res = await http.post('/student/wrongbook/submit',
+        new URLSearchParams({ wrong_id: retakingQuestionId, answer: retakingAnswer })
+      );
+      setRetakingResult(res.data);
+    } catch (e) {
+      message.error('提交失败');
+    }
+    setRetakingLoading(false);
   };
 
   const handleGeneratePractice = async () => {
@@ -263,22 +284,244 @@ export default function StudentWrongbook() {
                       displayOptions = {};
                     }
                   }
+                  const isRetaking = retakingQuestionId === q.id;
+                  
                   return (
                   <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
                     <div style={{ width: '100%' }}>
-                      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{q.question}</div>
-                      {displayOptions && Object.keys(displayOptions).length > 0 && (
-                        <div style={{ margin: '8px 0' }}>
-                          {Object.entries(displayOptions).map(([k, v]) => (
-                            <div key={k}>{k}. {v}</div>
-                          ))}
+                      <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>{q.question}</span>
+                        {!isRetaking && <Tag color="error" style={{ marginLeft: 12 }}>错题</Tag>}
+                      </div>
+                      
+                      {!isRetaking ? (
+                        <div>
+                          {displayOptions && Object.keys(displayOptions).length > 0 && (
+                            <div style={{ 
+                              paddingLeft: 16,
+                              borderLeft: '3px solid #d9d9d9',
+                              background: '#fafafa',
+                              borderRadius: 8,
+                              paddingTop: 8,
+                              paddingBottom: 8,
+                              marginBottom: 16
+                            }}>
+                              {Object.entries(displayOptions).map(([k, v]) => (
+                                <div 
+                                  key={k}
+                                  style={{ 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    cursor: 'default',
+                                    padding: '10px 12px',
+                                    borderRadius: 8,
+                                    marginBottom: 8,
+                                    border: '1px solid #e8e8e8',
+                                    background: '#fff',
+                                    color: '#666'
+                                  }}
+                                >
+                                  <span style={{ marginRight: 8, color: '#999' }}>○</span>
+                                  <span>{k}. {v}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <Button 
+                            type="primary" 
+                            onClick={() => {
+                              setRetakingQuestionId(q.id);
+                              setRetakingAnswer('');
+                              setRetakingResult(null);
+                            }} 
+                            style={{ marginTop: 8, borderRadius: 12, fontWeight: 600 }}
+                          >
+                            重做
+                          </Button>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 12, padding: '16px', background: '#f8fafb', border: '1px solid #e6f7ff', borderRadius: 12 }}>
+                          <div style={{ 
+                            fontWeight: 600, 
+                            fontSize: 15,
+                            color: '#1f1f1f',
+                            marginBottom: 12
+                          }}>
+                            重做本题
+                          </div>
+                          
+                          {/* 根据题目类型显示对应的输入界面 */}
+                          {q.type === 'choice' ? (
+                            // 单选题 - 与考试页面样式保持一致
+                            <div style={{ 
+                              paddingLeft: 16,
+                              borderLeft: '3px solid #1890ff',
+                              background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)',
+                              borderRadius: 8,
+                              paddingTop: 8,
+                              paddingBottom: 8,
+                              marginBottom: 16
+                            }}>
+                              {displayOptions && Object.entries(displayOptions).map(([k, v]) => {
+                                const optionKey = `retaking_${k}`;
+                                const isSelected = retakingAnswer === k;
+                                const isHovered = hoveredRetakingOption === optionKey;
+                                return (
+                                  <label 
+                                    key={k}
+                                    style={{ 
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      padding: '10px 12px',
+                                      borderRadius: 8,
+                                      marginBottom: 8,
+                                      transition: 'all 0.2s ease',
+                                      border: isSelected ? '1px solid #69b1ff' : (isHovered ? '1px solid #91caff' : '1px solid transparent'),
+                                      background: isSelected ? '#e6f4ff' : (isHovered ? '#f0f7ff' : 'transparent'),
+                                      boxShadow: isHovered ? '0 2px 8px rgba(22,119,255,0.12)' : 'none'
+                                    }}
+                                    onMouseEnter={() => setHoveredRetakingOption(optionKey)}
+                                    onMouseLeave={() => setHoveredRetakingOption('')}
+                                  >
+                                    <input 
+                                      type="radio"
+                                      name="retaking_choice"
+                                      value={k}
+                                      checked={isSelected}
+                                      onChange={(e) => setRetakingAnswer(e.target.value)}
+                                      style={{ marginRight: 8, cursor: 'pointer' }}
+                                    />
+                                    <span>{k}. {v}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : q.type === 'multi' ? (
+                            // 多选题 - 与考试页面样式保持一致
+                            <div style={{ 
+                              paddingLeft: 16,
+                              borderLeft: '3px solid #1890ff',
+                              background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)',
+                              borderRadius: 8,
+                              paddingTop: 8,
+                              paddingBottom: 8,
+                              marginBottom: 16
+                            }}>
+                              {displayOptions && Object.entries(displayOptions).map(([k, v]) => {
+                                const optionKey = `retaking_${k}`;
+                                const selectedArray = retakingAnswer ? retakingAnswer.split(',') : [];
+                                const isSelected = selectedArray.includes(k);
+                                const isHovered = hoveredRetakingOption === optionKey;
+                                return (
+                                  <label 
+                                    key={k}
+                                    style={{ 
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      padding: '10px 12px',
+                                      borderRadius: 8,
+                                      marginBottom: 8,
+                                      transition: 'all 0.2s ease',
+                                      border: isSelected ? '1px solid #69b1ff' : (isHovered ? '1px solid #91caff' : '1px solid transparent'),
+                                      background: isSelected ? '#e6f4ff' : (isHovered ? '#f0f7ff' : 'transparent'),
+                                      boxShadow: isHovered ? '0 2px 8px rgba(22,119,255,0.12)' : 'none'
+                                    }}
+                                    onMouseEnter={() => setHoveredRetakingOption(optionKey)}
+                                    onMouseLeave={() => setHoveredRetakingOption('')}
+                                  >
+                                    <input 
+                                      type="checkbox"
+                                      value={k}
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        const newSelected = e.target.checked
+                                          ? [...selectedArray, k]
+                                          : selectedArray.filter(item => item !== k);
+                                        setRetakingAnswer(newSelected.join(','));
+                                      }}
+                                      style={{ marginRight: 8, cursor: 'pointer' }}
+                                    />
+                                    <span>{k}. {v}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : q.type === 'fill_blank' ? (
+                            // 填空题
+                            <Input
+                              value={retakingAnswer}
+                              onChange={e => setRetakingAnswer(e.target.value)}
+                              placeholder="请输入答案，多个空用空格分隔"
+                              style={{ width: '100%', marginBottom: 16, fontSize: 14, borderRadius: 8 }}
+                            />
+                          ) : q.type === 'short_answer' || q.type === 'essay' ? (
+                            // 简答题/问答题
+                            <TextArea
+                              value={retakingAnswer}
+                              onChange={e => setRetakingAnswer(e.target.value)}
+                              placeholder="请输入答案"
+                              rows={4}
+                              style={{ marginBottom: 16, fontSize: 14, borderRadius: 8 }}
+                            />
+                          ) : q.type === 'programming' ? (
+                            // 编程题
+                            <TextArea
+                              value={retakingAnswer}
+                              onChange={e => setRetakingAnswer(e.target.value)}
+                              placeholder="请输入代码"
+                              rows={6}
+                              style={{ marginBottom: 16, fontSize: 14, borderRadius: 8, fontFamily: 'monospace' }}
+                            />
+                          ) : (
+                            // 默认：文本输入
+                            <Input
+                              value={retakingAnswer}
+                              onChange={e => setRetakingAnswer(e.target.value)}
+                              placeholder="请输入答案"
+                              style={{ width: '100%', marginBottom: 16, fontSize: 14, borderRadius: 8 }}
+                            />
+                          )}
+                          
+                          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                            <Button 
+                              type="primary" 
+                              onClick={handleRetakeSubmit} 
+                              loading={retakingLoading}
+                              style={{ borderRadius: 8, fontWeight: 600, flex: 1 }}
+                            >
+                              提交答案
+                            </Button>
+                            <Button 
+                              onClick={() => {
+                                setRetakingQuestionId(null);
+                                setRetakingAnswer('');
+                                setRetakingResult(null);
+                                setHoveredRetakingOption('');
+                              }}
+                              style={{ borderRadius: 8, fontWeight: 600 }}
+                            >
+                              取消
+                            </Button>
+                          </div>
+                          
+                          {retakingResult && (
+                            <Result
+                              status={retakingResult.is_correct ? 'success' : 'error'}
+                              title={retakingResult.is_correct ? '回答正确' : '回答错误'}
+                              subTitle={
+                                <div style={{ marginTop: 8, textAlign: 'left' }}>
+                                  <div>你的答案：<span style={{ color: retakingResult.is_correct ? '#52c41a' : '#d4380d', fontWeight: 600 }}>{retakingResult.your_answer}</span></div>
+                                  <div>正确答案：<span style={{ color: '#52c41a', fontWeight: 600 }}>{retakingResult.correct_answer}</span></div>
+                                  <div style={{ marginTop: 12 }}>解析：<span style={{ color: '#666' }}>{retakingResult.explanation}</span></div>
+                                </div>
+                              }
+                              style={{ margin: 0 }}
+                            />
+                          )}
                         </div>
                       )}
-                      <Button type="primary" ghost onClick={() => {
-                        setActiveQuestion(q);
-                        setAnswer('');
-                        setResult(null);
-                      }} style={{ marginTop: 8, borderRadius: 12, fontWeight: 600 }}>重做</Button>
                     </div>
                   </List.Item>
                   );
@@ -329,7 +572,7 @@ export default function StudentWrongbook() {
         )}
 
         <Modal
-          open={!!activeQuestion}
+          open={false}
           onCancel={() => { setActiveQuestion(null); setResult(null); setAnswer(''); }}
           footer={null}
           title={<span style={{ fontWeight: 700, fontSize: 20 }}>错题重做</span>}
