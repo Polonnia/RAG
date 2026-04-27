@@ -118,7 +118,6 @@ export default function StudentKnowledgeGraph() {
       const nextEntities = Array.isArray(response?.data?.entities) ? response.data.entities : [];
       const nextRelationships = Array.isArray(response?.data?.relationships) ? response.data.relationships : [];
       const nextStructure = buildTreeData(response?.data?.structure || []);
-
       setEntities(nextEntities);
       setRelationships(nextRelationships);
       setStructureTree(nextStructure);
