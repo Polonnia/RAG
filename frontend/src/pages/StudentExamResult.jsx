@@ -218,6 +218,14 @@ export default function StudentExamResult() {
             )}
           </div>
         </div>
+
+        <Divider />
+
+        <div style={{ textAlign: 'right', paddingTop: 16 }}>
+          <Button onClick={() => navigate('/student')} size="large" style={{ borderRadius: 8, fontWeight: 600 }}>
+            返回考试列表
+          </Button>
+        </div>
       </Card>
       </div>
     </AppLayout>

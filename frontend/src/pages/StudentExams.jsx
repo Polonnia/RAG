@@ -13,6 +13,8 @@ export default function StudentExams() {
   const [current, setCurrent] = useState(null);
   const [answers, setAnswers] = useState({});
   const [open, setOpen] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [hoveredOption, setHoveredOption] = useState('');
   const { isMobile } = useResponsive();
   const navigate = useNavigate();
 
@@ -26,7 +28,32 @@ export default function StudentExams() {
     // 加载已保存的答题
     const savedAnswers = data.saved_answers || {};
     setAnswers(savedAnswers);
+    setRemainingSeconds(Math.max((data?.exam?.duration || 0) * 60, 0));
+    setHoveredOption('');
     setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open || !current?.exam?.id || remainingSeconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          message.warning('考试时间已到，请尽快提交试卷');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [open, current?.exam?.id, remainingSeconds]);
+
+  const formatRemainTime = (seconds) => {
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
   };
 
   const submit = async () => {
@@ -167,7 +194,44 @@ export default function StudentExams() {
       )}
 
       <Modal 
-        title={<span style={{ fontSize: 16, fontWeight: 600 }}>{current?.exam?.title}</span>}
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: isMobile ? '8px 14px' : '10px 18px',
+                borderRadius: 999,
+                border: '1px solid #91caff',
+                background: '#e6f4ff',
+                color: '#0958d9',
+                fontSize: isMobile ? 15 : 18,
+                fontWeight: 600,
+                maxWidth: isMobile ? '58vw' : '70vw',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {current?.exam?.title || '未命名考试'}
+            </div>
+            <div
+              style={{
+                padding: '6px 12px',
+                borderRadius: 10,
+                border: '1px solid #ffd666',
+                background: remainingSeconds <= 60 ? '#fff1f0' : '#fffbe6',
+                color: remainingSeconds <= 60 ? '#cf1322' : '#ad6800',
+                fontWeight: 700,
+                fontSize: 14,
+                minWidth: 110,
+                textAlign: 'center'
+              }}
+            >
+              剩余 {formatRemainTime(remainingSeconds)}
+            </div>
+          </div>
+        }
         open={open} 
         onCancel={async () => {
           if (current && Object.keys(answers).length > 0) {
@@ -181,15 +245,22 @@ export default function StudentExams() {
           setOpen(false);
         }}
         onOk={submit} 
-        width={isMobile ? '96%' : 900} 
+        width="100vw"
+        style={{ top: 0, maxWidth: '100vw', paddingBottom: 0 }}
+        styles={{
+          content: { height: '100vh', borderRadius: 0, paddingBottom: 0, display: 'flex', flexDirection: 'column' },
+          header: { borderRadius: 0 },
+          body: { flex: 1, overflowY: 'auto', padding: isMobile ? 12 : 20, paddingBottom: isMobile ? 96 : 120 },
+          footer: { margin: 0, borderTop: '1px solid #f0f0f0', padding: isMobile ? '12px 16px' : '16px 24px', background: '#fff' }
+        }}
         destroyOnClose
         okText="提交考试"
-        cancelText="取消"
+        cancelText="保存并返回"
         okButtonProps={{ size: 'large' }}
         cancelButtonProps={{ size: 'large' }}
       >
         {current && (
-          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div>
             {(current.questions || []).map((q, idx) => (
               <Card
                 key={q.id}
@@ -220,23 +291,40 @@ export default function StudentExams() {
                   {q.options && Object.keys(q.options).length > 0 && (
                     <div style={{ 
                       paddingLeft: 16,
-                      borderLeft: '3px solid #1890ff'
+                      borderLeft: '3px solid #1890ff',
+                      background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)',
+                      borderRadius: 8,
+                      paddingTop: 8,
+                      paddingBottom: 8
                     }}>
                       {Object.entries(q.options).map(([k, v]) => (
                         <div key={k} style={{ marginBottom: 8 }}>
+                          {(() => {
+                            const optionKey = `${q.id}_${k}`;
+                            const isSelected = q.type === 'multi'
+                              ? (Array.isArray(answers[q.id]) && answers[q.id].includes(k))
+                              : (answers[q.id] === k);
+                            const isHovered = hoveredOption === optionKey;
+                            return (
                           <label style={{ 
                             display: 'flex',
                             alignItems: 'center',
                             cursor: 'pointer',
-                            padding: '8px',
-                            borderRadius: '4px',
-                            transition: 'background 0.2s'
-                          }}>
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            transition: 'all 0.2s ease',
+                            border: isSelected ? '1px solid #69b1ff' : (isHovered ? '1px solid #91caff' : '1px solid transparent'),
+                            background: isSelected ? '#e6f4ff' : (isHovered ? '#f0f7ff' : 'transparent'),
+                            boxShadow: isHovered ? '0 2px 8px rgba(22,119,255,0.12)' : 'none'
+                          }}
+                          onMouseEnter={() => setHoveredOption(optionKey)}
+                          onMouseLeave={() => setHoveredOption('')}
+                          >
                             <input 
                               type={q.type === 'multi' ? 'checkbox' : 'radio'}
                               name={`q_${q.id}`}
                               value={k}
-                              checked={q.type === 'multi' ? (Array.isArray(answers[q.id]) && answers[q.id].includes(k)) : (answers[q.id] === k)}
+                              checked={isSelected}
                               onChange={(e) => {
                                 if (q.type === 'multi') {
                                   setAnswers(prev => {
@@ -248,10 +336,12 @@ export default function StudentExams() {
                                   setAnswers(prev => ({ ...prev, [q.id]: k }));
                                 }
                               }}
-                              style={{ marginRight: 8, cursor: 'pointer' }}
+                              style={{ marginRight: 10, cursor: 'pointer' }}
                             />
-                            <span style={{ fontSize: 14 }}>{k}. {v}</span>
+                            <span style={{ fontSize: 14, color: isSelected ? '#0958d9' : '#262626', fontWeight: isSelected ? 600 : 500 }}>{k}. {v}</span>
                           </label>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>

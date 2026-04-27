@@ -651,6 +651,10 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
             raise HTTPException(status_code=400, detail="未找到考试记录")
         if student_exam.end_time:
             raise HTTPException(status_code=400, detail="您已经提交过这个考试")
+
+        # 若学生先保存过草稿，会已存在同题答题记录；提交前先清理，避免重复写入。
+        db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id).delete()
+
         answers = json.loads(answers_data)
         total_score = 0
         questions = db.query(Question).filter(Question.exam_id == exam_id).all()
@@ -791,7 +795,7 @@ async def submit_exam(exam_id: int = Form(...), answers_data: str = Form(...), c
 
                 # AI总结失败不影响错题归档
                 try:
-                    from api.ai_api import ai_weakness_summary
+                    from api.analysis_api import ai_weakness_summary
                     ai_result = await ai_weakness_summary(answers=None, exam_id=exam_id, current_user=user, db=db2)
                     ai_summary = ai_result.get("summary", "") if ai_result else ""
                 except Exception as e:
@@ -872,10 +876,23 @@ async def get_exam_result(exam_id: int, current_user: User = Depends(get_current
     student_exam = db.query(StudentExam).filter(StudentExam.exam_id == exam_id, StudentExam.student_id == current_user.id).first()
     if not student_exam:
         raise HTTPException(status_code=404, detail="未找到考试记录")
-    answers = db.query(StudentAnswer).filter(StudentAnswer.student_exam_id == student_exam.id).all()
-    question_ids = [answer.question_id for answer in answers]
-    questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
-    question_map = {q.id: q for q in questions}
+
+    # 兼容历史重复数据：同一题只保留最新一条答题记录。
+    raw_answers = (
+        db.query(StudentAnswer)
+        .filter(StudentAnswer.student_exam_id == student_exam.id)
+        .order_by(StudentAnswer.id.desc())
+        .all()
+    )
+    latest_answer_map = {}
+    for answer in raw_answers:
+        if answer.question_id not in latest_answer_map:
+            latest_answer_map[answer.question_id] = answer
+
+    exam_questions = db.query(Question).filter(Question.exam_id == exam_id).all()
+    question_map = {q.id: q for q in exam_questions}
+    answers = [latest_answer_map[q.id] for q in exam_questions if q.id in latest_answer_map]
+
     # 查找AI薄弱点分析
     from models import ExamHistory
     ai_summary = ""
