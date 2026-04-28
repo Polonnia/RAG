@@ -1,9 +1,0 @@
-# Inference
-numpy
-onnxruntime
-transformers
-
-# predict.py/record_and_predict.py samples
-librosa
-soundfile
-pyaudio
