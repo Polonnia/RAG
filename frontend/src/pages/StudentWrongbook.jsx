@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox, Row, Col } from 'antd';
-import { BookOutlined } from '@ant-design/icons';
+import { Card, List, Empty, Spin, Button, Input, Modal, Radio, Space, Progress, Result, Tag, Checkbox, Row, Col, Divider } from 'antd';
+import { BookOutlined, CloseOutlined } from '@ant-design/icons';
 import http from '../api/http';
+import getApiUrl from '../apiConfig';
 import AppLayout from '../components/layout/AppLayout';
 import { message } from 'antd';
 import PageHeader from '../components/PageHeader';
@@ -24,6 +25,7 @@ export default function StudentWrongbook() {
   const [practiceAnswers, setPracticeAnswers] = useState({});
   const [practiceResult, setPracticeResult] = useState(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
+  const [practiceGenerateProgress, setPracticeGenerateProgress] = useState(0);
   const [practiceHistory, setPracticeHistory] = useState([]);
   
   // 重做功能相关状态
@@ -32,6 +34,7 @@ export default function StudentWrongbook() {
   const [retakingResult, setRetakingResult] = useState(null);
   const [retakingLoading, setRetakingLoading] = useState(false);
   const [hoveredRetakingOption, setHoveredRetakingOption] = useState('');
+  const [hoveredPracticeOption, setHoveredPracticeOption] = useState(null);
 
   useEffect(() => {
     // 自动修复错题本数据（为多知识点的错题补充缺失记录）
@@ -133,30 +136,97 @@ export default function StudentWrongbook() {
   const handleGeneratePractice = async () => {
     if (!selectedKeyword) return;
     setPracticeLoading(true);
+    setPracticeGenerateProgress(0);
     setPracticeQuestions([]);
     setPracticeResult(null);
     setPracticeAnswers({});
     try {
       console.log('[巩固练习] 开始生成习题，知识点:', selectedKeyword, '数量:', practiceCount);
-      const res = await http.post('/student/generate-practice',
-        new URLSearchParams({ keyword: selectedKeyword, count: practiceCount, difficulty: '中等' }),
-        { timeout: 180000 }
-      );
-      console.log('[巩固练习] 生成习题响应:', res);
-      const questionsData = res.data?.questions || res.data || [];
-      console.log('[巩固练习] 设置习题数据，数量:', questionsData.length);
-      setPracticeQuestions(questionsData);
-      if (questionsData.length === 0) {
+      
+      // 使用流式API获取进度信息
+      const apiUrl = getApiUrl();
+      const fullUrl = `${apiUrl}/student/generate-practice-stream`;
+      console.log('[巩固练习] 调用URL:', fullUrl, 'API基础URL:', apiUrl);
+      
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ 
+          keyword: selectedKeyword, 
+          count: String(practiceCount),
+          difficulty: '中等' 
+        })
+      });
+      
+      console.log('[巩固练习] 响应状态:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let allQuestions = [];
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
+        
+        // 处理缓冲区中的所有完整行
+        const lines = buffer.split('\n');
+        
+        // 如果流结束，处理最后一行；否则保留最后一个不完整的行
+        buffer = done ? '' : (lines.pop() || '');
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const data = JSON.parse(line);
+            console.log('[巩固练习] 流式数据:', data);
+            
+            if (data.type === 'progress') {
+              // 更新进度条
+              setPracticeGenerateProgress(data.progress);
+              console.log('[巩固练习] 进度更新:', data.progress);
+            } else if (data.type === 'done') {
+              // 完成
+              allQuestions = data.questions || [];
+              console.log('[巩固练习] 收到done消息，题目数:', allQuestions.length);
+            } else if (data.type === 'error') {
+              console.error('[巩固练习] 后端返回错误:', data.message);
+            }
+          } catch (e) {
+            console.error('[巩固练习] 解析流式数据失败:', e, '行内容:', line);
+          }
+        }
+        
+        if (done) break;
+      }
+      
+      console.log('[巩固练习] 生成习题完成，最终数量:', allQuestions.length);
+      setPracticeQuestions(allQuestions);
+      setPracticeGenerateProgress(100);
+      
+      if (allQuestions.length === 0) {
         message.warning('生成的习题为空');
       } else {
-        message.success(`成功生成 ${questionsData.length} 道习题`);
+        message.success(`成功生成 ${allQuestions.length} 道习题`);
       }
     } catch (e) {
       console.error('[巩固练习] 生成习题失败:', e);
-      console.error('[巩固练习] 错误详情:', e.response?.data || e.message);
-      message.error('生成习题失败: ' + (e.response?.data?.detail || e.message));
+      console.error('[巩固练习] 错误详情:', e.message);
+      message.error('生成习题失败: ' + e.message);
     }
     setPracticeLoading(false);
+    setTimeout(() => setPracticeGenerateProgress(0), 1000);
   };
 
   const handleSubmitPractice = async () => {
@@ -258,10 +328,22 @@ export default function StudentWrongbook() {
 
         {selectedKeyword && (
           <div>
-            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <Space wrap>
-                <Tag color="processing">已选择：{selectedKeyword}</Tag>
-                <Tag color={currentAccuracy < 60 ? 'error' : currentAccuracy < 80 ? 'warning' : 'success'}>
+            {/* 分割框 */}
+            <div style={{
+              margin: '16px 0',
+              padding: '12px 16px',
+              background: 'linear-gradient(135deg, rgba(24, 144, 255, 0.06) 0%, rgba(24, 144, 255, 0.02) 100%)',
+              border: '1px solid rgba(24, 144, 255, 0.2)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12
+            }}>
+              <Space wrap style={{ flex: 1 }}>
+                <Tag color="processing" style={{ marginRight: 4, fontSize: 15, padding: '6px 12px' }}>错题列表：{selectedKeyword}</Tag>
+                <Tag color={currentAccuracy < 60 ? 'error' : currentAccuracy < 80 ? 'warning' : 'success'} style={{ fontSize: 15, padding: '6px 12px' }}>
                   正确率：{accuracyMap[selectedKeyword] !== undefined ? accuracyMap[selectedKeyword] + '%' : '--'}
                 </Tag>
               </Space>
@@ -269,7 +351,6 @@ export default function StudentWrongbook() {
                 巩固练习
               </Button>
             </div>
-            <b style={{ fontSize: 18 }}>错题列表{selectedKeyword ? `（${selectedKeyword}）` : ''}：</b>
             {loading ? <Spin style={{ marginLeft: 16 }} /> : (
               <List
                 dataSource={questions}
@@ -667,22 +748,40 @@ export default function StudentWrongbook() {
           open={practiceModal}
           onCancel={() => { setPracticeModal(false); setPracticeQuestions([]); setPracticeResult(null); setPracticeAnswers({}); }}
           footer={null}
-          title={<span style={{ fontWeight: 800, fontSize: 20, color: '#1f3f75' }}>巩固练习 - {selectedKeyword}</span>}
-          bodyStyle={{ padding: 20, background: '#f7fbff' }}
-          width={860}
-          centered
+          title={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span style={{ fontWeight: 800, fontSize: 20, color: '#1f3f75' }}>巩固练习 - {selectedKeyword}</span>
+              <Button 
+                type="text" 
+                onClick={() => { setPracticeModal(false); setPracticeQuestions([]); setPracticeResult(null); setPracticeAnswers({}); }}
+                style={{ color: '#1f3f75', fontSize: 16, fontWeight: 600 }}
+              >
+                返回
+              </Button>
+            </div>
+          }
+          width="100vw"
+          style={{ top: 0, maxWidth: '100vw', paddingBottom: 0 }}
+          styles={{
+            content: { height: '100vh', borderRadius: 0, paddingBottom: 0, display: 'flex', flexDirection: 'column' },
+            body: { padding: 0, background: '#f7fbff', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' },
+            header: { borderRadius: 0, padding: '16px 24px' }
+          }}
         >
+          {/* 顶部生成区域 */}
           <div style={{
+            margin: 20,
             marginBottom: 16,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'center',
             gap: 12,
-            flexWrap: 'wrap',
             padding: '12px 14px',
             borderRadius: 12,
             border: '1px solid #d6e4ff',
-            background: 'linear-gradient(90deg, #f8fbff 0%, #eef7ff 100%)'
+            background: 'linear-gradient(90deg, #f8fbff 0%, #eef7ff 100%)',
+            flexShrink: 0
           }}>
             <Space wrap>
               <Button
@@ -694,139 +793,163 @@ export default function StudentWrongbook() {
               >
                 {practiceLoading ? '生成中...' : '生成巩固练习'}
               </Button>
-              <Tag color="processing" style={{ borderRadius: 999 }}>知识点：{selectedKeyword || '--'}</Tag>
               {practiceQuestions.length > 0 && (
                 <Tag color="blue" style={{ borderRadius: 999 }}>共 {practiceQuestions.length} 题</Tag>
               )}
             </Space>
-            {practiceQuestions.length > 0 && (
-              <div style={{ minWidth: 220 }}>
-                <div style={{ fontSize: 12, color: '#59708f', marginBottom: 4 }}>完成进度</div>
-                <Progress percent={practiceProgress} size="small" />
+            
+            {/* 生成进度条 */}
+            {practiceLoading && (
+              <div style={{ width: '100%', maxWidth: 400, marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: '#59708f', marginBottom: 4, textAlign: 'center' }}>生成进度：{practiceGenerateProgress}%</div>
+                <Progress percent={practiceGenerateProgress} size="small" status={practiceGenerateProgress === 100 ? 'success' : 'active'} />
               </div>
             )}
           </div>
-          {practiceQuestions.length === 0 ? (
-            <Empty description="暂无巩固练习题目" />
-          ) : (
-            <div style={{ maxHeight: '56vh', overflowY: 'auto', paddingRight: 4 }}>
-              {practiceQuestions.map((q, idx) => {
-                // 防御性处理 options - 如果是字符串则尝试解析
-                let displayOptions = q.options;
-                if (typeof displayOptions === 'string') {
-                  try {
-                    displayOptions = JSON.parse(displayOptions);
-                  } catch {
-                    displayOptions = {};
+
+          {/* 中间题目区域 - 可滚动 */}
+          <div style={{ flex: 1, overflowY: 'auto', paddingLeft: 20, paddingRight: 20, paddingTop: 0, paddingBottom: 20 }}>
+            {practiceQuestions.length === 0 ? (
+              <Empty description="暂无巩固练习题目" />
+            ) : (
+              <div>
+                {practiceQuestions.map((q, idx) => {
+                  // 防御性处理 options - 如果是字符串则尝试解析
+                  let displayOptions = q.options;
+                  if (typeof displayOptions === 'string') {
+                    try {
+                      displayOptions = JSON.parse(displayOptions);
+                    } catch {
+                      displayOptions = {};
+                    }
                   }
-                }
-                return (
-                <Card
-                  key={`practice-q-${idx}`}
-                  size="small"
-                  style={{
-                    marginBottom: 12,
-                    borderRadius: 12,
-                    border: '1px solid #e6eeff',
-                    background: '#fff',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
-                  }}
-                  title={<span style={{ fontWeight: 700, color: '#1f3f75' }}>题目 {idx + 1}</span>}
-                >
-                  <div style={{ width: '100%' }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10, lineHeight: 1.7 }}>{q.question}</div>
-                    {/* 根据题目类型显示对应的输入界面 */}
-                    {q.type === 'choice' ? (
-                      // 单选题
-                      <Radio.Group
-                        value={practiceAnswers[idx]}
-                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
-                        style={{ marginBottom: 8 }}
-                      >
-                        <Space direction="vertical">
-                          {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
-                            <Radio key={k} value={k}>{k}. {v}</Radio>
-                          ))}
-                        </Space>
-                      </Radio.Group>
-                    ) : q.type === 'multi' ? (
-                      // 多选题
-                      <Checkbox.Group
-                        value={practiceAnswers[idx] ? practiceAnswers[idx].split(',') : []}
-                        onChange={checkedValues => setPracticeAnswers({ ...practiceAnswers, [idx]: checkedValues.join(',') })}
-                        style={{ marginBottom: 8 }}
-                      >
-                        <Space direction="vertical">
-                          {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
-                            <Checkbox key={k} value={k}>{k}. {v}</Checkbox>
-                          ))}
-                        </Space>
-                      </Checkbox.Group>
-                    ) : q.type === 'fill_blank' ? (
-                      // 填空题
-                      <Input
-                        value={practiceAnswers[idx] || ''}
-                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
-                        placeholder="请输入答案，多个空用空格分隔"
-                        style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
-                      />
-                    ) : q.type === 'short_answer' ? (
-                      // 简答题
-                      <TextArea
-                        value={practiceAnswers[idx] || ''}
-                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
-                        placeholder="请输入答案"
-                        rows={3}
-                        style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
-                      />
-                    ) : q.type === 'programming' ? (
-                      // 编程题
-                      <TextArea
-                        value={practiceAnswers[idx] || ''}
-                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
-                        placeholder="请输入代码"
-                        rows={5}
-                        style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8, fontFamily: 'monospace' }}
-                      />
-                    ) : (
-                      // 默认：文本输入
-                      <Input
-                        value={practiceAnswers[idx] || ''}
-                        onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
-                        placeholder="请输入答案"
-                        style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
-                      />
-                    )}
-                  </div>
-                </Card>
-                );
-              })}
-            </div>
-          )}
-          {practiceQuestions.length > 0 && !practiceResult && (
-            <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 700, height: 42 }}>
-              提交练习
-            </Button>
-          )}
-          {practiceResult && (
-            <Card title={<span>练习得分：<span style={{ color: '#52c41a', fontWeight: 800 }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12, border: '1px solid #d9f7be', background: '#fcfff5' }}>
-              <List
-                dataSource={practiceResult.results}
-                renderItem={(r, idx) => (
-                  <List.Item>
+                  return (
+                  <Card
+                    key={`practice-q-${idx}`}
+                    size="small"
+                    style={{
+                      marginBottom: 12,
+                      borderRadius: 12,
+                      border: '1px solid #e6eeff',
+                      background: '#fff',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+                    }}
+                    title={<span style={{ fontWeight: 700, color: '#1f3f75' }}>题目 {idx + 1}</span>}
+                  >
                     <div style={{ width: '100%' }}>
-                      <div><b>题目{idx + 1}：</b>{r.question}</div>
-                      <div>你的答案：<span style={{ color: r.is_correct ? '#52c41a' : '#d4380d' }}>{r.answer}</span></div>
-                      <div>正确答案：<span style={{ color: '#52c41a' }}>{r.correct_answer}</span></div>
-                      <div>解析：{r.explanation}</div>
-                      <div>知识点：{Array.isArray(r.knowledge_points) ? r.knowledge_points.join('，') : r.knowledge_points}</div>
-                      <div>判定：{r.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}</div>
+                      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10, lineHeight: 1.7 }}>{q.question}</div>
+                      {/* 根据题目类型显示对应的输入界面 */}
+                      {q.type === 'choice' ? (
+                        // 单选题
+                        <Radio.Group
+                          value={practiceAnswers[idx]}
+                          onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                          style={{ marginBottom: 8, width: '100%' }}
+                        >
+                          <Space direction="vertical" style={{ width: '100%' }}>
+                            {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
+                              <div
+                                key={k}
+                                onMouseEnter={() => setHoveredPracticeOption(`${idx}-${k}`)}
+                                onMouseLeave={() => setHoveredPracticeOption(null)}
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: 8,
+                                  background: hoveredPracticeOption === `${idx}-${k}` ? '#e6f7ff' : 'transparent',
+                                  border: hoveredPracticeOption === `${idx}-${k}` ? '1px solid #91d5ff' : '1px solid transparent',
+                                  transition: 'all 0.3s ease',
+                                  cursor: 'pointer',
+                                  width: '100%'
+                                }}
+                              >
+                                <Radio value={k} style={{ width: '100%' }}>{k}. {v}</Radio>
+                              </div>
+                            ))}
+                          </Space>
+                        </Radio.Group>
+                      ) : q.type === 'multi' ? (
+                        // 多选题
+                        <Checkbox.Group
+                          value={practiceAnswers[idx] ? practiceAnswers[idx].split(',') : []}
+                          onChange={checkedValues => setPracticeAnswers({ ...practiceAnswers, [idx]: checkedValues.join(',') })}
+                          style={{ marginBottom: 8 }}
+                        >
+                          <Space direction="vertical">
+                            {displayOptions && Object.entries(displayOptions).map(([k, v]) => (
+                              <Checkbox key={k} value={k}>{k}. {v}</Checkbox>
+                            ))}
+                          </Space>
+                        </Checkbox.Group>
+                      ) : q.type === 'fill_blank' ? (
+                        // 填空题
+                        <Input
+                          value={practiceAnswers[idx] || ''}
+                          onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                          placeholder="请输入答案，多个空用空格分隔"
+                          style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                        />
+                      ) : q.type === 'short_answer' ? (
+                        // 简答题
+                        <TextArea
+                          value={practiceAnswers[idx] || ''}
+                          onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                          placeholder="请输入答案"
+                          rows={3}
+                          style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                        />
+                      ) : q.type === 'programming' ? (
+                        // 编程题
+                        <TextArea
+                          value={practiceAnswers[idx] || ''}
+                          onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                          placeholder="请输入代码"
+                          rows={5}
+                          style={{ marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8, fontFamily: 'monospace' }}
+                        />
+                      ) : (
+                        // 默认：文本输入
+                        <Input
+                          value={practiceAnswers[idx] || ''}
+                          onChange={e => setPracticeAnswers({ ...practiceAnswers, [idx]: e.target.value })}
+                          placeholder="请输入答案"
+                          style={{ width: '100%', marginBottom: 8, fontSize: 16, padding: 8, borderRadius: 8 }}
+                        />
+                      )}
                     </div>
-                  </List.Item>
-                )}
-              />
-            </Card>
-          )}
+                  </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 底部提交按钮区域 - 固定位置 */}
+          <div style={{ padding: '0 20px 20px 20px', borderTop: '1px solid #e6eeff', background: '#f7fbff', flexShrink: 0 }}>
+            {practiceQuestions.length > 0 && !practiceResult && (
+              <Button type="primary" onClick={handleSubmitPractice} loading={practiceLoading} style={{ marginTop: 16, width: '100%', borderRadius: 12, fontWeight: 700, height: 42 }}>
+                提交练习
+              </Button>
+            )}
+            {practiceResult && (
+              <Card title={<span>练习得分：<span style={{ color: '#52c41a', fontWeight: 800 }}>{practiceResult.score}</span></span>} style={{ marginTop: 16, borderRadius: 12, border: '1px solid #d9f7be', background: '#fcfff5' }}>
+                <List
+                  dataSource={practiceResult.results}
+                  renderItem={(r, idx) => (
+                    <List.Item>
+                      <div style={{ width: '100%' }}>
+                        <div><b>题目{idx + 1}：</b>{r.question}</div>
+                        <div>你的答案：<span style={{ color: r.is_correct ? '#52c41a' : '#d4380d' }}>{r.answer}</span></div>
+                        <div>正确答案：<span style={{ color: '#52c41a' }}>{r.correct_answer}</span></div>
+                        <div>解析：{r.explanation}</div>
+                        <div>知识点：{Array.isArray(r.knowledge_points) ? r.knowledge_points.join('，') : r.knowledge_points}</div>
+                        <div>判定：{r.is_correct ? <Tag color="green">正确</Tag> : <Tag color="red">错误</Tag>}</div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            )}
+          </div>
         </Modal>
       </Card>
       </div>

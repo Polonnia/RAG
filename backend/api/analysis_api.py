@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, Body
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from models import get_db, User, StudentExam, Exam, StudentAnswer, ExamHistory, StudentWrongQuestion, Question, StudentPracticeRecord, StudentKeywordAccuracy
 from rag.exam_generator import exam_generator
@@ -7,6 +8,7 @@ from auth import get_current_user
 import json
 from datetime import datetime
 from sqlalchemy import func
+import asyncio
 
 router = APIRouter()
 
@@ -266,6 +268,136 @@ async def generate_practice(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"生成习题失败: {str(e)}")
+
+def _json_line(payload: dict) -> str:
+    """将字典转为 JSON 行"""
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+@router.post("/student/generate-practice-stream")
+async def generate_practice_stream(
+    keyword: str = Form(...),
+    count: int = Form(2),
+    difficulty: str = Form("中等"),
+    current_user: User = Depends(get_current_user)
+):
+    """流式生成巩固练习，实时返回进度"""
+    print(f"[API] 流式生成练习接收到请求 - keyword={keyword}, count={count}, difficulty={difficulty}, user={current_user.username}")
+    
+    async def event_generator():
+        try:
+            current_progress = 0
+            
+            async def send_progress_to(target_progress, step=1, delay=0.05):
+                """逐步递增进度，避免回退"""
+                nonlocal current_progress
+                while current_progress < target_progress:
+                    current_progress += step
+                    if current_progress > target_progress:
+                        current_progress = target_progress
+                    yield _json_line({"type": "progress", "progress": current_progress})
+                    await asyncio.sleep(delay)
+            
+            # 初始化阶段到20%
+            async for progress_line in send_progress_to(20, step=2, delay=0.05):
+                yield progress_line
+            
+            outline = "巩固以下知识点：" + keyword
+            
+            # 分配题目数量
+            choice_count = (count * 3 + 2) // 5
+            fill_count = count - choice_count
+            
+            # 创建两个生成任务
+            concept_task = asyncio.to_thread(
+                exam_generator.generate_concept_questions,
+                outline,
+                [],
+                choice_count,
+                difficulty,
+            ) if choice_count > 0 else None
+
+            fill_task = asyncio.to_thread(
+                exam_generator.generate_fill_blank_questions,
+                outline,
+                [],
+                fill_count,
+                difficulty,
+            ) if fill_count > 0 else None
+
+            # 等待任务完成，期间持续发送进度更新（20% -> 70%）
+            questions = []
+            fill_questions = []
+            
+            if concept_task and fill_task:
+                # 两个任务都有
+                pending = {concept_task, fill_task}
+                
+                while pending:
+                    done, pending = await asyncio.wait(pending, timeout=0.5)
+                    
+                    for task in done:
+                        result = await task
+                        if len(result) == choice_count:
+                            questions = result
+                            print(f"[API] 选择题任务完成，数量: {len(questions)}")
+                            # 递增进度到50%
+                            async for progress_line in send_progress_to(50, step=2, delay=0.02):
+                                yield progress_line
+                        else:
+                            fill_questions = result
+                            print(f"[API] 填空题任务完成，数量: {len(fill_questions)}")
+                            # 递增进度到70%
+                            async for progress_line in send_progress_to(70, step=2, delay=0.02):
+                                yield progress_line
+                    
+                    # 如果还有任务在执行，缓慢递增进度
+                    if pending:
+                        next_target = min(current_progress + 5, 65)
+                        async for progress_line in send_progress_to(next_target, step=1, delay=0.1):
+                            yield progress_line
+                        
+            elif concept_task:
+                # 只有选择题
+                questions = await concept_task
+                print(f"[API] 选择题任务完成，数量: {len(questions)}")
+                async for progress_line in send_progress_to(70, step=2, delay=0.05):
+                    yield progress_line
+                
+            elif fill_task:
+                # 只有填空题
+                fill_questions = await fill_task
+                print(f"[API] 填空题任务完成，数量: {len(fill_questions)}")
+                async for progress_line in send_progress_to(70, step=2, delay=0.05):
+                    yield progress_line
+            
+            # 处理结果阶段：70% -> 95%
+            async for progress_line in send_progress_to(95, step=2, delay=0.05):
+                yield progress_line
+            
+            for q in questions:
+                q["type"] = "choice"
+            
+            for q in fill_questions:
+                q["type"] = "fill_blank"
+            
+            all_questions = questions + fill_questions
+            
+            # 完成阶段：95% -> 100%
+            async for progress_line in send_progress_to(100, step=1, delay=0.01):
+                yield progress_line
+            
+            if len(all_questions) != count:
+                print(f"[警告] 生成的题数({len(all_questions)}) 与请求不符({count})")
+            
+            yield _json_line({"type": "done", "progress": 100, "questions": all_questions})
+            
+        except Exception as e:
+            print(f"[API] 流式生成练习题失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            yield _json_line({"type": "error", "message": f"生成习题失败: {str(e)}"})
+    
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 @router.post("/student/submit-practice")
 async def submit_practice(
