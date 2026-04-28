@@ -5,7 +5,7 @@ import QAPage from './pages/QAPage';
 import TeachingSettings from './pages/TeachingSettings';
 import ExamGenerator from './pages/ExamGenerator';
 import ExamManage from './pages/ExamManage';
-import Grading from './pages/Grading';
+import Grading, { GradingQuestionPage } from './pages/Grading'; 
 import StudentExams from './pages/StudentExams';
 import StudentExamResult from './pages/StudentExamResult';
 import StudentAnalysis from './pages/StudentAnalysis';
@@ -37,6 +37,12 @@ export default function AppRoutes() {
         <Route path="/exam" element={<RequireAuth roles={["teacher","admin"]}><ExamGenerator /></RequireAuth>} />
         <Route path="/manage" element={<RequireAuth roles={["teacher","admin"]}><ExamManage /></RequireAuth>} />
         <Route path="/grading" element={<RequireAuth roles={["teacher","admin"]}><Grading /></RequireAuth>} />
+
+        {/* 批改详情页面（教师专用） */}
+        <Route 
+          path="/grading/question/:examId/:questionId" 
+          element={<RequireAuth roles={["teacher","admin"]}><GradingQuestionPage /></RequireAuth>} 
+        />
         
         {/* 学生路由 */}
         <Route path="/student" element={<RequireAuth roles={["student"]}><StudentExams /></RequireAuth>} />
