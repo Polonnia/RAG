@@ -174,9 +174,23 @@ export default function Grading() {
             setGradingForm({ score: 0, comment: '' });
           }}
           footer={null}
-          title={<span style={{ fontSize: 16, fontWeight: 600 }}>批改试题</span>}
-          width="90%"
-          style={{ maxWidth: '1200px' }}
+          title={
+            <div style={{
+              fontSize: 18,
+              fontWeight: 700,
+              padding: '12px 0',
+              borderBottom: '1px solid #f0f0f0'
+            }}>批改试题</div>
+          }
+          width="95vw"
+          style={{ maxWidth: '1400px', top: 20 }}
+          styles={{
+            body: {
+              padding: 24,
+              maxHeight: '85vh',
+              overflowY: 'auto'
+            }
+          }}
           destroyOnClose
         >
           {gradingModalQuestion && gradingModalStudentAnswers.length > 0 ? (
@@ -194,7 +208,9 @@ export default function Grading() {
                   {gradingModalQuestion.question}
                 </div>
                 <div style={{ marginTop: 12, display: 'flex', gap: '24px' }}>
-                  <span>题型：{gradingModalQuestion.type === 'short_answer' ? '简答题' : '编程题'}</span>
+                  <span style={{ color: '#1677ff', fontWeight: 600 }}>
+                    题型：{gradingModalQuestion.type === 'short_answer' ? '简答题' : '编程题'}
+                  </span>
                   <span style={{ color: '#1677ff', fontWeight: 600 }}>
                     满分：{gradingModalQuestion.points} 分
                   </span>

@@ -299,34 +299,30 @@ export default function TeachingSettings() {
           font-size: 12px;
           color: #59708f;
         }
-        /* 左右内容容器统一尺寸，顶端对齐 */
-        .teaching-tree-box, .teaching-outline-box {
-          height: calc(100% - 48px);
-          max-height: unset;
-          margin-top: 4px;
+        /* 左侧 Tree 滚动 */
+        .tree-scroll-wrapper {
+          height: calc(72vh - 180px);
+          min-height: 400px;
           overflow: auto;
-          border-radius: 10px;
           border: 1px solid #f0f0f0;
+          border-radius: 10px;
+          background: #fcfcfd;
+          margin-top: 8px;
+        }
+        .tree-scroll-wrapper .ant-tree {
+          padding: 8px;
+          background: transparent;
         }
         .teaching-outline-box {
           padding: 12px;
           background: #fafafa;
           white-space: pre-wrap;
-        }
-        .teaching-tree-box {
-          padding: 8px;
-          background: #fcfcfd;
-        }
-        .teaching-tree-spin {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-        }
-        .teaching-tree-spin .ant-spin-nested-loading,
-        .teaching-tree-spin .ant-spin-container {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
+          height: calc(72vh - 180px);
+          min-height: 400px;
+          overflow: auto;
+          border-radius: 10px;
+          border: 1px solid #f0f0f0;
+          margin-top: 8px;
         }
         .teaching-result-box {
           margin-bottom: 0;
@@ -345,183 +341,188 @@ export default function TeachingSettings() {
             height: auto;
             min-height: 420px;
           }
+          .tree-scroll-wrapper,
+          .teaching-outline-box {
+            height: 400px;
+          }
         }
       `}</style>
 
       <div className="page-content-wrap page-enter">
-      <PageHeader
-        title="教学内容设计"
-        subtitle="选择教材目录，生成结构化教学安排"
-        icon={<FileTextOutlined />}
-        variant="dashboard"
-      />
+        <PageHeader
+          title="教学内容设计"
+          subtitle="选择教材目录，生成结构化教学安排"
+          icon={<FileTextOutlined />}
+          variant="dashboard"
+        />
 
-      <Card style={{ marginBottom: 16, borderRadius: 12 }}>
-        <div className="teaching-toolbar">
-          <Text strong>教材选择</Text>
-          <Select
-            className="teaching-select"
-            style={{ width: 360 }}
-            placeholder="请选择知识库教材"
-            value={selectedFilename || undefined}
-            loading={materialLoading}
-            showSearch
-            allowClear
-            optionFilterProp="label"
-            options={(materials || []).map((item) => ({
-              label: item.filename,
-              value: item.filename,
-            }))}
-            onChange={(value) => {
-              const nextValue = value || '';
-              setSelectedFilename(nextValue);
-              loadStructure(nextValue);
-            }}
-          />
-          <Button className="teaching-quick-btn" onClick={() => setSelectedFilename('')} disabled={!selectedFilename}>清空选择</Button>
-          <Button onClick={fetchMaterials} loading={materialLoading}>刷新教材</Button>
-          {selectedFilename ? <Tag color="blue">当前教材：{selectedFilename}</Tag> : null}
-          <Tag color="processing" style={{ marginInlineStart: 2 }}>已选章节/小节：{checkedCount}</Tag>
-        </div>
-      </Card>
-
-      <div className="teaching-layout">
-        <Card
-          className="teaching-panel-card"
-          title={<Space><Tag color="blue">教材思维导图</Tag><Text type="secondary">可取消任意章节/小节</Text></Space>}
-          styles={{
-            body: {
-              height: 'calc(72vh - 57px)',
-              minHeight: 520,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0,
-              padding: '16px'
-            }
-          }}
-        >
+        <Card style={{ marginBottom: 16, borderRadius: 12 }}>
           <div className="teaching-toolbar">
-            <Button size="small" onClick={() => {
-              const allKeys = flattenTreeKeys(treeData);
-              setCheckedKeys(allKeys);
-              setHalfCheckedKeys([]);
-            }}>全选</Button>
-            <Button size="small" onClick={() => {
-              setCheckedKeys([]);
-              setHalfCheckedKeys([]);
-            }}>清空</Button>
-            <Button size="small" onClick={() => setExpandedKeys(flattenTreeKeys(treeData))}>展开全部</Button>
-            <Button size="small" onClick={() => setExpandedKeys([])}>收起全部</Button>
+            <Text strong>教材选择</Text>
+            <Select
+              className="teaching-select"
+              style={{ width: 360 }}
+              placeholder="请选择知识库教材"
+              value={selectedFilename || undefined}
+              loading={materialLoading}
+              showSearch
+              allowClear
+              optionFilterProp="label"
+              options={(materials || []).map((item) => ({
+                label: item.filename,
+                value: item.filename,
+              }))}
+              onChange={(value) => {
+                const nextValue = value || '';
+                setSelectedFilename(nextValue);
+                loadStructure(nextValue);
+              }}
+            />
+            <Button className="teaching-quick-btn" onClick={() => setSelectedFilename('')} disabled={!selectedFilename}>清空选择</Button>
+            <Button onClick={fetchMaterials} loading={materialLoading}>刷新教材</Button>
+            {selectedFilename ? <Tag color="blue">当前教材：{selectedFilename}</Tag> : null}
+            <Tag color="processing" style={{ marginInlineStart: 2 }}>已选章节/小节：{checkedCount}</Tag>
           </div>
-          {treeData.length === 0 ? (
-            <Empty description="请选择教材后加载目录" style={{marginTop:16}}/>
-          ) : (
-            <Spin spinning={structureLoading} className="teaching-tree-spin">
-              <div className="teaching-tree-box">
-                <Tree
-                  checkable
-                  blockNode
-                  checkedKeys={checkedKeys}
-                  expandedKeys={expandedKeys}
-                  treeData={treeData}
-                  onExpand={(keys) => setExpandedKeys(keys)}
-                  onCheck={(nextChecked, info) => {
-                    const checked = Array.isArray(nextChecked) ? nextChecked : (nextChecked?.checked || []);
-                    const halfChecked = Array.isArray(nextChecked)
-                      ? (info?.halfCheckedKeys || [])
-                      : (nextChecked?.halfChecked || []);
-                    setCheckedKeys(checked);
-                    setHalfCheckedKeys(halfChecked);
-                  }}
-                />
-              </div>
+        </Card>
+
+        <div className="teaching-layout">
+          <Card
+            className="teaching-panel-card"
+            title={<Space><Tag color="blue">教材思维导图</Tag><Text type="secondary">可取消任意章节/小节</Text></Space>}
+            styles={{
+              body: {
+                height: 'calc(72vh - 57px)',
+                minHeight: 520,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0,
+                padding: '16px'
+              }
+            }}
+          >
+            <div className="teaching-toolbar">
+              <Button size="small" onClick={() => {
+                const allKeys = flattenTreeKeys(treeData);
+                setCheckedKeys(allKeys);
+                setHalfCheckedKeys([]);
+              }}>全选</Button>
+              <Button size="small" onClick={() => {
+                setCheckedKeys([]);
+                setHalfCheckedKeys([]);
+              }}>清空</Button>
+              <Button size="small" onClick={() => setExpandedKeys(flattenTreeKeys(treeData))}>展开全部</Button>
+              <Button size="small" onClick={() => setExpandedKeys([])}>收起全部</Button>
+            </div>
+            
+            <Spin spinning={structureLoading}>
+              {treeData.length === 0 ? (
+                <Empty description="请选择教材后加载目录" style={{marginTop: 16}}/>
+              ) : (
+                <div className="tree-scroll-wrapper">
+                  <Tree
+                    checkable
+                    blockNode
+                    checkedKeys={checkedKeys}
+                    expandedKeys={expandedKeys}
+                    treeData={treeData}
+                    onExpand={(keys) => setExpandedKeys(keys)}
+                    onCheck={(nextChecked, info) => {
+                      const checked = Array.isArray(nextChecked) ? nextChecked : (nextChecked?.checked || []);
+                      const halfChecked = Array.isArray(nextChecked)
+                        ? (info?.halfCheckedKeys || [])
+                        : (nextChecked?.halfChecked || []);
+                      setCheckedKeys(checked);
+                      setHalfCheckedKeys(halfChecked);
+                    }}
+                  />
+                </div>
+              )}
             </Spin>
-          )}
-        </Card>
+          </Card>
 
-        <Card
-          className="teaching-panel-card"
-          title={<Space><Tag color="green">最终大纲</Tag><Text type="secondary">用于生成课程安排</Text></Space>}
-          styles={{
-            body: {
-              height: 'calc(72vh - 57px)',
-              minHeight: 520,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0,
-              padding: '16px'
-            }
-          }}
-        >
-          <div className="teaching-config-panel">
-            <div className="teaching-toolbar-group">
-              <div className="teaching-counter">
-                <span className="teaching-counter-label">总课时</span>
-                <InputNumber min={1} max={300} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} style={{ width: '100%' }} />
+          <Card
+            className="teaching-panel-card"
+            title={<Space><Tag color="green">最终大纲</Tag><Text type="secondary">用于生成课程安排</Text></Space>}
+            styles={{
+              body: {
+                height: 'calc(72vh - 57px)',
+                minHeight: 520,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0,
+                padding: '16px'
+              }
+            }}
+          >
+            <div className="teaching-config-panel">
+              <div className="teaching-toolbar-group">
+                <div className="teaching-counter">
+                  <span className="teaching-counter-label">总课时</span>
+                  <InputNumber min={1} max={300} precision={0} value={totalHours} onChange={(value) => setTotalHours(Number(value) || 0)} style={{ width: '100%' }} />
+                </div>
+                <div className="teaching-counter">
+                  <span className="teaching-counter-label">总课数</span>
+                  <InputNumber min={1} max={100} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} style={{ width: '100%' }} />
+                </div>
               </div>
-              <div className="teaching-counter">
-                <span className="teaching-counter-label">总课数</span>
-                <InputNumber min={1} max={100} precision={0} value={totalLessons} onChange={(value) => setTotalLessons(Number(value) || 0)} style={{ width: '100%' }} />
+
+              <div className="teaching-toolbar-group">
+                <Text type="secondary" style={{ fontSize: 12 }}>预设方案：</Text>
+                <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(16); setTotalLessons(8); }}>16课时 / 8课</Button>
+                <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(32); setTotalLessons(16); }}>32课时 / 16课</Button>
+                <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(48); setTotalLessons(24); }}>48课时 / 24课</Button>
+              </div>
+
+              <div className="teaching-toolbar-group">
+                <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading} disabled={!selectedFilename || checkedCount === 0}>生成教学安排表</Button>
               </div>
             </div>
-
-            <div className="teaching-toolbar-group">
-              <Text type="secondary" style={{ fontSize: 12 }}>预设方案：</Text>
-              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(16); setTotalLessons(8); }}>16课时 / 8课</Button>
-              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(32); setTotalLessons(16); }}>32课时 / 16课</Button>
-              <Button className="teaching-quick-btn" size="small" onClick={() => { setTotalHours(48); setTotalLessons(24); }}>48课时 / 24课</Button>
+            {scheduleStage ? (
+              <Text className="teaching-section-caption">状态：{scheduleStage}</Text>
+            ) : (
+              <Text className="teaching-section-caption">提示：可在左侧取消不需要的小节。</Text>
+            )}
+            <div className="teaching-outline-box">
+              {selectedOutline || '请在左侧勾选目录节点'}
             </div>
+          </Card>
+        </div>
 
-            <div className="teaching-toolbar-group">
-              <Button type="primary" onClick={handleGenerateSchedule} loading={scheduleLoading} disabled={!selectedFilename || checkedCount === 0}>生成教学安排表</Button>
-            </div>
-          </div>
-          {scheduleStage ? (
-            <Text className="teaching-section-caption">状态：{scheduleStage}</Text>
-          ) : (
-            <Text className="teaching-section-caption">提示：可在左侧取消不需要的小节。</Text>
-          )}
-          <Paragraph className="teaching-outline-box">
-            {selectedOutline || '请在左侧勾选目录节点'}
-          </Paragraph>
+        <Card title={<Tag color="gold">教学安排</Tag>} style={{ marginTop: 16 }}>
+          <Spin spinning={false}>
+            {scheduleMarkdown ? (
+              <div className="teaching-result-box">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ children }) => (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680, background: '#fff' }}>
+                        {children}
+                      </table>
+                    ),
+                    th: ({ children }) => (
+                      <th style={{ border: '1px solid #d9d9d9', background: '#fafafa', padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td style={{ border: '1px solid #f0f0f0', padding: '8px 10px', verticalAlign: 'top' }}>
+                        {children}
+                      </td>
+                    ),
+                    p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
+                    br: () => <br />,
+                  }}
+                  skipHtml={false}
+                >
+                  {scheduleMarkdown}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <Empty description="填写课时并生成后显示" />
+            )}
+          </Spin>
         </Card>
-      </div>
-
-      <Card title={<Tag color="gold">教学安排</Tag>} style={{ marginTop: 16 }}>
-        <Spin spinning={false}>
-          {scheduleMarkdown ? (
-            <div className="teaching-result-box">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  table: ({ children }) => (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680, background: '#fff' }}>
-                      {children}
-                    </table>
-                  ),
-                  th: ({ children }) => (
-                    <th style={{ border: '1px solid #d9d9d9', background: '#fafafa', padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {children}
-                    </th>
-                  ),
-                  td: ({ children }) => (
-                    <td style={{ border: '1px solid #f0f0f0', padding: '8px 10px', verticalAlign: 'top' }}>
-                      {children}
-                    </td>
-                  ),
-                  p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
-                  br: () => <br />, // 支持 <br> 换行
-                }}
-                skipHtml={false} // 允许解析 HTML 标签
-              >
-                {scheduleMarkdown}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <Empty description="填写课时并生成后显示" />
-          )}
-        </Spin>
-      </Card>
       </div>
     </AppLayout>
   );
