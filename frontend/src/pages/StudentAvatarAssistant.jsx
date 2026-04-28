@@ -7,11 +7,14 @@ import PageHeader from '../components/PageHeader';
 const { Text } = Typography;
 
 function buildAvatarUrl() {
+  // 检查是否在本地开发环境
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  return isLocalhost ? 'http://localhost:8282/ui/index.html' : '/ui/index.html';
+  
+  // 开发环境使用 localhost:8282，生产环境使用相对路径
+  return isLocalhost ? 'http://localhost:8282/gradio' : '/avatar/gradio';
 }
 
-export default function StudentAssistant() {
+export default function StudentAvatarAssistant() {
   const avatarUrl = useMemo(() => buildAvatarUrl(), []);
 
   return (
@@ -36,24 +39,19 @@ export default function StudentAssistant() {
               <Space direction="vertical" size={4}>
                 <Text strong>当前数字人服务地址</Text>
                 <Text code>{avatarUrl}</Text>
-                <Text type="secondary">若数字人未响应，请确保 OpenAvatarChat 服务已启动。</Text>
+                <Text type="secondary">如需修改地址，可设置环境变量 REACT_APP_OPENAVATAR_URL。</Text>
               </Space>
             </Col>
             <Col xs={24} md="auto">
-              <Button type="primary" icon={<ExportOutlined />} onClick={() => window.open(avatarUrl, '_blank', 'noopener,noreferrer')}>
-                新窗口打开
-              </Button>
+              <Space>
+                <Button href="#/assistant" type="default">返回学习助手</Button>
+                <Button type="primary" icon={<ExportOutlined />} onClick={() => window.open(avatarUrl, '_blank', 'noopener,noreferrer')}>
+                  新窗口打开
+                </Button>
+              </Space>
             </Col>
           </Row>
         </Card>
-
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 16, borderRadius: 12 }}
-          message="若嵌入区域为空，请点击'新窗口打开'"
-          description="部分浏览器会限制 iframe 摄像头/麦克风权限。建议在同域名下部署 OpenAvatarChat，或通过新窗口单独访问。"
-        />
 
         <Card bodyStyle={{ padding: 0 }} style={{ borderRadius: 16, overflow: 'hidden' }}>
           <iframe
