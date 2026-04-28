@@ -610,44 +610,114 @@ export default function StudentWrongbook() {
               />
             )}
 
-            <div style={{ marginTop: 32 }}>
-              <b style={{ fontSize: 16 }}>巩固练习历史：</b>
-              {practiceHistory.length === 0 ? (
-                <div style={{ color: '#aaa', margin: '12px 0' }}><Empty description="暂无巩固练习记录" /></div>
-              ) : (
-                <List
-                  dataSource={practiceHistory}
-                  renderItem={h => {
-                    // 防御性处理 options - 如果是字符串则尝试解析
-                    let displayOptions = h.options;
-                    if (typeof displayOptions === 'string') {
-                      try {
-                        displayOptions = JSON.parse(displayOptions);
-                      } catch {
-                        displayOptions = {};
+            <div style={{
+              marginTop: 32,
+              padding: '0 0 16px 0',
+              border: '1px solid #d6e4ff',
+              borderRadius: 12,
+              background: '#f8fbff',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #d6e4ff',
+                background: 'linear-gradient(90deg, #f8fbff 0%, #eef7ff 100%)'
+              }}>
+                <b style={{ fontSize: 16, color: '#1f3f75' }}>巩固练习历史</b>
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                {practiceHistory.length === 0 ? (
+                  <div style={{ color: '#aaa', textAlign: 'center', padding: '20px 0' }}><Empty description="暂无巩固练习记录" /></div>
+                ) : (
+                  <div>
+                    {practiceHistory.map((h, idx) => {
+                      // 防御性处理 options - 如果是字符串则尝试解析
+                      let displayOptions = h.options;
+                      if (typeof displayOptions === 'string') {
+                        try {
+                          displayOptions = JSON.parse(displayOptions);
+                        } catch {
+                          displayOptions = {};
+                        }
                       }
-                    }
-                    return (
-                    <List.Item style={{ padding: '16px 0', border: 'none', borderBottom: '1px solid #f0f0f0' }}>
-                      <div style={{ width: '100%' }}>
-                        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{h.question}</div>
-                        {displayOptions && Object.keys(displayOptions).length > 0 && (
-                          <div style={{ margin: '8px 0' }}>
-                            {Object.entries(displayOptions).map(([k, v]) => (
-                              <div key={k}>{k}. {v}</div>
-                            ))}
+                      const typeMap = {
+                        'choice': '单选题',
+                        'multi': '多选题',
+                        'fill_blank': '填空题',
+                        'short_answer': '简答题',
+                        'programming': '编程题'
+                      };
+                      return (
+                        <div key={idx} style={{ 
+                          marginBottom: 16, 
+                          padding: '16px', 
+                          borderRadius: 12, 
+                          border: '1px solid #e6eeff',
+                          background: '#fff'
+                        }}>
+                          {/* 题干部分 */}
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ marginBottom: 8 }}>
+                              <span style={{ fontWeight: 600, fontSize: 15 }}>第 {idx + 1} 题</span>
+                              {h.type && (
+                                <Tag style={{ marginLeft: 8, borderRadius: 4 }}>
+                                  {typeMap[h.type] || h.type}
+                                </Tag>
+                              )}
+                            </div>
+                            <div style={{ marginTop: 8, fontSize: 15, lineHeight: 1.6 }}>
+                              {h.question}
+                            </div>
                           </div>
-                        )}
-                        <div style={{ margin: '8px 0' }}>你的答案：{h.student_answer}</div>
-                        <div style={{ margin: '8px 0' }}>正确答案：{h.correct_answer}</div>
-                        <div style={{ margin: '8px 0' }}>解析：{h.explanation}</div>
-                        <div style={{ color: '#888', fontSize: 12 }}>{h.time}</div>
+
+                          {/* 显示选项 */}
+                          {displayOptions && Object.keys(displayOptions).length > 0 && (
+                            <div style={{
+                              marginBottom: 16,
+                              paddingLeft: 16,
+                              borderLeft: '2px solid #e6eeff'
+                            }}>
+                              {Object.entries(displayOptions).map(([k, v]) => (
+                                <div key={k} style={{ marginBottom: 4, color: '#666' }}>
+                                  {k}. {v}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 答案和解析 */}
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ marginBottom: 8 }}>
+                              <span style={{ fontWeight: 600, color: '#1f3f75' }}>你的答案：</span>
+                              <span style={{ color: '#666', marginLeft: 8 }}>
+                                {h.student_answer}
+                              </span>
+                            </div>
+                            <div style={{ marginBottom: 8 }}>
+                              <span style={{ fontWeight: 600, color: '#1f3f75' }}>正确答案：</span>
+                              <span style={{ color: '#52c41a', marginLeft: 8, fontWeight: 500 }}>
+                                {h.correct_answer}
+                              </span>
+                            </div>
+                            <div style={{ marginBottom: 8 }}>
+                              <span style={{ fontWeight: 600, color: '#1f3f75' }}>解析：</span>
+                              <div style={{ marginTop: 4, color: '#666', lineHeight: 1.6 }}>
+                                {h.explanation}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* 统一的完成时间显示 */}
+                    {practiceHistory.length > 0 && (
+                      <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #d6e4ff', color: '#888', fontSize: 12, textAlign: 'right' }}>
+                        完成时间：{practiceHistory[0]?.time}
                       </div>
-                    </List.Item>
-                    );
-                  }}
-                />
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

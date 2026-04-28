@@ -494,7 +494,7 @@ def get_practice_records(keyword: str, current_user: User = Depends(get_current_
     target_keyword = normalize_keyword(keyword)
     all_records = db.query(StudentPracticeRecord).filter(
         StudentPracticeRecord.student_id == current_user.id
-    ).order_by(StudentPracticeRecord.time.desc()).all()
+    ).order_by(StudentPracticeRecord.time.asc()).all()
 
     records = [r for r in all_records if normalize_keyword(getattr(r, "keyword", "")) == target_keyword]
 
