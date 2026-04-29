@@ -231,6 +231,18 @@ export default function TeachingSettings() {
 
   const checkedCount = checkedKeys.length + halfCheckedKeys.length;
 
+  // 判断是否全部展开
+  const isAllExpanded = expandedKeys.length === flattenTreeKeys(treeData).length && treeData.length > 0;
+  // 切换展开/收起
+  const toggleExpandAll = () => {
+    if (isAllExpanded) {
+      setExpandedKeys([]); // 全部收起
+    } else {
+      const allKeys = flattenTreeKeys(treeData);
+      setExpandedKeys(allKeys); // 全部展开
+    }
+  };
+
   return (
     <AppLayout>
       <style>{`
@@ -334,7 +346,7 @@ export default function TeachingSettings() {
           min-height: 400px;
           overflow: auto;
           border-radius: 14px;
-          border: 2px solid #d6f5e3;
+          border: 2px solid #d6e4ff;
           margin-top: 8px;
           line-height: 2;
           box-shadow: 0 0 0 1px #d6f5e3 inset;
@@ -443,8 +455,10 @@ export default function TeachingSettings() {
                 setCheckedKeys([]);
                 setHalfCheckedKeys([]);
               }}>清空</Button>
-              <Button size="small" onClick={() => setExpandedKeys(flattenTreeKeys(treeData))}>展开全部</Button>
-              <Button size="small" onClick={() => setExpandedKeys([])}>收起全部</Button>
+              {/* 合并后的切换按钮 */}
+              <Button size="small" onClick={toggleExpandAll}>
+                {isAllExpanded ? '收起全部' : '展开全部'}
+              </Button>
             </div>
             
             <Spin spinning={structureLoading}>

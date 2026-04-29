@@ -130,7 +130,7 @@ export default function ExamGenerator() {
     objective: { choice: 8, multi: 5, fill_blank: 4, short_answer: 1, programming: 0 },
     advanced: { choice: 3, multi: 3, fill_blank: 2, short_answer: 4, programming: 2 },
   miniTest: { choice: 3, multi: 2, fill_blank: 2, short_answer: 1, programming: 0 },
-  fullChoice: { choice: 10, multi: 6, fill_blank: 0, short_answer: 0, programming: 0 },
+  objective: { choice: 10, multi: 6, fill_blank: 4, short_answer: 0, programming: 0 },
   subjective: { choice: 0, multi: 0, fill_blank: 0, short_answer: 5, programming: 3 },
   };
 
@@ -367,7 +367,7 @@ export default function ExamGenerator() {
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('objective')}>客观题优先</Button>
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('advanced')}>高阶能力</Button>
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('miniTest')}>随堂小测</Button>
-                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('fullChoice')}>纯客观题</Button>
+                <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('objective')}>纯客观题</Button>
                 <Button size="small" className="config-chip" onClick={() => applyQuestionPreset('subjective')}>纯主观题</Button>
               </div>
 
