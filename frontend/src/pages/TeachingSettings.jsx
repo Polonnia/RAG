@@ -37,12 +37,21 @@ const flattenTreeKeys = (nodes) => {
 const buildSelectedOutline = (nodes, checkedKeySet, depth = 0) => {
   const lines = [];
 
+  const levelStyles = [
+    { dot: '<span class="dot dot1"></span>'},
+    { dot: '<span class="dot dot2"></span>'},
+    { dot: '<span class="dot dot3"></span>'},
+    { dot: '<span class="dot dot4"></span>'},
+    { dot: '<span class="dot dot5"></span>'},
+  ];
+  const current = levelStyles[depth] || levelStyles[0];
+  const indent = '  '.repeat(depth);
+
   (nodes || []).forEach((node) => {
     const selected = checkedKeySet.has(node.key);
     if (!selected) return;
 
-    const indent = '  '.repeat(depth);
-    lines.push(`${indent}- ${node.title}`);
+    lines.push(`${indent}${current.dot} ${node.title}`);
 
     if (node.children?.length) {
       lines.push(...buildSelectedOutline(node.children, checkedKeySet, depth + 1));
@@ -222,6 +231,18 @@ export default function TeachingSettings() {
 
   const checkedCount = checkedKeys.length + halfCheckedKeys.length;
 
+  // 判断是否全部展开
+  const isAllExpanded = expandedKeys.length === flattenTreeKeys(treeData).length && treeData.length > 0;
+  // 切换展开/收起
+  const toggleExpandAll = () => {
+    if (isAllExpanded) {
+      setExpandedKeys([]); // 全部收起
+    } else {
+      const allKeys = flattenTreeKeys(treeData);
+      setExpandedKeys(allKeys); // 全部展开
+    }
+  };
+
   return (
     <AppLayout>
       <style>{`
@@ -299,40 +320,64 @@ export default function TeachingSettings() {
           font-size: 12px;
           color: #59708f;
         }
-        /* 左侧 Tree 滚动 */
+
+        /* 思维导图容器 */
         .tree-scroll-wrapper {
           height: calc(72vh - 180px);
           min-height: 400px;
           overflow: auto;
-          border: 1px solid #f0f0f0;
-          border-radius: 10px;
+          border: 2px solid #d6e4ff;
+          border-radius: 14px;
           background: #fcfcfd;
           margin-top: 8px;
+          box-shadow: 0 0 0 1px #e5eeff inset;
         }
         .tree-scroll-wrapper .ant-tree {
           padding: 8px;
           background: transparent;
         }
+
+        /* 最终大纲容器 */
         .teaching-outline-box {
           padding: 12px;
-          background: #fafafa;
+          background: #fcfcfd;
           white-space: pre-wrap;
           height: calc(72vh - 180px);
           min-height: 400px;
           overflow: auto;
-          border-radius: 10px;
-          border: 1px solid #f0f0f0;
+          border-radius: 14px;
+          border: 2px solid #d6e4ff;
           margin-top: 8px;
+          line-height: 2;
+          box-shadow: 0 0 0 1px #d6f5e3 inset;
         }
+
+        /* 下方内容表格容器  */
         .teaching-result-box {
           margin-bottom: 0;
           padding: 12px;
-          border-radius: 10px;
-          border: 1px solid #f0f0f0;
+          border-radius: 14px;
+          border: 2px solid #ffe8b3;
           background: #fffbe6;
           min-height: 260px;
           overflow-x: auto;
+          box-shadow: 0 0 0 1px #fff1d6 inset;
         }
+
+         .dot {
+          display: inline-block;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          margin-right: 8px;
+          vertical-align: middle;
+        }
+        .dot1 { background: #22c55e; }
+        .dot2 { background: #3b82f6; }
+        .dot3 { background: #facc15; }
+        .dot4 { background: #f97316; }
+        .dot5 { background: #ef4444; }
+
         @media (max-width: 1200px) {
           .teaching-layout {
             grid-template-columns: 1fr;
@@ -410,8 +455,10 @@ export default function TeachingSettings() {
                 setCheckedKeys([]);
                 setHalfCheckedKeys([]);
               }}>清空</Button>
-              <Button size="small" onClick={() => setExpandedKeys(flattenTreeKeys(treeData))}>展开全部</Button>
-              <Button size="small" onClick={() => setExpandedKeys([])}>收起全部</Button>
+              {/* 合并后的切换按钮 */}
+              <Button size="small" onClick={toggleExpandAll}>
+                {isAllExpanded ? '收起全部' : '展开全部'}
+              </Button>
             </div>
             
             <Spin spinning={structureLoading}>
@@ -482,9 +529,12 @@ export default function TeachingSettings() {
             ) : (
               <Text className="teaching-section-caption">提示：可在左侧取消不需要的小节。</Text>
             )}
-            <div className="teaching-outline-box">
-              {selectedOutline || '请在左侧勾选目录节点'}
-            </div>
+            <div 
+              className="teaching-outline-box"
+              dangerouslySetInnerHTML={{
+                __html: selectedOutline || '请在左侧勾选目录节点'
+              }}
+            />
           </Card>
         </div>
 
