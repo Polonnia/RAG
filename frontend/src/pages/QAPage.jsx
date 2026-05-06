@@ -1776,5 +1776,3 @@ export default function QAPage() {
     </AppLayout>
   );
 }
-
-
