@@ -1,3 +1,0 @@
-[submodule "backend/OpenAvatarChat"]
-	path = backend/OpenAvatarChat
-	url = https://github.com/HumanAIGC/OpenAvatarChat.git
