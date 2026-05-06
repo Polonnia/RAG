@@ -32,5 +32,9 @@ uv run install.py --config config/chat_with_openai_compatible_bailian_cosyvoice.
 
 uv run scripts/download_models.py --handler liteavatar
 
+pnpm install
+
+pnpm run build
+
 uv run src/demo.py --config config/chat_with_openai_compatible_bailian_cosyvoice.yaml
 ```
