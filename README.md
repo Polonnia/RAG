@@ -21,3 +21,16 @@ npm start
 ```bash
 python backend/main.py
 ```
+
+### OpenAvatarChat
+```bash
+git clone https://github.com/HumanAIGC-Engineering/OpenAvatarChat.git
+cd OpenAvatarChat
+git submodule update --init --recursive --depth 1
+
+uv run install.py --config config/chat_with_openai_compatible_bailian_cosyvoice.yaml
+
+uv run scripts/download_models.py --handler liteavatar
+
+uv run src/demo.py --config config/chat_with_openai_compatible_bailian_cosyvoice.yaml
+```
