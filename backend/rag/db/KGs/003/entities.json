@@ -1,0 +1,906 @@
+[
+  {
+    "id": "网络地址转换",
+    "human_readable_id": "1",
+    "title": "网络地址转换",
+    "type": "主题",
+    "description": "一种在IP数据包通过路由器时修改源或目标IP地址的技术，用于解决IPv4地址短缺问题<SEP>一种通过修改IP地址和端口号来实现网络隔离和地址复用的技术",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde",
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ],
+    "frequency": 2,
+    "degree": 5,
+    "level": 0,
+    "section": [
+      "0000",
+      "0004"
+    ]
+  },
+  {
+    "id": "私有IP地址",
+    "human_readable_id": "2",
+    "title": "私有IP地址",
+    "type": "概念",
+    "description": "内网专用的IP地址范围，不可直接在互联网上路由，需通过NAT转换<SEP>在局域网内部使用的IP地址，如192.168.x.x，无法在公网上直接路由",
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566",
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 2,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0000",
+      "0005"
+    ]
+  },
+  {
+    "id": "公网IP地址",
+    "human_readable_id": "3",
+    "title": "公网IP地址",
+    "type": "概念",
+    "description": "全球唯一的IP地址，用于互联网上的设备识别和通信<SEP>在互联网上全球唯一的IP地址，用于直接访问互联网<SEP>在互联网上全球唯一的IP地址，用于设备之间的直接通信",
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106",
+      "chunk-c368cbb35481530102c039dce9c9e566",
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 3,
+    "degree": 3,
+    "level": 0,
+    "section": [
+      "0000",
+      "0002",
+      "0005"
+    ]
+  },
+  {
+    "id": "NAT设备",
+    "human_readable_id": "4",
+    "title": "NAT设备",
+    "type": "程序",
+    "description": "执行网络地址转换功能的路由器或网关，允许多个私有IP共享一个公网IP上网",
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0000"
+    ]
+  },
+  {
+    "id": "IP地址冲突",
+    "human_readable_id": "5",
+    "title": "IP地址冲突",
+    "type": "事件",
+    "description": "同一网络中出现重复IP地址导致通信故障的现象",
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0000"
+    ]
+  },
+  {
+    "id": "多个设备同时上网",
+    "human_readable_id": "6",
+    "title": "多个设备同时上网",
+    "type": "应用",
+    "description": "在同一局域网下，多个终端同时访问互联网的行为",
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0000"
+    ]
+  },
+  {
+    "id": "IPV4地址",
+    "human_readable_id": "7",
+    "title": "IPV4地址",
+    "type": "概念",
+    "description": "互联网协议第四版中定义的IP地址，数量有限，面临短缺问题<SEP>互联网协议第四版地址，资源有限且面临短缺问题<SEP>互联网协议第四版地址，资源有限，面临短缺问题",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b",
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ],
+    "frequency": 3,
+    "degree": 5,
+    "level": 0,
+    "section": [
+      "0001",
+      "0002",
+      "0011"
+    ]
+  },
+  {
+    "id": "公网地址",
+    "human_readable_id": "8",
+    "title": "公网地址",
+    "type": "概念",
+    "description": "全球唯一的IP地址，用于互联网通信",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0001"
+    ]
+  },
+  {
+    "id": "私网地址",
+    "human_readable_id": "9",
+    "title": "私网地址",
+    "type": "概念",
+    "description": "内部网络中使用的IP地址，不可直接用于互联网通信<SEP>内部网络使用的IP地址，不能直接在互联网上路由",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ],
+    "frequency": 2,
+    "degree": 5,
+    "level": 0,
+    "section": [
+      "0001",
+      "0002"
+    ]
+  },
+  {
+    "id": "NAT",
+    "human_readable_id": "10",
+    "title": "NAT",
+    "type": "概念",
+    "description": "网络地址转换技术，使私网设备通过公网地址访问互联网<SEP>网络地址转换技术，用于将私有IP地址映射为公网IP地址，以解决IP地址短缺问题<SEP>网络地址转换技术，用于将私有IP地址映射到公网IP地址，以缓解公网IP地址不足的问题<SEP>网络地址转换技术，用于将私有IP地址转换为公有IP地址，广泛应用于家庭网络、运营商网络和云计算平台<SEP>网络地址转换，一种将内部私有IP地址转换为公网IP地址的技术，用于解决局域网IP地址冲突和数据包路由问题<SEP>网络地址转换，一种通过修改IP地址和端口实现内网多台计算机共享公网IP访问外部网络的技术",
+    "text_unit_ids": [
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388",
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-0660c1267c456f382ae63a19f6ae4a16",
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b",
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 6,
+    "degree": 23,
+    "level": 0,
+    "section": [
+      "0001",
+      "0003",
+      "0006",
+      "0008",
+      "0010",
+      "0011"
+    ]
+  },
+  {
+    "id": "SNAT",
+    "human_readable_id": "11",
+    "title": "SNAT",
+    "type": "概念",
+    "description": "源地址转换技术，用于将内网IP地址转换为公网IP地址以实现内网设备访问公网<SEP>源地址转换技术，用于将内网私有IP地址转换为外网公网IP地址，实现多个内网设备共享一个公网IP访问外网<SEP>源网络地址转换，修改数据包的源IP地址",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-12174cdc5c11e7158cb68811c21f5bde",
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 3,
+    "degree": 14,
+    "level": 0,
+    "section": [
+      "0001",
+      "0004",
+      "0005"
+    ]
+  },
+  {
+    "id": "DNAT",
+    "human_readable_id": "12",
+    "title": "DNAT",
+    "type": "概念",
+    "description": "目标地址转换技术，用于将公网请求转发至内网服务器，实现IP地址复用和安全访问<SEP>目标地址转换，NAT的一种类型，用于修改数据包的目标IP地址，常应用于端口映射和负载均衡<SEP>目的网络地址转换，修改数据包的目标IP地址",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 3,
+    "degree": 5,
+    "level": 0,
+    "section": [
+      "0001",
+      "0008",
+      "0009"
+    ]
+  },
+  {
+    "id": "IP冲突",
+    "human_readable_id": "13",
+    "title": "IP冲突",
+    "type": "事件",
+    "description": "局域网中两个设备使用相同IP地址导致的问题",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0001"
+    ]
+  },
+  {
+    "id": "路由器",
+    "human_readable_id": "14",
+    "title": "路由器",
+    "type": "概念",
+    "description": "执行地址转换功能的网络设备，用于连接不同网络<SEP>网络设备，执行NAT功能，修改数据包的源IP和源端口并维护映射表<SEP>网络设备，执行SNAT转换，管理数据包的路由和地址映射",
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb",
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 3,
+    "degree": 5,
+    "level": 0,
+    "section": [
+      "0001",
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "id": "IP地址短缺",
+    "human_readable_id": "15",
+    "title": "IP地址短缺",
+    "type": "事实",
+    "description": "由于IPv4地址总量有限及分配不均，导致中国可用公网IP有限的问题",
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0002"
+    ]
+  },
+  {
+    "id": "网络地址转换（NAT）",
+    "human_readable_id": "16",
+    "title": "网络地址转换（NAT）",
+    "type": "概念",
+    "description": "一种将私网地址转换为公网地址以访问互联网的技术",
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0002"
+    ]
+  },
+  {
+    "id": "IP地址",
+    "human_readable_id": "17",
+    "title": "IP地址",
+    "type": "概念",
+    "description": "互联网协议地址，用于标识网络中的设备，分为私有地址和公网地址<SEP>网络层的地址标识，用于识别网络设备，但在内网环境下无法唯一区分多台计算机<SEP>网络设备的标识符，分为私有IP和公网IP，用于在网络中定位设备<SEP>网络设备的标识符，分为私有IP和公网IP，用于数据包路由和定位<SEP>网络通信中用于标识设备的数字地址，因IPv4资源有限而需要被节省",
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388",
+      "chunk-325984719d77270ef2d6560503e07dcc",
+      "chunk-0660c1267c456f382ae63a19f6ae4a16",
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 5,
+    "degree": 4,
+    "level": 0,
+    "section": [
+      "0003",
+      "0005",
+      "0006",
+      "0008",
+      "0009"
+    ]
+  },
+  {
+    "id": "局域网",
+    "human_readable_id": "18",
+    "title": "局域网",
+    "type": "概念",
+    "description": "由多个设备组成的内部网络，使用私有IP地址进行通信",
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ],
+    "frequency": 1,
+    "degree": 3,
+    "level": 0,
+    "section": [
+      "0003"
+    ]
+  },
+  {
+    "id": "ARP表",
+    "human_readable_id": "19",
+    "title": "ARP表",
+    "type": "概念",
+    "description": "地址解析协议表，用于记录IP地址与MAC地址的对应关系，维护网络通信",
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0003"
+    ]
+  },
+  {
+    "id": "数据包路由",
+    "human_readable_id": "20",
+    "title": "数据包路由",
+    "type": "概念",
+    "description": "网络数据包在网络上从源设备传输到目标设备的过程",
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0003"
+    ]
+  },
+  {
+    "id": "公网IP",
+    "human_readable_id": "21",
+    "title": "公网IP",
+    "type": "概念",
+    "description": "全球唯一的公共IP地址，用于在互联网中标识设备<SEP>在互联网上唯一标识设备的全局IP地址，用于外部网络通信",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde",
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ],
+    "frequency": 2,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0003",
+      "0004"
+    ]
+  },
+  {
+    "id": "私有IP",
+    "human_readable_id": "22",
+    "title": "私有IP",
+    "type": "概念",
+    "description": "在局域网内使用的非全局唯一IP地址，用于内部设备间通信",
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0003"
+    ]
+  },
+  {
+    "id": "内网IP",
+    "human_readable_id": "23",
+    "title": "内网IP",
+    "type": "概念",
+    "description": "内部网络中的私有IP地址，无法直接在公网中路由",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0004"
+    ]
+  },
+  {
+    "id": "TCP/UDP端口号",
+    "human_readable_id": "24",
+    "title": "TCP/UDP端口号",
+    "type": "概念",
+    "description": "传输层协议TCP和UDP中用于区分不同应用程序或会话的标识符",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0004"
+    ]
+  },
+  {
+    "id": "ICMP协议",
+    "human_readable_id": "25",
+    "title": "ICMP协议",
+    "type": "概念",
+    "description": "互联网控制消息协议，用于在IP网络中传递错误消息和操作信息",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0004"
+    ]
+  },
+  {
+    "id": "映射关系",
+    "human_readable_id": "26",
+    "title": "映射关系",
+    "type": "概念",
+    "description": "SNAT中建立的从内网设备到公网IP及端口号的对应关系，用于正确转发返回数据包",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0004"
+    ]
+  },
+  {
+    "id": "内网访问公网",
+    "human_readable_id": "27",
+    "title": "内网访问公网",
+    "type": "例子",
+    "description": "描述内网设备通过SNAT技术访问外部网络的典型场景",
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0004"
+    ]
+  },
+  {
+    "id": "源地址转换",
+    "human_readable_id": "28",
+    "title": "源地址转换",
+    "type": "概念",
+    "description": "SNAT的完整名称，即修改数据包源IP地址的过程",
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0005"
+    ]
+  },
+  {
+    "id": "内网计算机",
+    "human_readable_id": "29",
+    "title": "内网计算机",
+    "type": "例子",
+    "description": "位于私有网络中的计算机，共享一个公网IP地址访问外部网络<SEP>处于局域网内部、使用私有IP地址的设备，需要通过SNAT才能访问外网",
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb",
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 2,
+    "degree": 4,
+    "level": 0,
+    "section": [
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "id": "外网服务器",
+    "human_readable_id": "30",
+    "title": "外网服务器",
+    "type": "例子",
+    "description": "位于公共网络中的服务器，作为内网计算机的访问目标",
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0005"
+    ]
+  },
+  {
+    "id": "数据包传输",
+    "human_readable_id": "31",
+    "title": "数据包传输",
+    "type": "概念",
+    "description": "网络通信中数据封装成包并通过路由转发的过程，涉及源IP和目的IP的修改",
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0005"
+    ]
+  },
+  {
+    "id": "传输层端口",
+    "human_readable_id": "32",
+    "title": "传输层端口",
+    "type": "概念",
+    "description": "传输层的标识信息，用于区分不同应用程序或连接，帮助NAT识别返回的数据包",
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0006"
+    ]
+  },
+  {
+    "id": "外部服务",
+    "human_readable_id": "33",
+    "title": "外部服务",
+    "type": "概念",
+    "description": "互联网上的服务器，内网计算机通过NAT访问的目标",
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0006"
+    ]
+  },
+  {
+    "id": "TCP协议",
+    "human_readable_id": "34",
+    "title": "TCP协议",
+    "type": "概念",
+    "description": "传输控制协议，面向连接的可靠传输协议，与NAT配合工作",
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0006"
+    ]
+  },
+  {
+    "id": "UDP协议",
+    "human_readable_id": "35",
+    "title": "UDP协议",
+    "type": "概念",
+    "description": "用户数据报协议，无连接的不可靠传输协议，与NAT配合工作",
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0006"
+    ]
+  },
+  {
+    "id": "网络协议",
+    "human_readable_id": "36",
+    "title": "网络协议",
+    "type": "概念",
+    "description": "计算机网络中通信规则和标准的集合，指导数据交换",
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0007"
+    ]
+  },
+  {
+    "id": "ICMP",
+    "human_readable_id": "37",
+    "title": "ICMP",
+    "type": "概念",
+    "description": "互联网控制报文协议，用于在IP网络中传递错误消息和操作信息，属于无端口概念的网络协议",
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0007"
+    ]
+  },
+  {
+    "id": "无端口概念",
+    "human_readable_id": "38",
+    "title": "无端口概念",
+    "type": "概念",
+    "description": "指不依赖TCP/UDP端口号进行数据通信的网络协议特征",
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0007"
+    ]
+  },
+  {
+    "id": "协议特定字段",
+    "human_readable_id": "39",
+    "title": "协议特定字段",
+    "type": "概念",
+    "description": "用于区分不同协议功能或状态的内部字段，如ICMP中的type和code字段",
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ],
+    "frequency": 1,
+    "degree": 2,
+    "level": 0,
+    "section": [
+      "0007"
+    ]
+  },
+  {
+    "id": "连接或规则的关联",
+    "human_readable_id": "40",
+    "title": "连接或规则的关联",
+    "type": "概念",
+    "description": "通过协议特定字段建立网络连接或规则匹配的机制",
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0007"
+    ]
+  },
+  {
+    "id": "静态NAT",
+    "human_readable_id": "41",
+    "title": "静态NAT",
+    "type": "概念",
+    "description": "NAT的一种分类，实现一对一固定的IP地址映射<SEP>NAT的一种类型，将私有IP地址与公网IP地址进行一对一的固定映射",
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 2,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0008",
+      "0010"
+    ]
+  },
+  {
+    "id": "动态NAT",
+    "human_readable_id": "42",
+    "title": "动态NAT",
+    "type": "概念",
+    "description": "NAT的一种分类，从地址池中动态分配公网地址进行映射<SEP>NAT的一种类型，从公网地址池中动态分配一个公网IP给私有IP使用",
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 2,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0008",
+      "0010"
+    ]
+  },
+  {
+    "id": "NAT SERVER",
+    "human_readable_id": "43",
+    "title": "NAT SERVER",
+    "type": "概念",
+    "description": "NAT的一种分类，用于将内部服务器映射到公网，以便外部访问<SEP>NAT的一种类型，用于将内部服务器的私有IP地址映射为公网IP，使外部用户可访问",
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 2,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0008",
+      "0010"
+    ]
+  },
+  {
+    "id": "NAPT",
+    "human_readable_id": "44",
+    "title": "NAPT",
+    "type": "概念",
+    "description": "网络地址端口转换，NAT的一种类型，通过端口号实现多个私有IP共享一个公网IP",
+    "text_unit_ids": [
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0008"
+    ]
+  },
+  {
+    "id": "EASY IP",
+    "human_readable_id": "45",
+    "title": "EASY IP",
+    "type": "概念",
+    "description": "NAT的一种分类，使用出接口地址做NAPT，适合无固定公网IP的场景<SEP>NAT的一种简化实现，直接使用路由器出口的公网IP进行地址转换",
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ],
+    "frequency": 2,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0008",
+      "0010"
+    ]
+  },
+  {
+    "id": "公网",
+    "human_readable_id": "46",
+    "title": "公网",
+    "type": "概念",
+    "description": "互联网上的公开网络空间，拥有全局唯一的IP地址",
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0009"
+    ]
+  },
+  {
+    "id": "内网服务器",
+    "human_readable_id": "47",
+    "title": "内网服务器",
+    "type": "概念",
+    "description": "位于私有网络中的服务器，通常使用私有IP地址，无法直接被公网访问",
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0009"
+    ]
+  },
+  {
+    "id": "WEB服务端口",
+    "human_readable_id": "48",
+    "title": "WEB服务端口",
+    "type": "例子",
+    "description": "配置示例中提到的具体网络端口，用于展示DNAT如何将公网请求转发到内网Web服务器",
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0009"
+    ]
+  },
+  {
+    "id": "NAPT/PAT",
+    "human_readable_id": "49",
+    "title": "NAPT/PAT",
+    "type": "概念",
+    "description": "NAT的一种分类，允许多个私有地址共享少量公网地址和端口进行通信",
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0010"
+    ]
+  },
+  {
+    "id": "家庭网络",
+    "human_readable_id": "50",
+    "title": "家庭网络",
+    "type": "应用",
+    "description": "使用NAT技术共享单个公有IP地址以连接多台设备的本地网络",
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0011"
+    ]
+  },
+  {
+    "id": "运营商网络",
+    "human_readable_id": "51",
+    "title": "运营商网络",
+    "type": "应用",
+    "description": "电信运营商部署NAT以节省公有IP地址并管理用户流量",
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0011"
+    ]
+  },
+  {
+    "id": "云计算平台",
+    "human_readable_id": "52",
+    "title": "云计算平台",
+    "type": "应用",
+    "description": "云服务商通过NAT技术实现虚拟机或容器的网络访问与隔离",
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0011"
+    ]
+  },
+  {
+    "id": "NAT工作流程图解",
+    "human_readable_id": "53",
+    "title": "NAT工作流程图解",
+    "type": "例子",
+    "description": "文档末尾提供的图表，用于直观展示NAT的地址转换过程",
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ],
+    "frequency": 1,
+    "degree": 1,
+    "level": 0,
+    "section": [
+      "0011"
+    ]
+  }
+]

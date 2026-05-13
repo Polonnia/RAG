@@ -1,0 +1,790 @@
+[
+  {
+    "id": "网络地址转换->私有IP地址",
+    "human_readable_id": "1",
+    "source": "网络地址转换",
+    "target": "私有IP地址",
+    "description": "NAT将私有IP地址转换为公网IP地址，使得私有地址可以访问互联网",
+    "weight": 9.0,
+    "combined_degree": 7,
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ]
+  },
+  {
+    "id": "网络地址转换->公网IP地址",
+    "human_readable_id": "2",
+    "source": "网络地址转换",
+    "target": "公网IP地址",
+    "description": "NAT技术通过共享一个公网IP地址，使多个私有设备同时上网",
+    "weight": 9.0,
+    "combined_degree": 8,
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ]
+  },
+  {
+    "id": "网络地址转换->NAT设备",
+    "human_readable_id": "3",
+    "source": "网络地址转换",
+    "target": "NAT设备",
+    "description": "NAT设备是执行网络地址转换功能的具体设备",
+    "weight": 9.0,
+    "combined_degree": 7,
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ]
+  },
+  {
+    "id": "网络地址转换->多个设备同时上网",
+    "human_readable_id": "4",
+    "source": "网络地址转换",
+    "target": "多个设备同时上网",
+    "description": "NAT技术是多个设备使用相同私有IP同时上网的核心解决方案",
+    "weight": 8.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ]
+  },
+  {
+    "id": "网络地址转换->SNAT",
+    "human_readable_id": "5",
+    "source": "网络地址转换",
+    "target": "SNAT",
+    "description": "SNAT是网络地址转换的一种具体实现方式",
+    "weight": 9.0,
+    "combined_degree": 19,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "私有IP地址->内网计算机",
+    "human_readable_id": "6",
+    "source": "私有IP地址",
+    "target": "内网计算机",
+    "description": "内网计算机使用私有IP地址进行局域网通信",
+    "weight": 9.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "公网IP地址->IPV4地址",
+    "human_readable_id": "7",
+    "source": "公网IP地址",
+    "target": "IPV4地址",
+    "description": "公网IP地址是IPv4地址中用于互联网通信的部分",
+    "weight": 8.0,
+    "combined_degree": 8,
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ]
+  },
+  {
+    "id": "公网IP地址->路由器",
+    "human_readable_id": "8",
+    "source": "公网IP地址",
+    "target": "路由器",
+    "description": "路由器拥有公网IP地址，用于SNAT转换后的源地址替换",
+    "weight": 9.0,
+    "combined_degree": 8,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "NAT设备->IP地址冲突",
+    "human_readable_id": "9",
+    "source": "NAT设备",
+    "target": "IP地址冲突",
+    "description": "NAT通过地址转换避免了同一网络中使用相同私有IP导致的冲突问题",
+    "weight": 8.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-c368cbb35481530102c039dce9c9e566"
+    ]
+  },
+  {
+    "id": "IP地址冲突->NAT",
+    "human_readable_id": "10",
+    "source": "IP地址冲突",
+    "target": "NAT",
+    "description": "IP地址冲突会导致网络混乱，NAT通过映射不同公网IP来避免冲突",
+    "weight": 8.0,
+    "combined_degree": 25,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "IPV4地址->公网地址",
+    "human_readable_id": "11",
+    "source": "IPV4地址",
+    "target": "公网地址",
+    "description": "公网地址是IPv4地址的一种类型，具有全球唯一性",
+    "weight": 8.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ]
+  },
+  {
+    "id": "IPV4地址->私网地址",
+    "human_readable_id": "12",
+    "source": "IPV4地址",
+    "target": "私网地址",
+    "description": "私网地址是IPv4地址的一种类型，用于内部网络",
+    "weight": 8.0,
+    "combined_degree": 10,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ]
+  },
+  {
+    "id": "IPV4地址->IP地址短缺",
+    "human_readable_id": "13",
+    "source": "IPV4地址",
+    "target": "IP地址短缺",
+    "description": "IPv4地址的有限性直接导致了IP地址短缺问题",
+    "weight": 9.0,
+    "combined_degree": 7,
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ]
+  },
+  {
+    "id": "IPV4地址->NAT",
+    "human_readable_id": "14",
+    "source": "IPV4地址",
+    "target": "NAT",
+    "description": "NAT技术通过地址转换来缓解IPv4地址短缺问题",
+    "weight": 9.0,
+    "combined_degree": 28,
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ]
+  },
+  {
+    "id": "私网地址->NAT",
+    "human_readable_id": "15",
+    "source": "私网地址",
+    "target": "NAT",
+    "description": "NAT技术允许私网地址的设备通过转换访问互联网",
+    "weight": 9.0,
+    "combined_degree": 28,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ]
+  },
+  {
+    "id": "私网地址->IP冲突",
+    "human_readable_id": "16",
+    "source": "私网地址",
+    "target": "IP冲突",
+    "description": "私网地址在局域网中若未正确管理可能导致IP冲突",
+    "weight": 6.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ]
+  },
+  {
+    "id": "私网地址->IP地址短缺",
+    "human_readable_id": "17",
+    "source": "私网地址",
+    "target": "IP地址短缺",
+    "description": "私网地址是应对IP地址短缺的一种内部组网解决方案",
+    "weight": 8.0,
+    "combined_degree": 7,
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ]
+  },
+  {
+    "id": "私网地址->网络地址转换（NAT）",
+    "human_readable_id": "18",
+    "source": "私网地址",
+    "target": "网络地址转换（NAT）",
+    "description": "NAT技术用于将私网地址转换为公网地址，以实现互联网访问",
+    "weight": 9.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-bde9a391e12c6d050506f4f200b8e106"
+    ]
+  },
+  {
+    "id": "NAT->SNAT",
+    "human_readable_id": "19",
+    "source": "NAT",
+    "target": "SNAT",
+    "description": "SNAT是NAT的一种具体实现，用于修改源地址",
+    "weight": 8.0,
+    "combined_degree": 37,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19"
+    ]
+  },
+  {
+    "id": "NAT->DNAT",
+    "human_readable_id": "20",
+    "source": "NAT",
+    "target": "DNAT",
+    "description": "DNAT是NAT技术的一个重要子类型，属于NAT的靶向分类<SEP>DNAT是NAT的一种具体实现，用于修改目标地址",
+    "weight": 17.0,
+    "combined_degree": 28,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->路由器",
+    "human_readable_id": "21",
+    "source": "NAT",
+    "target": "路由器",
+    "description": "路由器执行NAT功能，负责修改数据包并建立映射表<SEP>路由器通常执行NAT功能以实现地址转换",
+    "weight": 18.0,
+    "combined_degree": 28,
+    "text_unit_ids": [
+      "chunk-0b5bdf47bb80d99e853a91c29f614e19",
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "NAT->IP地址",
+    "human_readable_id": "22",
+    "source": "NAT",
+    "target": "IP地址",
+    "description": "NAT技术通过转换IP地址（私有IP与公网IP）来解决网络通信问题<SEP>NAT通过修改IP地址实现内网计算机共享公网IP<SEP>NAT通过映射私有IP和公网IP来缓解IP地址短缺问题",
+    "weight": 27.0,
+    "combined_degree": 27,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388",
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "NAT->局域网",
+    "human_readable_id": "23",
+    "source": "NAT",
+    "target": "局域网",
+    "description": "NAT在局域网环境中部署，将局域网内部私有IP转换为公网IP",
+    "weight": 9.0,
+    "combined_degree": 26,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "NAT->公网IP",
+    "human_readable_id": "24",
+    "source": "NAT",
+    "target": "公网IP",
+    "description": "NAT将私有IP映射到公网IP，使局域网设备能访问外部网络",
+    "weight": 9.0,
+    "combined_degree": 25,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "NAT->传输层端口",
+    "human_readable_id": "25",
+    "source": "NAT",
+    "target": "传输层端口",
+    "description": "NAT引入传输层端口信息来区分不同内网计算机的连接",
+    "weight": 9.0,
+    "combined_degree": 25,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "NAT->内网计算机",
+    "human_readable_id": "26",
+    "source": "NAT",
+    "target": "内网计算机",
+    "description": "内网计算机通过NAT访问外部服务",
+    "weight": 8.0,
+    "combined_degree": 27,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "NAT->TCP协议",
+    "human_readable_id": "27",
+    "source": "NAT",
+    "target": "TCP协议",
+    "description": "NAT适用于TCP协议，处理其面向连接的通信",
+    "weight": 7.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "NAT->UDP协议",
+    "human_readable_id": "28",
+    "source": "NAT",
+    "target": "UDP协议",
+    "description": "NAT适用于UDP协议，处理其无连接通信",
+    "weight": 7.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "NAT->静态NAT",
+    "human_readable_id": "29",
+    "source": "NAT",
+    "target": "静态NAT",
+    "description": "静态NAT是NAT技术的一种分类<SEP>静态NAT是NAT技术的基础分类之一",
+    "weight": 17.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->动态NAT",
+    "human_readable_id": "30",
+    "source": "NAT",
+    "target": "动态NAT",
+    "description": "动态NAT是NAT技术的一种分类<SEP>动态NAT是NAT技术的基础分类之一",
+    "weight": 17.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->NAT SERVER",
+    "human_readable_id": "31",
+    "source": "NAT",
+    "target": "NAT SERVER",
+    "description": "NAT Server是NAT技术的一种分类<SEP>NAT Server是NAT技术的一种高级应用形式",
+    "weight": 17.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->NAPT",
+    "human_readable_id": "32",
+    "source": "NAT",
+    "target": "NAPT",
+    "description": "NAPT是NAT技术中最常用的类型，实现了端口级别的地址复用",
+    "weight": 9.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->EASY IP",
+    "human_readable_id": "33",
+    "source": "NAT",
+    "target": "EASY IP",
+    "description": "Easy IP是NAT技术的一种分类<SEP>Easy IP是NAT技术的一种简化实现方式",
+    "weight": 16.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03",
+      "chunk-f22f03b4b9ccb2690e8af0f35dd4e388"
+    ]
+  },
+  {
+    "id": "NAT->NAPT/PAT",
+    "human_readable_id": "34",
+    "source": "NAT",
+    "target": "NAPT/PAT",
+    "description": "NAPT/PAT是NAT技术的一种分类",
+    "weight": 9.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-2cd1ed330184282d00546921797d8c03"
+    ]
+  },
+  {
+    "id": "NAT->家庭网络",
+    "human_readable_id": "35",
+    "source": "NAT",
+    "target": "家庭网络",
+    "description": "家庭网络依赖NAT实现多设备共享同一公网IP地址上网",
+    "weight": 8.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ]
+  },
+  {
+    "id": "NAT->运营商网络",
+    "human_readable_id": "36",
+    "source": "NAT",
+    "target": "运营商网络",
+    "description": "运营商网络使用NAT以节省有限的IPv4地址资源",
+    "weight": 8.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ]
+  },
+  {
+    "id": "NAT->云计算平台",
+    "human_readable_id": "37",
+    "source": "NAT",
+    "target": "云计算平台",
+    "description": "云计算平台利用NAT提供弹性的网络地址管理功能",
+    "weight": 8.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ]
+  },
+  {
+    "id": "NAT->NAT工作流程图解",
+    "human_readable_id": "38",
+    "source": "NAT",
+    "target": "NAT工作流程图解",
+    "description": "NAT工作流程图解用于辅助理解NAT的工作原理",
+    "weight": 7.0,
+    "combined_degree": 24,
+    "text_unit_ids": [
+      "chunk-ed1e947ca7bfc54e2d6d9df26b8e8d3b"
+    ]
+  },
+  {
+    "id": "SNAT->内网IP",
+    "human_readable_id": "39",
+    "source": "SNAT",
+    "target": "内网IP",
+    "description": "SNAT将内网IP转换为公网IP以支持通信",
+    "weight": 9.0,
+    "combined_degree": 15,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->公网IP",
+    "human_readable_id": "40",
+    "source": "SNAT",
+    "target": "公网IP",
+    "description": "SNAT将源地址从内网IP转换为公网IP",
+    "weight": 9.0,
+    "combined_degree": 16,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->映射关系",
+    "human_readable_id": "41",
+    "source": "SNAT",
+    "target": "映射关系",
+    "description": "SNAT通过建立映射关系来区分多台内网设备的返回数据包",
+    "weight": 9.0,
+    "combined_degree": 16,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->TCP/UDP端口号",
+    "human_readable_id": "42",
+    "source": "SNAT",
+    "target": "TCP/UDP端口号",
+    "description": "SNAT使用TCP/UDP端口号来扩展映射关系，以确保返回数据包正确路由",
+    "weight": 8.0,
+    "combined_degree": 16,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->ICMP协议",
+    "human_readable_id": "43",
+    "source": "SNAT",
+    "target": "ICMP协议",
+    "description": "在ICMP协议中，SNAT使用type/code字段来建立映射关系",
+    "weight": 7.0,
+    "combined_degree": 15,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->内网访问公网",
+    "human_readable_id": "44",
+    "source": "SNAT",
+    "target": "内网访问公网",
+    "description": "内网访问公网的场景是SNAT技术应用的典型例子",
+    "weight": 8.0,
+    "combined_degree": 15,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "SNAT->源地址转换",
+    "human_readable_id": "45",
+    "source": "SNAT",
+    "target": "源地址转换",
+    "description": "SNAT是源地址转换的缩写，两者指代同一技术",
+    "weight": 10.0,
+    "combined_degree": 15,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "SNAT->路由器",
+    "human_readable_id": "46",
+    "source": "SNAT",
+    "target": "路由器",
+    "description": "路由器执行SNAT转换过程，是SNAT的实现设备",
+    "weight": 9.0,
+    "combined_degree": 19,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "SNAT->IP地址",
+    "human_readable_id": "47",
+    "source": "SNAT",
+    "target": "IP地址",
+    "description": "SNAT操作涉及修改数据包的源IP地址字段",
+    "weight": 8.0,
+    "combined_degree": 18,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "SNAT->内网计算机",
+    "human_readable_id": "48",
+    "source": "SNAT",
+    "target": "内网计算机",
+    "description": "SNAT使得内网计算机能够使用私有IP访问外网",
+    "weight": 8.0,
+    "combined_degree": 18,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "SNAT->外网服务器",
+    "human_readable_id": "49",
+    "source": "SNAT",
+    "target": "外网服务器",
+    "description": "SNAT对外网服务器透明，但服务器返回数据包需经过逆向转换",
+    "weight": 7.0,
+    "combined_degree": 16,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "SNAT->数据包传输",
+    "human_readable_id": "50",
+    "source": "SNAT",
+    "target": "数据包传输",
+    "description": "SNAT在数据包传输过程中修改源IP，保证回复包能正确返回",
+    "weight": 8.0,
+    "combined_degree": 15,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "DNAT->IP地址",
+    "human_readable_id": "51",
+    "source": "DNAT",
+    "target": "IP地址",
+    "description": "DNAT通过地址转换技术帮助节省和复用IP地址，解决IPv4地址短缺问题",
+    "weight": 9.0,
+    "combined_degree": 9,
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ]
+  },
+  {
+    "id": "DNAT->公网",
+    "human_readable_id": "52",
+    "source": "DNAT",
+    "target": "公网",
+    "description": "DNAT接收来自公网的请求，并将其作为转发起点",
+    "weight": 8.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ]
+  },
+  {
+    "id": "DNAT->内网服务器",
+    "human_readable_id": "53",
+    "source": "DNAT",
+    "target": "内网服务器",
+    "description": "DNAT将公网请求转发至内网服务器，使其能对外提供服务",
+    "weight": 9.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ]
+  },
+  {
+    "id": "DNAT->WEB服务端口",
+    "human_readable_id": "54",
+    "source": "DNAT",
+    "target": "WEB服务端口",
+    "description": "通过Web服务端口的配置示例，展示了DNAT的具体应用场景",
+    "weight": 7.0,
+    "combined_degree": 6,
+    "text_unit_ids": [
+      "chunk-57a0f62ad200aa2bb173257c5821c2bb"
+    ]
+  },
+  {
+    "id": "路由器->内网计算机",
+    "human_readable_id": "55",
+    "source": "路由器",
+    "target": "内网计算机",
+    "description": "内网计算机的数据包首先发送到路由器进行SNAT处理",
+    "weight": 9.0,
+    "combined_degree": 9,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "路由器->外网服务器",
+    "human_readable_id": "56",
+    "source": "路由器",
+    "target": "外网服务器",
+    "description": "路由器将转换后的数据包转发给外网服务器",
+    "weight": 8.0,
+    "combined_degree": 7,
+    "text_unit_ids": [
+      "chunk-325984719d77270ef2d6560503e07dcc"
+    ]
+  },
+  {
+    "id": "IP地址->数据包路由",
+    "human_readable_id": "57",
+    "source": "IP地址",
+    "target": "数据包路由",
+    "description": "数据包路由依赖于正确的IP地址指向，NAT转换后确保路由准确",
+    "weight": 7.0,
+    "combined_degree": 5,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "局域网->ARP表",
+    "human_readable_id": "58",
+    "source": "局域网",
+    "target": "ARP表",
+    "description": "ARP表在局域网中维护设备间地址对应关系，若IP地址冲突会导致ARP表混乱",
+    "weight": 8.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "局域网->私有IP",
+    "human_readable_id": "59",
+    "source": "局域网",
+    "target": "私有IP",
+    "description": "私有IP地址是局域网内设备使用的内部标识，不能直接用于外网通信",
+    "weight": 8.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-0660c1267c456f382ae63a19f6ae4a16"
+    ]
+  },
+  {
+    "id": "TCP/UDP端口号->映射关系",
+    "human_readable_id": "60",
+    "source": "TCP/UDP端口号",
+    "target": "映射关系",
+    "description": "映射关系依赖于TCP/UDP端口号来区分不同的会话",
+    "weight": 8.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-12174cdc5c11e7158cb68811c21f5bde"
+    ]
+  },
+  {
+    "id": "传输层端口->外部服务",
+    "human_readable_id": "61",
+    "source": "传输层端口",
+    "target": "外部服务",
+    "description": "传输层端口帮助NAT将返回数据包正确转发到内网计算机",
+    "weight": 8.0,
+    "combined_degree": 3,
+    "text_unit_ids": [
+      "chunk-51db1ec726719a7ea92fd84abe72ebfb"
+    ]
+  },
+  {
+    "id": "网络协议->无端口概念",
+    "human_readable_id": "62",
+    "source": "网络协议",
+    "target": "无端口概念",
+    "description": "无端口概念是部分网络协议的属性",
+    "weight": 8.0,
+    "combined_degree": 3,
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ]
+  },
+  {
+    "id": "ICMP->无端口概念",
+    "human_readable_id": "63",
+    "source": "ICMP",
+    "target": "无端口概念",
+    "description": "ICMP是典型的无端口概念协议",
+    "weight": 9.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ]
+  },
+  {
+    "id": "ICMP->协议特定字段",
+    "human_readable_id": "64",
+    "source": "ICMP",
+    "target": "协议特定字段",
+    "description": "ICMP通过type和code等协议特定字段实现功能",
+    "weight": 9.0,
+    "combined_degree": 4,
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ]
+  },
+  {
+    "id": "协议特定字段->连接或规则的关联",
+    "human_readable_id": "65",
+    "source": "协议特定字段",
+    "target": "连接或规则的关联",
+    "description": "协议特定字段是实现连接或规则关联的关键",
+    "weight": 8.0,
+    "combined_degree": 3,
+    "text_unit_ids": [
+      "chunk-9995f037178aff1d869c9c211127436d"
+    ]
+  }
+]
