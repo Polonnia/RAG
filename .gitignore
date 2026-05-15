@@ -8,3 +8,9 @@ frontend/node_modules/
 
 # RAG processing logs
 backend/rag/logs/
+
+node_modules/
+.pnpm-store/
+
+
+backend/OpenAvatarChat/

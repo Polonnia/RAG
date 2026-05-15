@@ -301,7 +301,18 @@ Directly return the final JSON structure. Do not output anything else.
                 trace_id,
                 f"llm tree_search response done doc_id={doc_id}, level={level}, elapsed={time.perf_counter() - llm_started:.2f}s, response_len={len(str(tree_search_result or ''))}"
             )
+            raw_response = str(tree_search_result or "")
+            self._debug(
+                trace_id,
+                f"llm tree_search raw preview doc_id={doc_id}, level={level}, preview={raw_response[:300].replace(chr(10), ' ').replace(chr(13), ' ')}"
+            )
             tree_search_json = utils.extract_json(tree_search_result)
+            parsed_keys = list(tree_search_json.keys()) if isinstance(tree_search_json, dict) else []
+            parsed_node_list = tree_search_json.get("node_list", []) if isinstance(tree_search_json, dict) else []
+            self._debug(
+                trace_id,
+                f"tree_search json parsed doc_id={doc_id}, level={level}, is_dict={isinstance(tree_search_json, dict)}, keys={parsed_keys}, node_list_type={type(parsed_node_list).__name__}, node_list_len={len(parsed_node_list) if isinstance(parsed_node_list, list) else -1}"
+            )
             thinking = tree_search_json.get("thinking", "") if isinstance(tree_search_json, dict) else ""
             if thinking:
                 level_thinking.append(f"L{level}: {thinking}")
@@ -315,6 +326,11 @@ Directly return the final JSON structure. Do not output anything else.
                 trace_id,
                 f"tree_search level result doc_id={doc_id}, level={level}, selected={len(selected_nodes)}"
             )
+            if not selected_nodes:
+                self._debug(
+                    trace_id,
+                    f"tree_search no selection doc_id={doc_id}, level={level}, selected_ids={list(selected_ids)[:20]}, candidate_node_ids={[str(n.get('node_id')) for n in current_level_nodes[:20]]}"
+                )
 
             if not selected_nodes:
                 break

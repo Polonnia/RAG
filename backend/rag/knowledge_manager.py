@@ -442,25 +442,41 @@ def get_download_file_path(filename, current_user, db):
 def delete_knowledge_file(filename, db=None):
     """删除知识库中的文件"""
     try:
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        files_info = load_files_info()
+        actual_filename = filename
+        if filename not in files_info:
+            for stored_name, item in files_info.items():
+                if isinstance(item, dict) and item.get('original_filename') == filename:
+                    actual_filename = stored_name
+                    break
+
+        file_path = os.path.join(UPLOAD_DIR, actual_filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             print(f"物理文件已删除: {file_path}")
         else:
             print(f"物理文件不存在: {file_path}")
 
-        files_info = load_files_info()
-        if filename in files_info:
-            del files_info[filename]
+        # 同步删除该文件对应的结构化索引文件
+        structure_filename = f"{Path(actual_filename).stem}_structure.json"
+        structure_file_path = os.path.join(TREES_DIR, structure_filename)
+        if os.path.exists(structure_file_path):
+            os.remove(structure_file_path)
+            print(f"结构文件已删除: {structure_file_path}")
+        else:
+            print(f"结构文件不存在: {structure_file_path}")
+
+        if actual_filename in files_info:
+            del files_info[actual_filename]
             save_files_info(files_info)
 
         if db is not None:
-            perm = db.query(KnowledgeFilePermission).filter_by(filename=filename).first()
+            perm = db.query(KnowledgeFilePermission).filter_by(filename=actual_filename).first()
             if perm:
                 db.delete(perm)
                 db.commit()
         
-        print(f"文件删除成功: {filename}")
+        print(f"文件删除成功: {actual_filename}")
         return True
         
     except Exception as e:
