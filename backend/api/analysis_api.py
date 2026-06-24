@@ -141,7 +141,6 @@ async def get_student_analysis(current_user: User = Depends(get_current_user), d
                         keywords = question.knowledge_points
                 except:
                     keywords = []
-                
                 for kw in keywords:
                     kw = kw.strip() if isinstance(kw, str) else str(kw)
                     if kw:
